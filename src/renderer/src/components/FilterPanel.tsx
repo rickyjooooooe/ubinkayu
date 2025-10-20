@@ -94,7 +94,11 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
         {/* [BARU] Filter berdasarkan produk */}
         <div className="form-group">
           <label>Produk</label>
-          <select name="productType" value={filters.productType || 'all'} onChange={handleInputChange}>
+          <select
+            name="productType"
+            value={filters.productType || 'all'}
+            onChange={handleInputChange}
+          >
             <option value="all">Semua Produk</option>
             {availableProductTypes.map((productType) => (
               <option key={productType} value={productType}>
@@ -106,30 +110,32 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
 
         <div className="form-group">
           <label>Tanggal Input Dari</label>
-          <Input label="" type="date" name="dateFrom" value={filters.dateFrom} onChange={handleInputChange} />
-        </div>
-        <div className="form-group">
-          <label>Tanggal Input Sampai</label>
-          <Input label="" type="date" name="dateTo" value={filters.dateTo} onChange={handleInputChange} />
-        </div>
-
-        <div className="form-group">
-          <label>Tanggal Kirim Dari</label>
           <Input
             label=""
             type="date"
-            name="deadlineFrom"
-            value={filters.deadlineFrom}
+            name="dateFrom"
+            value={filters.dateFrom}
             onChange={handleInputChange}
           />
         </div>
         <div className="form-group">
-          <label>Tanggal Kirim Sampai</label>
+          <label>Tanggal Input Sampai</label>
           <Input
             label=""
             type="date"
-            name="deadlineTo"
-            value={filters.deadlineTo}
+            name="dateTo"
+            value={filters.dateTo}
+            onChange={handleInputChange}
+          />
+        </div>
+
+        <div className="form-group">
+          <label>Tanggal Kirim</label>
+          <Input
+            label=""
+            type="date"
+            name="deadlineDate" // <-- Ganti nama menjadi 'deadlineDate'
+            value={filters.deadlineDate}
             onChange={handleInputChange}
           />
         </div>

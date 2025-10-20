@@ -37,10 +37,8 @@ const POTable: React.FC<POTableProps> = ({
             <th>Customer</th>
             <th>Tanggal Masuk</th>
             <th>Target Kirim</th>
-            {/* --- KOLOM BARU DITAMBAHKAN DI SINI --- */}
             <th>Jenis Kayu & Produk</th>
             <th>Total Kubikasi</th>
-            {/* --- AKHIR KOLOM BARU --- */}
             <th>Prioritas</th>
             <th>Status</th>
             <th>Progress</th>
@@ -50,7 +48,6 @@ const POTable: React.FC<POTableProps> = ({
         <tbody>
           {poList.map((po) => (
             <tr key={po.id}>
-              {/* Nomor PO dipindahkan ke dalam Customer untuk menghemat ruang */}
               <td>
                 <div className="customer-cell">
                   <strong>{po.project_name}</strong>
@@ -59,32 +56,34 @@ const POTable: React.FC<POTableProps> = ({
               </td>
               <td>{formatDate(po.created_at)}</td>
               <td>{formatDate(po.deadline)}</td>
-              {/* --- SEL BARU UNTUK MENAMPILKAN ITEM --- */}
               <td className="product-list-cell">
                 {po.items && po.items.length > 0 ? (
                   <ul>
+                    {/* --- PERUBAHAN KUNCI ADA DI SINI --- */}
                     {po.items.map((item) => (
                       <li key={item.id}>
-                        {item.product_name} ({item.wood_type || 'N/A'})
+                        <span>
+                          {item.product_name} ({item.wood_type || 'N/A'})
+                        </span>
+                        <strong>{Number(item.kubikasi || 0).toFixed(4)} m³</strong>
                       </li>
                     ))}
+                    {/* --- AKHIR PERUBAHAN --- */}
                   </ul>
                 ) : (
                   <span>-</span>
                 )}
               </td>
-              {/* --- SEL BARU UNTUK KUBIKASI --- */}
-              <td>
-                {Number(po.kubikasi_total || 0).toFixed(3)} m³
-              </td>
-              {/* --- AKHIR SEL BARU --- */}
+              <td>{Number(po.kubikasi_total || 0).toFixed(3)} m³</td>
               <td>
                 <span className={`status-badge ${(po.priority || 'Normal').toLowerCase()}`}>
                   {po.priority || 'Normal'}
                 </span>
               </td>
               <td>
-                <span className={`status-badge status-${(po.status || 'open').toLowerCase().replace(' ', '-')}`}>
+                <span
+                  className={`status-badge status-${(po.status || 'open').toLowerCase().replace(' ', '-')}`}
+                >
                   {po.status || 'Open'}
                 </span>
               </td>

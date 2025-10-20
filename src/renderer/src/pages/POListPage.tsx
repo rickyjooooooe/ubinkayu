@@ -37,8 +37,7 @@ const POListPage: React.FC<POListPageProps> = ({
     priority: 'all',
     dateFrom: '',
     dateTo: '',
-    deadlineFrom: '',
-    deadlineTo: '',
+    deadlineDate: '',
     woodType: 'all',
     productType: 'all'
   })
@@ -104,6 +103,18 @@ const POListPage: React.FC<POListPageProps> = ({
       processedPOs = processedPOs.filter((po) =>
         po.items?.some((item) => item.product_name === filters.productType)
       )
+    }
+    if (filters.deadlineDate) {
+      processedPOs = processedPOs.filter((po) => {
+        // Pastikan PO memiliki deadline sebelum membandingkan
+        if (!po.deadline) return false
+
+        // Ambil hanya bagian tanggal (YYYY-MM-DD) dari data PO
+        const poDeadlineDate = new Date(po.deadline).toISOString().split('T')[0]
+
+        // Bandingkan dengan tanggal dari filter
+        return poDeadlineDate === filters.deadlineDate
+      })
     }
 
     // Logika sorting tetap sama

@@ -2390,3 +2390,23 @@ body {
 .po-table {
   min-width: 1500px;
 }
+
+.product-list-cell li {
+  display: flex;                 /* 1. Aktifkan Flexbox */
+  justify-content: space-between; /* 2. Dorong item ke ujung kiri dan kanan */
+  align-items: center;           /* 3. Sejajarkan secara vertikal */
+  gap: 1rem;                     /* 4. Beri jarak antara nama dan kubikasi */
+  padding-bottom: 0.3rem;
+}
+
+.product-list-cell li span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; /* Tampilkan '...' jika nama produk terlalu panjang */
+}
+
+.product-list-cell li strong {
+  flex-shrink: 0; /* Mencegah teks kubikasi terpotong */
+  font-size: 0.85rem;
+  color: #555;
+}
