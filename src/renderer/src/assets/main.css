@@ -2410,3 +2410,62 @@ body {
   font-size: 0.85rem;
   color: #555;
 }
+
+/* ======================================================= */
+/* == STYLING UNTUK TABEL DETAIL PO YANG DI-UPGRADE       == */
+/* ======================================================= */
+
+/* Perluas grid di ringkasan PO agar muat 3 kolom di desktop */
+@media (min-width: 992px) {
+  .po-summary-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Beri style pada tabel detail yang baru */
+.detailed-item-table {
+  min-width: 1200px; /* Lebar minimum tabel */
+}
+
+.detailed-item-table td {
+  vertical-align: top;
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+
+/* Styling untuk sel-sel spesifik agar lebih rapi */
+.product-spec-cell, .size-qty-cell, .notes-location-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.product-spec-cell strong {
+  font-size: 1rem;
+}
+
+.product-spec-cell span, .notes-location-cell span {
+  font-size: 0.85rem;
+  color: #555;
+}
+
+.size-qty-cell strong {
+  font-weight: 700;
+}
+
+.notes-location-cell p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #777;
+  font-style: italic;
+}
+
+.item-progress-cell {
+  min-width: 180px;
+}
+
+.item-progress-cell span {
+  display: block;
+  font-size: 0.85rem;
+  margin-bottom: 4px;
+}
