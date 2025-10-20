@@ -6,7 +6,6 @@ import { Button } from '../components/Button'
 import FilterPanel from '../components/FilterPanel'
 import { POHeader } from '../types'
 import POTable from '../components/POTable'
-import { ProgressBar } from '../components/ProgressBar' // ProgressBar tidak digunakan lagi, bisa dihapus
 
 interface POListPageProps {
   poList: POHeader[]

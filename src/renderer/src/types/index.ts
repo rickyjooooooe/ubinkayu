@@ -59,7 +59,8 @@ export interface POHeader {
   progress?: number
   items?: POItem[]
   photo_url?: string | null
-  marketing?: string
+  acc_marketing?: string;
+  alamat_kirim?: string;
   completed_at?: string | null
 }
 
