@@ -2313,3 +2313,80 @@ body {
   /* Menambah padding bawah agar elemen terakhir tidak mepet ke tepi layar */
   padding-bottom: 2rem;
 }
+
+/* file: src/renderer/src/assets/main.css */
+
+/* Tambahkan ini di bagian paling bawah file */
+
+.progress-cell {
+  min-width: 150px; /* Agar kolom tidak terlalu sempit */
+  vertical-align: middle;
+}
+
+.progress-cell span {
+  display: block;
+  font-size: 0.85rem;
+  margin-bottom: 4px;
+  color: #555;
+  text-align: left;
+}
+
+/* ========================================= */
+/* == STYLING UNTUK TOMBOL AKSI DI TABEL    == */
+/* ========================================= */
+
+.actions-cell {
+  display: flex;         /* 1. Susun tombol secara horizontal */
+  gap: 0.5rem;           /* 2. Beri jarak antar tombol */
+  align-items: center;   /* 3. Sejajarkan tombol secara vertikal (jika tingginya beda) */
+  min-width: 300px;      /* 4. Beri lebar minimum agar tidak turun baris */
+}
+
+/* Opsional: Buat tombol di dalam tabel sedikit lebih kecil agar lebih pas */
+.po-table .actions-cell .btn {
+  padding: 0.3rem 0.8rem;
+  font-size: 0.85rem;
+  white-space: nowrap; /* Mencegah teks tombol terpotong */
+}
+
+/* file: src/renderer/src/assets/main.css */
+
+/* ================================================== */
+/* == STYLING TAMBAHAN UNTUK KOLOM BARU DI TABEL    == */
+/* ================================================== */
+
+/* Styling untuk sel Customer yang sekarang berisi 2 baris */
+.customer-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 180px;
+}
+.customer-cell span {
+  font-size: 0.85rem;
+  color: #777;
+}
+
+/* Styling untuk daftar produk di dalam sel tabel */
+.product-list-cell ul {
+  margin: 0;
+  padding-left: 1rem; /* Beri sedikit indentasi */
+  list-style-type: '- '; /* Ganti bullet point standar */
+  max-width: 250px; /* Batasi lebar agar tidak terlalu dominan */
+}
+
+.product-list-cell li {
+  padding-bottom: 0.3rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; /* Tampilkan '...' jika teks terlalu panjang */
+}
+
+.product-list-cell li:last-child {
+  padding-bottom: 0;
+}
+
+/* Perbarui lebar minimum tabel untuk mengakomodasi kolom baru */
+.po-table {
+  min-width: 1500px;
+}
