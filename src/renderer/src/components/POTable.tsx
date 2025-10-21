@@ -30,14 +30,18 @@ const POTable: React.FC<POTableProps> = ({
   }
   // [BARU] Fungsi format tanggal revisi terakhir (termasuk waktu)
   const formatLastRevisedDate = (d: string | undefined) =>
-    d ? new Date(d).toLocaleString('id-ID', {
-          day: '2-digit', month: 'short', year: 'numeric',
-          hour: '2-digit', minute: '2-digit'
+    d
+      ? new Date(d).toLocaleString('id-ID', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
         })
-      : '-';
+      : '-'
 
   const getStatusBadgeClass = (s: string | undefined) =>
-    `status-badge status-${(s || 'open').toLowerCase().replace(' ', '-')}`;
+    `status-badge status-${(s || 'open').toLowerCase().replace(' ', '-')}`
 
   return (
     <div className="po-table-container">
@@ -95,11 +99,8 @@ const POTable: React.FC<POTableProps> = ({
                 </span>
               </td>
               <td>
-                <span
-                  className={`status-badge status-${(po.status || 'open').toLowerCase().replace(' ', '-')}`}
-                >
-                  {po.status || 'Open'}
-                </span>
+                {/* SEKARANG: Panggil fungsi getStatusBadgeClass */}
+                <span className={getStatusBadgeClass(po.status)}>{po.status || 'Open'}</span>
               </td>
               <td>
                 <div className="progress-cell">
