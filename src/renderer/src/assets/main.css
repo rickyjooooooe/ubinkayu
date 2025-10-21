@@ -74,7 +74,7 @@ body {
 
 /* --- Page --- */
 .page-container {
-  max-width: 1200px;
+  width: 100%; /* Pastikan bisa menggunakan lebar penuh */
   margin: 2rem auto;
 }
 
@@ -733,7 +733,7 @@ label {
   padding: 12px 15px;
   text-align: left;
   border-bottom: 1px solid var(--border-color);
-  white-space: nowrap;
+
 }
 
 .po-table th {
@@ -761,6 +761,16 @@ label {
   padding: 0.25rem 0.75rem;
   font-size: 0.8rem;
 }
+
+
+
+.po-table td.no-wrap-cell {
+  white-space: nowrap; /* Terapkan nowrap hanya pada sel dengan kelas ini */
+}
+
+
+
+
 
 /* Badge untuk status PO di dalam tabel */
 .status-badge.status-open { background-color: #3182CE; }
