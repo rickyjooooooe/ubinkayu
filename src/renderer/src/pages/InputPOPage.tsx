@@ -4,6 +4,52 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { POHeader, POItem } from '../types'
 import * as apiService from '../apiService'
 
+
+// [BARU] Komponen Modal untuk Konfirmasi Revisi
+const RevisionConfirmModal: React.FC<{
+  isOpen: boolean
+  onClose: () => void
+  onConfirm: (reviserName: string) => void
+}> = ({ isOpen, onClose, onConfirm }) => {
+  const [reviserName, setReviserName] = useState('')
+
+  if (!isOpen) return null
+
+  const handleConfirm = () => {
+    if (!reviserName.trim()) {
+      alert('Nama perevisi harus diisi!')
+      return
+    }
+    onConfirm(reviserName)
+    setReviserName('') // Reset nama setelah konfirmasi
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-content">
+        <div className="modal-header">
+          <h3>Konfirmasi Revisi</h3>
+        </div>
+        <div className="modal-body">
+          <p>Untuk melacak perubahan, silakan masukkan nama Anda sebagai perevisi.</p>
+          <Input
+            label="Nama Perevisi"
+            value={reviserName}
+            onChange={(e) => setReviserName(e.target.value)}
+            placeholder="Masukkan nama Anda..."
+          />
+        </div>
+        <div className="modal-footer">
+          <Button variant="secondary" onClick={onClose}>
+            Batal
+          </Button>
+          <Button onClick={handleConfirm}>Konfirmasi & Simpan Revisi</Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Basic Component Implementations
 const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({
   children,
@@ -138,6 +184,7 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO }) =
   const today = new Date().toISOString().split('T')[0]
   // Cek apakah aplikasi berjalan di Electron
   const isElectron = !!(window as any).api
+  const [isRevisionModalOpen, setIsRevisionModalOpen] = useState(false)
 
   // State
   const [productList, setProductList] = useState<any[]>([])
@@ -413,14 +460,23 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO }) =
     return payload
   }
 
-  const handleSaveOrUpdatePO = async () => {
+  const handleSaveOrUpdatePO = async (reviserName?: string) => {
     if (!poData.nomorPo || !poData.namaCustomer)
       return alert('Nomor PO dan Nama Customer harus diisi!')
     if (items.length === 0) return alert('Tambahkan minimal satu item.')
 
     setIsSaving(true)
+    // Tutup modal jika terbuka
+    setIsRevisionModalOpen(false) 
+    
     try {
       const payload = await constructPayload()
+
+      // [TAMBAH] Sisipkan nama perevisi ke dalam payload jika ada
+      if (reviserName) {
+        payload.revisedBy = reviserName
+      }
+      
       const result = editingPO
         ? await apiService.updatePO(payload)
         : await apiService.saveNewPO(payload)
@@ -479,7 +535,17 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO }) =
           <Button variant="secondary" onClick={handlePreviewPO} disabled={isPreviewing}>
             {isPreviewing ? 'Membuka...' : '◎ Preview'}
           </Button>
-          <Button onClick={handleSaveOrUpdatePO} disabled={isSaving}>
+          {/* [DIUBAH] Tombol simpan sekarang punya logika berbeda */}
+          <Button
+            onClick={() => {
+              if (editingPO) {
+                setIsRevisionModalOpen(true) // Jika mode revisi, buka modal
+              } else {
+                handleSaveOrUpdatePO() // Jika PO baru, langsung simpan
+              }
+            }}
+            disabled={isSaving}
+          >
             {isSaving ? 'Menyimpan...' : editingPO ? 'Simpan Revisi' : 'Simpan PO Baru'}
           </Button>
         </div>
@@ -788,6 +854,14 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO }) =
         onClose={() => setIsAddProductModalOpen(false)}
         onSaveSuccess={fetchProducts}
       />
+
+      <RevisionConfirmModal
+        isOpen={isRevisionModalOpen}
+        onClose={() => setIsRevisionModalOpen(false)}
+        onConfirm={(name) => handleSaveOrUpdatePO(name)}
+      />
+
+
     </div>
   )
 }

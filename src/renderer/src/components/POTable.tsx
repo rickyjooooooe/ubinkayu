@@ -28,6 +28,16 @@ const POTable: React.FC<POTableProps> = ({
       year: 'numeric'
     })
   }
+  // [BARU] Fungsi format tanggal revisi terakhir (termasuk waktu)
+  const formatLastRevisedDate = (d: string | undefined) =>
+    d ? new Date(d).toLocaleString('id-ID', {
+          day: '2-digit', month: 'short', year: 'numeric',
+          hour: '2-digit', minute: '2-digit'
+        })
+      : '-';
+
+  const getStatusBadgeClass = (s: string | undefined) =>
+    `status-badge status-${(s || 'open').toLowerCase().replace(' ', '-')}`;
 
   return (
     <div className="po-table-container">
@@ -35,6 +45,8 @@ const POTable: React.FC<POTableProps> = ({
         <thead>
           <tr>
             <th>Customer</th>
+            <th>Revisi Oleh</th>
+            <th>Tgl Revisi</th>
             <th>Tanggal Masuk</th>
             <th>Target Kirim</th>
             <th>Jenis Kayu & Produk</th>
@@ -54,6 +66,8 @@ const POTable: React.FC<POTableProps> = ({
                   <span>PO: {po.po_number}</span>
                 </div>
               </td>
+              <td>{po.lastRevisedBy || '-'}</td>
+              <td>{formatLastRevisedDate(po.lastRevisedDate)}</td>
               <td>{formatDate(po.created_at)}</td>
               <td>{formatDate(po.deadline)}</td>
               <td className="product-list-cell">

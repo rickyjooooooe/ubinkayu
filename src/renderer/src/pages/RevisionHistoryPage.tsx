@@ -175,6 +175,12 @@ const RevisionHistoryPage: React.FC<RevisionHistoryPageProps> = ({ poId, poNumbe
                 </div>
                 <div className="revision-actions-group">
                   <span>Dibuat pada: {formatDate(revItem.revision.created_at)}</span>
+                  {/* [TAMBAHKAN INI] Tampilkan nama perevisi jika ada */}
+                    {revItem.revision.revised_by && (
+                      <span className="reviser-info">
+                        <strong>Direvisi oleh:</strong> {revItem.revision.revised_by}
+                      </span>
+                    )}
                   {revItem.revision.pdf_link && revItem.revision.pdf_link.startsWith('http') && (
                     <Button onClick={() => handleOpenPdf(revItem.revision.pdf_link!)}>
                       📄 Buka File Revisi Ini

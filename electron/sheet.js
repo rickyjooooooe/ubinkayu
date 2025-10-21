@@ -333,6 +333,9 @@ export async function listPOs() {
     // 3. Gabungkan dan Hitung Status/Progress
     const result = latestPoObjects.map((poObject) => {
       const poId = poObject.id
+      // [PERBAIKAN] Gunakan poObject dan akses properti langsung
+      const lastRevisedBy = poObject.revised_by || 'N/A';
+      const lastRevisedDate = poObject.created_at; // Ambil timestamp dari revisi terakhir (baris ini)
 
       const latestRev = latestItemRevisions.get(poId) ?? -1
       const poItems = itemRows.filter(
@@ -396,7 +399,9 @@ export async function listPOs() {
         progress: roundedProgress,
         status: finalStatus,
         completed_at: completed_at,
-        pdf_link: poObject.pdf_link || null
+        pdf_link: poObject.pdf_link || null,
+        lastRevisedBy: lastRevisedBy,
+        lastRevisedDate: lastRevisedDate
       }
     })
 
@@ -405,6 +410,7 @@ export async function listPOs() {
     console.error('❌ listPOs error:', err.message)
     return []
   }
+
 }
 
 export async function saveNewPO(data) {
@@ -508,7 +514,8 @@ export async function updatePO(data) {
       kubikasi_total: data.kubikasi_total ?? prev.kubikasi_total ?? 0,
       acc_marketing: data.marketing ?? prev.acc_marketing ?? '',
       created_at: now,
-      pdf_link: 'generating...'
+      pdf_link: 'generating...',
+      revised_by: data.revisedBy || 'Unknown' // <--
     })
 
     const itemsWithIds = []

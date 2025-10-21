@@ -62,6 +62,8 @@ export interface POHeader {
   acc_marketing?: string;
   alamat_kirim?: string;
   completed_at?: string | null
+  lastRevisedBy?: string
+  lastRevisedDate?: string
 }
 
 export interface PORevision {
@@ -76,6 +78,7 @@ export interface PORevision {
   created_at: string
   pdf_link?: string | null
   acc_marketing?: string
+  revised_by?: string; // <-- TAMBAHKAN BARIS INI
 }
 
 export interface RevisionHistoryItem {
