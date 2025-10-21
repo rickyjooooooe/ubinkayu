@@ -1,9 +1,10 @@
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react' // Tambahkan useCallback
 import { Card } from '../components/Card'
-import { AnalysisData, POItem } from '../types'
+// [UBAH] Import POHeader juga
+import { AnalysisData, POItem, POHeader } from '../types'
 import { useWindowWidth } from '../hooks/useWindowWidth'
 import {
   BarChart,
@@ -23,39 +24,42 @@ import * as apiService from '../apiService'
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF']
 
-// Helper untuk menghitung kesimpulan dari data yang difilter
-const calculateInsights = (items: POItem[]) => {
-  if (items.length === 0) {
-    return { topProduct: 'N/A', topWood: 'N/A', topColor: 'N/A', topFinishing: 'N/A' }
+// [DIUBAH] Helper insights sekarang bekerja dengan array POHeader
+const calculateInsightsFromPOs = (pos: POHeader[]) => {
+  const allItems = pos.flatMap(po => po.items || []); // Ambil semua item dari PO yang terfilter
+  if (allItems.length === 0) {
+    return { topProduct: 'N/A', topWood: 'N/A', topColor: 'N/A', topFinishing: 'N/A' };
   }
-  const count = (key: keyof POItem) =>
-    items.reduce(
-      (acc, item) => {
-        const value = item[key] as string
-        if (value) acc[value] = (acc[value] || 0) + (item.quantity || 1)
-        return acc
-      },
-      {} as Record<string, number>
-    )
+   // Logika count dan getTopItem tetap sama, tapi inputnya allItems
+   const count = (key: keyof POItem) =>
+     allItems.reduce(
+       (acc, item) => {
+         const value = item[key] as string
+         if (value) acc[value] = (acc[value] || 0) + (item.quantity || 1)
+         return acc
+       },
+       {} as Record<string, number>
+     );
+   const getTopItem = (data: Record<string, number>) =>
+     Object.keys(data).length > 0
+       ? Object.keys(data).reduce((a, b) => (data[a] > data[b] ? a : b))
+       : 'N/A';
 
-  const getTopItem = (data: Record<string, number>) =>
-    Object.keys(data).length > 0
-      ? Object.keys(data).reduce((a, b) => (data[a] > data[b] ? a : b))
-      : 'N/A'
-
-  return {
-    topProduct: getTopItem(count('product_name')),
-    topWood: getTopItem(count('wood_type')),
-    topColor: getTopItem(count('color')),
-    topFinishing: getTopItem(count('finishing'))
-  }
+   return {
+     topProduct: getTopItem(count('product_name')),
+     topWood: getTopItem(count('wood_type')),
+     topColor: getTopItem(count('color')),
+     topFinishing: getTopItem(count('finishing'))
+   };
 }
+
 
 const AnalysisPage: React.FC = () => {
   const windowWidth = useWindowWidth()
   const isMobile = windowWidth < 640
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null)
-  const [allItems, setAllItems] = useState<POItem[]>([])
+  const [allItems, setAllItems] = useState<POItem[]>([]) // Tetap simpan allItems untuk uniqueOptions
+  const [allPOs, setAllPOs] = useState<POHeader[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   const [filters, setFilters] = useState({
@@ -65,17 +69,37 @@ const AnalysisPage: React.FC = () => {
     finishing: 'all'
   })
 
+  // Helper function for formatting dates
+  const formatDate = (dateString?: string | null) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleDateString('id-ID', {
+      day: '2-digit', month: 'short', year: 'numeric'
+    });
+  };
+  // Helper function for formatting date and time
+   const formatDateTime = (dateString?: string | null) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleString('id-ID', {
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: false
+    });
+  };
+
+
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true)
       try {
+        // Ambil semua data yang dibutuhkan
         // @ts-ignore
-        const [summaryData, itemData] = await Promise.all([
+        const [summaryData, itemData, poListData] = await Promise.all([
           apiService.getProductSalesAnalysis(),
-          apiService.getSalesItemData()
+          apiService.getSalesItemData(), // Mungkin masih berguna untuk uniqueOptions
+          apiService.listPOs() // Ambil semua PO (dengan item list)
         ])
         setAnalysisData(summaryData)
         setAllItems(itemData)
+        setAllPOs(poListData)
       } catch (err) {
         console.error('Gagal mengambil data analisis:', err)
       } finally {
@@ -85,37 +109,51 @@ const AnalysisPage: React.FC = () => {
     fetchData()
   }, [])
 
+  // uniqueOptions bisa tetap diambil dari allItems atau diubah ke allPOs
   const uniqueOptions = useMemo(() => {
     const wood_type = new Set<string>()
     const profile = new Set<string>()
     const color = new Set<string>()
     const finishing = new Set<string>()
-    allItems.forEach((item) => {
-      if (item.wood_type) wood_type.add(item.wood_type)
-      if (item.profile) profile.add(item.profile)
-      if (item.color) color.add(item.color)
-      if (item.finishing) finishing.add(item.finishing)
-    })
+    // Ambil opsi dari allPOs agar lebih relevan dengan tabel PO
+    allPOs.forEach(po => {
+       (po.items || []).forEach(item => {
+           if (item.wood_type) wood_type.add(item.wood_type);
+           if (item.profile) profile.add(item.profile);
+           if (item.color) color.add(item.color);
+           if (item.finishing) finishing.add(item.finishing);
+       });
+    });
     return {
-      wood_type: [...wood_type],
-      profile: [...profile],
-      color: [...color],
-      finishing: [...finishing]
+      wood_type: [...wood_type].sort(),
+      profile: [...profile].sort(),
+      color: [...color].sort(),
+      finishing: [...finishing].sort()
     }
-  }, [allItems])
+  }, [allPOs]) // Ubah dependensi
 
-  const filteredItems = useMemo(() => {
-    return allItems.filter((item) => {
-      return (
+  // [DIROMBAK] Filter sekarang diterapkan pada PO, bukan item
+  const filteredPOs = useMemo(() => {
+    // 1. Ambil hanya PO yang 'Completed'
+    const completedPOs = allPOs.filter(po => po.status === 'Completed');
+
+    // 2. Terapkan filter dropdown pada PO
+    return completedPOs.filter((po) => {
+      // Cek apakah *minimal satu* item di PO ini cocok dengan filter
+      const hasMatchingItem = (po.items || []).some(item =>
         (filters.wood_type === 'all' || item.wood_type === filters.wood_type) &&
         (filters.profile === 'all' || item.profile === filters.profile) &&
         (filters.color === 'all' || item.color === filters.color) &&
         (filters.finishing === 'all' || item.finishing === filters.finishing)
-      )
-    })
-  }, [allItems, filters])
+      );
+      // Jika tidak ada filter aktif ATAU ada item yang cocok, tampilkan PO ini
+      const noFiltersActive = filters.wood_type === 'all' && filters.profile === 'all' && filters.color === 'all' && filters.finishing === 'all';
+      return noFiltersActive || hasMatchingItem;
+    });
+  }, [allPOs, filters])
 
-  const insights = useMemo(() => calculateInsights(filteredItems), [filteredItems])
+  // Insights dihitung dari PO yang terfilter
+  const insights = useMemo(() => calculateInsightsFromPOs(filteredPOs), [filteredPOs])
 
   const handleFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setFilters((prev) => ({ ...prev, [e.target.name]: e.target.value }))
@@ -132,9 +170,10 @@ const AnalysisPage: React.FC = () => {
     const topTrending = analysisData.trendingProducts
       .slice(0, 2)
       .map((p) => p.name)
-      .join(' dan ')
-    return `Pertimbangkan untuk menambah stok untuk produk ${topTrending} karena permintaannya sedang meningkat pesat.`
+     .join(' dan ')
+    return `Pertimbangkan untuk menambah stok untuk produk ${topTrending} karena permintaannya sedang meningkat pesat.`; // Semicolon added
   }, [analysisData])
+
 
   if (isLoading) {
     return (
@@ -207,7 +246,7 @@ const AnalysisPage: React.FC = () => {
         <ResponsiveContainer width="100%" height={400}>
           <BarChart
             layout="vertical"
-            data={analysisData.topSellingProducts.slice()}
+            data={analysisData.topSellingProducts.slice()} // Use slice() for safety if modifying data later
             margin={{ top: 20, right: 30, left: 100, bottom: 5 }}
           >
             <CartesianGrid strokeDasharray="3 3" />
@@ -255,7 +294,7 @@ const AnalysisPage: React.FC = () => {
       </Card>
 
       {/* --- BAGIAN EKSPLORASI DATA INTERAKTIF --- */}
-      <h3 style={{ marginTop: '2rem' }}>Eksplorasi Minat Customer</h3>
+      <h3 style={{ marginTop: '2rem' }}>Eksplorasi PO Selesai</h3> {/* Judul diubah */}
       <Card>
         <div className="interactive-bi-layout">
           <div className="bi-filters">
@@ -264,102 +303,103 @@ const AnalysisPage: React.FC = () => {
               <label>Jenis Kayu</label>
               <select name="wood_type" value={filters.wood_type} onChange={handleFilterChange}>
                 <option value="all">Semua</option>
-                {uniqueOptions.wood_type.map((o) => (
-                  <option key={o} value={o}>
-                    {o}
-                  </option>
-                ))}
+                {uniqueOptions.wood_type.map((o) => (<option key={o} value={o}>{o}</option>))}
               </select>
             </div>
             <div className="form-group">
               <label>Profil</label>
               <select name="profile" value={filters.profile} onChange={handleFilterChange}>
                 <option value="all">Semua</option>
-                {uniqueOptions.profile.map((o) => (
-                  <option key={o} value={o}>
-                    {o}
-                  </option>
-                ))}
+                {uniqueOptions.profile.map((o) => (<option key={o} value={o}>{o}</option>))}
               </select>
             </div>
             <div className="form-group">
               <label>Warna</label>
               <select name="color" value={filters.color} onChange={handleFilterChange}>
                 <option value="all">Semua</option>
-                {uniqueOptions.color.map((o) => (
-                  <option key={o} value={o}>
-                    {o}
-                  </option>
-                ))}
+                {uniqueOptions.color.map((o) => (<option key={o} value={o}>{o}</option>))}
               </select>
             </div>
             <div className="form-group">
               <label>Finishing</label>
               <select name="finishing" value={filters.finishing} onChange={handleFilterChange}>
                 <option value="all">Semua</option>
-                {uniqueOptions.finishing.map((o) => (
-                  <option key={o} value={o}>
-                    {o}
-                  </option>
-                ))}
+                {uniqueOptions.finishing.map((o) => (<option key={o} value={o}>{o}</option>))}
               </select>
             </div>
           </div>
           <div className="bi-results">
+            {/* Insights sekarang dihitung dari PO terfilter */}
             <Card className="insight-card">
               <h4>Kesimpulan Otomatis</h4>
-              <p>
-                Dari <strong>{filteredItems.length}</strong> item yang cocok:
-              </p>
+              <p>Dari <strong>{filteredPOs.length}</strong> PO Selesai yang cocok:</p>
               <ul>
-                <li>
-                  Produk Paling Laris: <strong>{insights.topProduct}</strong>
-                </li>
-                <li>
-                  Jenis Kayu Paling Umum: <strong>{insights.topWood}</strong>
-                </li>
-                <li>
-                  Warna Paling Diminati: <strong>{insights.topColor}</strong>
-                </li>
-                <li>
-                  Finishing Paling Populer: <strong>{insights.topFinishing}</strong>
-                </li>
+                 <li>Produk Paling Laris: <strong>{insights.topProduct}</strong></li>
+                 <li>Jenis Kayu Paling Umum: <strong>{insights.topWood}</strong></li>
+                 <li>Warna Paling Diminati: <strong>{insights.topColor}</strong></li>
+                 <li>Finishing Paling Populer: <strong>{insights.topFinishing}</strong></li>
               </ul>
             </Card>
           </div>
         </div>
+
+        {/* [DIROMBAK TOTAL] Tabel Data Berbasis PO */}
         <div className="po-table-container" style={{ marginTop: '1.5rem' }}>
-          <table className="simple-table">
+          <h4>Detail PO Selesai (Filter Aktif)</h4>
+          <table className="po-table"> {/* Class po-table agar styling konsisten */}
             <thead>
               <tr>
-                <th>Produk</th>
                 <th>Customer</th>
-                <th>Jenis Kayu</th>
-                <th>Profil</th>
-                <th>Warna</th>
-                <th>Finishing</th>
-                <th>Qty</th>
+                <th>Revisi Oleh</th>
+                <th>Tgl Revisi</th>
+                <th>Tanggal Masuk</th>
+                <th>Target Kirim</th>
+                <th>Jenis Kayu & Produk</th>
+                <th>Total Kubikasi</th>
+                {/* Tambahkan kolom Aksi jika perlu */}
               </tr>
             </thead>
             <tbody>
-              {filteredItems.slice(0, 100).map((item) => (
-                <tr key={item.id}>
-                  <td>{item.product_name}</td>
-                  <td>{item.customer_name}</td>
-                  <td>{item.wood_type}</td>
-                  <td>{item.profile}</td>
-                  <td>{item.color}</td>
-                  <td>{item.finishing}</td>
+              {/* Iterasi melalui filteredPOs */}
+              {filteredPOs.slice(0, 100).map((po) => (
+                <tr key={po.id}>
                   <td>
-                    {item.quantity} {item.satuan}
+                    <div className="customer-cell">
+                      <strong>{po.project_name}</strong>
+                      <span>PO: {po.po_number}</span>
+                    </div>
                   </td>
+                  <td>{po.lastRevisedBy && po.lastRevisedBy !== 'N/A' ? po.lastRevisedBy : '-'}</td>
+                  <td>{formatDateTime(po.lastRevisedDate)}</td>
+                  <td>{formatDate(po.created_at)}</td>
+                  <td>{formatDate(po.deadline)}</td>
+                  <td className="product-list-cell">
+                    {po.items && po.items.length > 0 ? (
+                      <ul>
+                        {po.items.map((item) => (
+                          // Pastikan item memiliki id unik atau gunakan index
+                          <li key={item.id || `${po.id}-${item.product_name}`}>
+                            <span>{item.product_name} ({item.wood_type || 'N/A'})</span>
+                            <strong>{Number(item.kubikasi || 0).toFixed(4)} m³</strong>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <span>-</span>
+                    )}
+                  </td>
+                  <td>{Number(po.kubikasi_total || 0).toFixed(3)} m³</td>
+                  {/* Tambahkan sel Aksi jika perlu */}
                 </tr>
               ))}
+              {filteredPOs.length === 0 && (
+                 <tr><td colSpan={7}>Tidak ada data PO Selesai yang cocok dengan filter.</td></tr>
+              )}
             </tbody>
           </table>
-          {filteredItems.length > 100 && (
+          {filteredPOs.length > 100 && (
             <p style={{ textAlign: 'center', marginTop: '1rem' }}>
-              <i>Dan {filteredItems.length - 100} item lainnya...</i>
+              <i>Dan {filteredPOs.length - 100} PO lainnya...</i>
             </p>
           )}
         </div>

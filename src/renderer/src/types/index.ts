@@ -43,6 +43,8 @@ export interface POItem {
   progressHistory?: ProgressUpdate[]
   stageDeadlines?: { stageName: string; deadline: string }[]
   customer_name?: string
+  po_date?: string; // Add this line (already added previously)
+  created_at?: string;
 }
 
 export interface POHeader {
