@@ -342,13 +342,14 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
         currentY + rowHeight / 2
       )
 
-      const quantity = `${item.quantity || 0} ${item.satuan || 'pcs'}`
+      const quantityValue = (item.quantity || 0).toFixed(1);
+      const quantity = `${quantityValue} ${item.satuan || 'pcs'}`
       finalCtx.fillText(
         quantity,
-        tableLeft + cols.kuantiti.x + cols.kuantiti.width / 2,
+      tableLeft + cols.kuantiti.x + cols.kuantiti.width / 2,
         currentY + rowHeight / 2
       )
-      const kubikasi = item.kubikasi ? item.kubikasi.toFixed(4) : '0.0000'
+      const kubikasi = (item.kubikasi || 0).toFixed(3); // Cukup ubah .toFixed(4) menjadi .toFixed(3)
       finalCtx.fillText(
         kubikasi,
         tableLeft + cols.kubikasi.x + cols.kubikasi.width / 2,
@@ -397,8 +398,8 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
     )
     finalCtx.textAlign = 'center'
     const totalKubikasi = poData.kubikasi_total
-      ? poData.kubikasi_total.toFixed(4) + ' m³'
-      : '0.0000 m³'
+      ? poData.kubikasi_total.toFixed(3) + ' m³' // Ubah .toFixed(4) menjadi .toFixed(3)
+      : '0.000 m³' // Ubah '0.0000' menjadi '0.000'
     finalCtx.fillText(
       totalKubikasi,
       tableLeft + cols.kubikasi.x + cols.kubikasi.width / 2,
