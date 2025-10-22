@@ -1,5 +1,3 @@
-// file: src/renderer/src/pages/PODetailPage.tsx
-
 import React, { useState, useEffect } from 'react'
 import { POHeader, POItem } from '../types'
 import * as apiService from '../apiService'
@@ -17,7 +15,6 @@ const PODetailPage: React.FC<PODetailPageProps> = ({ po, onBackToList, onShowHis
   const [items, setItems] = useState<POItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  // Array tahapan produksi untuk menghitung progress per item
   const stages = [
     'Cari Bahan Baku',
     'Sawmill',

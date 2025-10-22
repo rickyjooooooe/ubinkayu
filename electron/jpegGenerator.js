@@ -342,14 +342,14 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
         currentY + rowHeight / 2
       )
 
-      const quantityValue = (item.quantity || 0).toFixed(1);
+      const quantityValue = (Number(item.quantity) || 0).toFixed(1);
       const quantity = `${quantityValue} ${item.satuan || 'pcs'}`
       finalCtx.fillText(
         quantity,
-      tableLeft + cols.kuantiti.x + cols.kuantiti.width / 2,
+        tableLeft + cols.kuantiti.x + cols.kuantiti.width / 2,
         currentY + rowHeight / 2
       )
-      const kubikasi = (item.kubikasi || 0).toFixed(3); // Cukup ubah .toFixed(4) menjadi .toFixed(3)
+      const kubikasi = (Number(item.kubikasi) || 0).toFixed(3);
       finalCtx.fillText(
         kubikasi,
         tableLeft + cols.kubikasi.x + cols.kubikasi.width / 2,
@@ -398,8 +398,8 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
     )
     finalCtx.textAlign = 'center'
     const totalKubikasi = poData.kubikasi_total
-      ? poData.kubikasi_total.toFixed(3) + ' m³' // Ubah .toFixed(4) menjadi .toFixed(3)
-      : '0.000 m³' // Ubah '0.0000' menjadi '0.000'
+      ? (Number(poData.kubikasi_total) || 0).toFixed(3) + ' m³'
+      : '0.000 m³'
     finalCtx.fillText(
       totalKubikasi,
       tableLeft + cols.kubikasi.x + cols.kubikasi.width / 2,
@@ -459,10 +459,8 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
       finalCtx.lineTo(colX + approvalColWidth, currentY + 25)
       finalCtx.stroke()
 
-      // Tulis tanggal ACC di bawah
       finalCtx.fillText('tgl:', colX + approvalColWidth / 2, currentY + approvalTableHeight - 10)
 
-      // Tambah nama marketing kalau kolomnya 'ACC Mrktng'
       if (title === 'ACC Mrktng' && poData.marketing) {
         finalCtx.fillStyle = blackColor
         finalCtx.font = `bold 10px ${baseFont}`

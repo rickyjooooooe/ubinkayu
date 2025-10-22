@@ -316,9 +316,13 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO }) =
 
         try {
           const poItems = await apiService.listPOItems(editingPO.id)
-          const itemsWithNumbers = poItems.map((item) => ({
+          const itemsWithNumbers = poItems.map((item: any) => ({
             ...item,
-            kubikasi: Number(item.kubikasi) || 0
+            kubikasi: Number(item.kubikasi) || 0,
+            thickness_mm: Number(item.thickness_mm) || 0,
+            width_mm: Number(item.width_mm) || 0,
+            length_mm: Number(item.length_mm) || 0,
+            quantity: Number(item.quantity) || 1
           }))
           setItems(itemsWithNumbers)
         } catch (error) {
@@ -466,17 +470,15 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO }) =
     if (items.length === 0) return alert('Tambahkan minimal satu item.')
 
     setIsSaving(true)
-    // Tutup modal jika terbuka
-    setIsRevisionModalOpen(false) 
-    
+    setIsRevisionModalOpen(false)
+
     try {
       const payload = await constructPayload()
 
-      // [TAMBAH] Sisipkan nama perevisi ke dalam payload jika ada
       if (reviserName) {
         payload.revisedBy = reviserName
       }
-      
+
       const result = editingPO
         ? await apiService.updatePO(payload)
         : await apiService.saveNewPO(payload)
