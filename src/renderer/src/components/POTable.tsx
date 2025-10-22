@@ -1,13 +1,14 @@
 // file: src/renderer/src/components/POTable.tsx
 
 import React from 'react'
-import { POHeader } from '../types'
+import { POHeader, POItem } from '../types' // Import POItem
 import { Button } from './Button'
 import { ProgressBar } from './ProgressBar'
 
 interface POTableProps {
   poList: POHeader[]
-  onDeletePO: (poId: string) => Promise<void>
+  // onDeletePO now accepts poInfo string
+  onDeletePO: (poId: string, poInfo: string) => Promise<void>
   onEditPO: (po: POHeader) => void
   onShowDetail: (po: POHeader) => void
   onShowProgress: (po: POHeader) => void
@@ -28,7 +29,7 @@ const POTable: React.FC<POTableProps> = ({
       year: 'numeric'
     })
   }
-  // [BARU] Fungsi format tanggal revisi terakhir (termasuk waktu)
+
   const formatLastRevisedDate = (d: string | undefined) =>
     d
       ? new Date(d).toLocaleString('id-ID', {
@@ -36,12 +37,28 @@ const POTable: React.FC<POTableProps> = ({
           month: 'short',
           year: 'numeric',
           hour: '2-digit',
-          minute: '2-digit'
+          minute: '2-digit',
+          hour12: false
         })
       : '-'
 
   const getStatusBadgeClass = (s: string | undefined) =>
     `status-badge status-${(s || 'open').toLowerCase().replace(' ', '-')}`
+
+  // Helper to render list items or '-'
+  const renderItemList = (items: POItem[] | undefined, key: keyof POItem) => {
+     if (!items || items.length === 0) return <span>-</span>;
+     return (
+       <ul>
+         {items.map((item, index) => (
+           <li key={item.id || index}>
+             {/* Display value or '-' if empty */}
+             {String(item[key] || '-')}
+           </li>
+         ))}
+       </ul>
+     );
+  }
 
   return (
     <div className="po-table-container">
@@ -50,11 +67,16 @@ const POTable: React.FC<POTableProps> = ({
           <tr>
             <th>Customer</th>
             <th>Revisi Oleh</th>
-            <th>Tanggal Revisi</th>
+            <th>Tgl Revisi</th>
             <th>Tanggal Masuk</th>
             <th>Target Kirim</th>
             <th>Jenis Kayu & Produk</th>
-            <th>Total Kubikasi</th>
+             <th>Total Kubikasi</th>
+            <th>Finishing</th> {/* New Column */}
+            <th>Sample</th>    {/* New Column */}
+            <th>Marketing</th> {/* New Column */}
+            <th>Location</th>  {/* New Column */}
+           
             <th>Prioritas</th>
             <th>Status</th>
             <th>Progress</th>
@@ -74,32 +96,35 @@ const POTable: React.FC<POTableProps> = ({
               <td>{formatLastRevisedDate(po.lastRevisedDate)}</td>
               <td>{formatDate(po.created_at)}</td>
               <td>{formatDate(po.deadline)}</td>
+              {/* Jenis Kayu & Produk (Including Kubikasi per item) */}
               <td className="product-list-cell">
                 {po.items && po.items.length > 0 ? (
                   <ul>
-                    {/* --- PERUBAHAN KUNCI ADA DI SINI --- */}
                     {po.items.map((item) => (
-                      <li key={item.id}>
-                        <span>
-                          {item.product_name} ({item.wood_type || 'N/A'})
-                        </span>
+                      <li key={item.id || `${po.id}-${item.product_name}`}>
+                        <span>{item.product_name} ({item.wood_type || 'N/A'})</span>
                         <strong>{Number(item.kubikasi || 0).toFixed(4)} m³</strong>
                       </li>
                     ))}
-                    {/* --- AKHIR PERUBAHAN --- */}
                   </ul>
                 ) : (
                   <span>-</span>
                 )}
               </td>
               <td>{Number(po.kubikasi_total || 0).toFixed(3)} m³</td>
+              {/* New Columns */}
+              <td className="product-list-cell">{renderItemList(po.items, 'finishing')}</td>
+              <td className="product-list-cell">{renderItemList(po.items, 'sample')}</td>
+              <td className="product-list-cell">{renderItemList(po.items, 'marketing')}</td>
+              <td className="product-list-cell">{renderItemList(po.items, 'location')}</td>
+              {/* End of New Columns */}
+              
               <td>
                 <span className={`status-badge ${(po.priority || 'Normal').toLowerCase()}`}>
                   {po.priority || 'Normal'}
                 </span>
               </td>
               <td>
-                {/* SEKARANG: Panggil fungsi getStatusBadgeClass */}
                 <span className={getStatusBadgeClass(po.status)}>{po.status || 'Open'}</span>
               </td>
               <td>
@@ -110,20 +135,23 @@ const POTable: React.FC<POTableProps> = ({
               </td>
               <td>
                 <div className="actions-cell">
-                  <Button variant="secondary" onClick={() => onShowDetail(po)}>
-                    Detail
-                  </Button>
+                  <Button variant="secondary" onClick={() => onShowDetail(po)}>Detail</Button>
                   <Button onClick={() => onEditPO(po)}>Revisi</Button>
-                  <Button variant="primary" onClick={() => onShowProgress(po)}>
-                    Update
-                  </Button>
-                  <Button variant="danger" onClick={() => onDeletePO(po.id)}>
+                  <Button variant="primary" onClick={() => onShowProgress(po)}>Update</Button>
+                  <Button
+                    variant="danger"
+                    onClick={() => onDeletePO(po.id, `${po.po_number} - ${po.project_name}`)}
+                  >
                     Hapus
                   </Button>
                 </div>
               </td>
             </tr>
           ))}
+           {poList.length === 0 && (
+             // Update colspan to 15 (original 11 + 4 new columns)
+             <tr><td colSpan={15}>Tidak ada PO aktif yang cocok.</td></tr>
+          )}
         </tbody>
       </table>
     </div>
