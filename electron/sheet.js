@@ -356,11 +356,11 @@ export async function listPOs() {
           let latestStageIndex = -1
 
           if (itemProgressHistory.length > 0) {
-             const latestProgress = itemProgressHistory.sort(
-                (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-             )[0]
-             // Gunakan PRODUCTION_STAGES yang terimpor
-             latestStageIndex = PRODUCTION_STAGES.indexOf(latestProgress.stage)
+            const latestProgress = itemProgressHistory.sort(
+              (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            )[0]
+            // Gunakan PRODUCTION_STAGES yang terimpor
+            latestStageIndex = PRODUCTION_STAGES.indexOf(latestProgress.stage)
           }
 
           const itemPercentage =
@@ -539,26 +539,38 @@ export async function updatePO(data) {
       await itemSheet.addRows(itemsToAdd)
     }
 
-    const poDataForJpeg = {
-      po_number: data.nomorPo ?? prev.po_number,
-      project_name: data.namaCustomer ?? prev.project_name,
-      deadline: data.tanggalKirim ?? prev.deadline,
-      priority: data.prioritas ?? prev.priority,
-      items: itemsWithIds,
-      notes: data.catatan ?? prev.notes,
-      created_at: now,
-      kubikasi_total: data.kubikasi_total ?? prev.kubikasi_total ?? 0,
-      poPhotoPath: data.poPhotoPath,
-      marketing: data.acc_marketing
-    }
+    if (data.poPhotoBase64) {
+      console.log(`[updatePO] 📸 Terdeteksi foto baru (base64), membuat JPEG baru...`)
 
-    const uploadResult = await generateAndUploadPO(poDataForJpeg, newRev)
+      const poDataForJpeg = {
+        po_number: data.nomorPo ?? prev.po_number,
+        project_name: data.namaCustomer ?? prev.project_name,
+        deadline: data.tanggalKirim ?? prev.deadline,
+        priority: data.prioritas ?? prev.priority,
+        items: itemsWithIds,
+        notes: data.catatan ?? prev.notes,
+        created_at: now,
+        kubikasi_total: data.kubikasi_total ?? prev.kubikasi_total ?? 0,
 
-    if (uploadResult.success) {
-      newRevisionRow.set('pdf_link', uploadResult.link)
+        poPhotoPath: data.poPhotoPath,
+        poPhotoBase64: data.poPhotoBase64,
+
+        marketing: data.acc_marketing
+      }
+
+      const uploadResult = await generateAndUploadPO(poDataForJpeg, newRev)
+
+      if (uploadResult.success) {
+        newRevisionRow.set('pdf_link', uploadResult.link)
+      } else {
+        newRevisionRow.set('pdf_link', `ERROR: ${uploadResult.error}`)
+      }
       await newRevisionRow.save()
+
     } else {
-      newRevisionRow.set('pdf_link', `ERROR: ${uploadResult.error}`)
+      console.log(`[updatePO] 🖼️ Tidak ada foto baru. Menyalin link dari revisi ${latest}: ${prev.pdf_link}`)
+
+      newRevisionRow.set('pdf_link', prev.pdf_link || null)
       await newRevisionRow.save()
     }
 
