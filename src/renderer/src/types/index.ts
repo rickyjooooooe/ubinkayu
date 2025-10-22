@@ -83,6 +83,19 @@ export interface PORevision {
   revised_by?: string; // <-- TAMBAHKAN BARIS INI
 }
 
+export interface ProductMaster {
+  id: string; // Atau number, sesuaikan dengan data Anda
+  product_name: string;
+  wood_type?: string | null;
+  profile?: string | null;
+  color?: string | null;
+  finishing?: string | null;
+  sample?: string | null;
+  marketing?: string | null;
+  satuan?: string | null; // Kolom 'satuan' sepertinya ada di sheet Anda
+  // Tambahkan properti lain jika ada kolom lain di sheet product_master
+}
+
 export interface RevisionHistoryItem {
   revision: PORevision
   items: POItem[]
