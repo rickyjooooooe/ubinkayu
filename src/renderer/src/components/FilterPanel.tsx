@@ -24,7 +24,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   }
 
   return (
-    <Card className="filter-panel">
+    <Card className="filter-panel refined-filter"> {/* Tambah class refined-filter */}
       <div className="filter-header">
         <h3>📊 Sort & Filter Purchase Order</h3>
         <span>
@@ -32,8 +32,10 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
         </span>
       </div>
 
-      <div className="filter-grid">
-        <div className="form-group">
+      <div className="filter-grid-refined"> {/* Gunakan class baru */}
+
+        {/* --- Bagian Atas: Urutkan & Pencarian --- */}
+        <div className="form-group sort-group">
           <label>Urutkan Berdasarkan</label>
           <select name="sortBy" value={filters.sortBy} onChange={handleInputChange}>
             <option value="deadline-asc">Tanggal Kirim (Terdekat)</option>
@@ -43,19 +45,16 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
             <option value="priority">Prioritas (Urgent &gt; High &gt; Normal)</option>
           </select>
         </div>
-
-        <div className="form-group search-bar">
+        <div className="form-group search-group">
           <label>Pencarian</label>
           <Input
-            label=""
-            type="text"
-            name="searchQuery"
+            label="" type="text" name="searchQuery"
             placeholder="Cari berdasarkan nomor PO atau nama customer..."
-            value={filters.searchQuery}
-            onChange={handleInputChange}
+            value={filters.searchQuery} onChange={handleInputChange}
           />
         </div>
 
+        {/* --- Bagian Tengah: Filter Dropdown --- */}
         <div className="form-group">
           <label>Status PO</label>
           <select name="status" value={filters.status} onChange={handleInputChange}>
@@ -63,11 +62,9 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
             <option value="Open">Open</option>
             <option value="In Progress">In Progress</option>
             <option value="Completed">Completed</option>
-            {/* [MODIFIKASI] Tambahkan opsi Cancelled */}
             <option value="Cancelled">Cancelled</option>
           </select>
         </div>
-
         <div className="form-group">
           <label>Prioritas</label>
           <select name="priority" value={filters.priority} onChange={handleInputChange}>
@@ -77,69 +74,39 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
             <option value="Normal">Normal</option>
           </select>
         </div>
-
-        {/* [BARU] Filter berdasarkan jenis kayu */}
         <div className="form-group">
           <label>Jenis Kayu</label>
           <select name="woodType" value={filters.woodType || 'all'} onChange={handleInputChange}>
             <option value="all">Semua Jenis Kayu</option>
-            {availableWoodTypes.map((woodType) => (
-              <option key={woodType} value={woodType}>
-                {woodType}
-              </option>
-            ))}
+            {availableWoodTypes.map((woodType) => (<option key={woodType} value={woodType}>{woodType}</option>))}
           </select>
         </div>
-
-        {/* [BARU] Filter berdasarkan produk */}
         <div className="form-group">
           <label>Produk</label>
-          <select
-            name="productType"
-            value={filters.productType || 'all'}
-            onChange={handleInputChange}
-          >
+          <select name="productType" value={filters.productType || 'all'} onChange={handleInputChange}>
             <option value="all">Semua Produk</option>
-            {availableProductTypes.map((productType) => (
-              <option key={productType} value={productType}>
-                {productType}
-              </option>
-            ))}
+            {availableProductTypes.map((productType) => (<option key={productType} value={productType}>{productType}</option>))}
           </select>
         </div>
 
-        <div className="form-group">
-          <label>Tanggal Input Dari</label>
-          <Input
-            label=""
-            type="date"
-            name="dateFrom"
-            value={filters.dateFrom}
-            onChange={handleInputChange}
-          />
+        {/* --- Bagian Bawah: Filter Tanggal --- */}
+        <div className="form-group date-filter-group">
+          <label>Tanggal Input</label>
+          <div className="date-range-group">
+            <Input label="" type="date" name="dateFrom" value={filters.dateFrom} onChange={handleInputChange} />
+            <span>sampai</span>
+            <Input label="" type="date" name="dateTo" value={filters.dateTo} onChange={handleInputChange} />
+          </div>
         </div>
-        <div className="form-group">
-          <label>Tanggal Input Sampai</label>
+        <div className="form-group date-filter-group">
+          <label>Tanggal Kirim</label>
           <Input
-            label=""
-            type="date"
-            name="dateTo"
-            value={filters.dateTo}
-            onChange={handleInputChange}
+            label="" type="date" name="deadlineDate"
+            value={filters.deadlineDate} onChange={handleInputChange}
           />
         </div>
 
-        <div className="form-group">
-          <label>Tanggal Kirim</label>
-          <Input
-            label=""
-            type="date"
-            name="deadlineDate" // <-- Ganti nama menjadi 'deadlineDate'
-            value={filters.deadlineDate}
-            onChange={handleInputChange}
-          />
-        </div>
-      </div>
+      </div> {/* Akhir filter-grid-refined */}
     </Card>
   )
 }

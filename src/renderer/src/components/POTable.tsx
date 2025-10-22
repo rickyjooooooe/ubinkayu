@@ -50,7 +50,7 @@ const POTable: React.FC<POTableProps> = ({
           <tr>
             <th>Customer</th>
             <th>Revisi Oleh</th>
-            <th>Tgl Revisi</th>
+            <th>Tanggal Revisi</th>
             <th>Tanggal Masuk</th>
             <th>Target Kirim</th>
             <th>Jenis Kayu & Produk</th>

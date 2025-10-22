@@ -2524,3 +2524,265 @@ body {
   color: var(--primary-color);
   background-color: #fff9f0; /* Warna hover halus */
 }
+/* ======================================================= */
+/* == REVISI FINAL STYLING FILTER PANEL (ALIGNMENT FIX) == */
+/* ======================================================= */
+
+.filter-grid-improved {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr); /* 6 columns on desktop */
+  gap: 1.5rem 1rem; /* Vertical gap, Horizontal gap */
+  align-items: end; /* Align grid items (form-groups) to the bottom */
+}
+
+/* Styling internal layout of each form group */
+.filter-grid-improved .form-group {
+  display: flex;          /* Use Flexbox */
+  flex-direction: column; /* Stack label above input/select */
+  /* Remove justify-content if previously added */
+}
+
+/* Consistent spacing below ALL labels in the filter */
+.filter-grid-improved .form-group label {
+  margin-bottom: 8px; /* Standard space below label */
+  display: block; /* Ensure label takes its own line */
+}
+
+/* Target ALL input/select elements directly for consistent appearance */
+.filter-grid-improved .form-group input,
+.filter-grid-improved .form-group select {
+  /* Remove fixed height to allow natural height based on content/padding */
+  /* height: 42px; */
+
+  /* Ensure consistent vertical padding (adjust values to match your base input style) */
+  padding-top: 10px;
+  padding-bottom: 10px;
+
+  /* Ensure consistent border */
+  border: 1px solid #d1d5db; /* Example border, match your theme */
+
+  /* Consistent font size */
+  font-size: 14px; /* Example size, match your theme */
+  line-height: 1.5; /* Ensure consistent line height */
+
+  box-sizing: border-box; /* Include padding and border in element's total width and height */
+  width: 100%; /* Make elements fill their grid cell */
+}
+
+/* Helper classes for spanning columns (remain the same) */
+.filter-grid-improved .span-2 { grid-column: span 2; }
+.filter-grid-improved .span-3 { grid-column: span 3; }
+.filter-grid-improved .span-4 { grid-column: span 4; }
+.filter-grid-improved .span-6 { grid-column: span 6; }
+
+/* Styling date range group (remains mostly the same) */
+.date-range-group {
+  display: flex;
+  align-items: center; /* Vertically align items in the date group */
+  gap: 0.5rem;
+}
+.date-range-group span {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  flex-shrink: 0; /* Prevent "sampai" text from shrinking */
+}
+.date-range-group input[type="date"] {
+  flex: 1; /* Allow date inputs to grow */
+  /* Ensure date inputs also match the standard padding */
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+
+/* --- Responsive Adjustments (remain the same) --- */
+@media (max-width: 992px) {
+  .filter-grid-improved {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .filter-grid-improved .span-2 { grid-column: span 2; }
+  .filter-grid-improved .span-3 { grid-column: span 4; }
+  .filter-grid-improved .span-4 { grid-column: span 4; }
+}
+
+@media (max-width: 768px) {
+  .filter-grid-improved {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .filter-grid-improved .span-2,
+  .filter-grid-improved .span-3,
+  .filter-grid-improved .span-4 {
+    grid-column: span 2;
+  }
+  .date-range-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+   .date-range-group span {
+    text-align: center;
+    margin: 0.25rem 0;
+  }
+}
+
+@media (max-width: 576px) {
+  .filter-grid-improved {
+    grid-template-columns: 1fr;
+  }
+  .filter-grid-improved .span-2,
+  .filter-grid-improved .span-3,
+  .filter-grid-improved .span-4 {
+    grid-column: span 1;
+  }
+}
+
+/* --- PERBAIKAN UNTUK STATUS BADGE --- */
+
+.status-badge {
+  display: inline-block; /* Pastikan badge sejajar dengan teks lain */
+  padding: 0.3rem 0.8rem; /* Beri padding horizontal yang cukup */
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: white;
+  text-align: center;
+  white-space: nowrap; /* <-- KUNCI: Cegah teks turun baris */
+  line-height: 1.2;    /* Sesuaikan line-height jika perlu */
+  vertical-align: middle; /* Sejajarkan badge secara vertikal */
+}
+
+/* Pastikan warna latar sudah benar (mungkin sudah ada) */
+.status-badge.status-open { background-color: #3182CE; }
+.status-badge.status-in-progress { background-color: #D69E2E; } /* Oranye */
+.status-badge.status-completed { background-color: #38A169; } /* Hijau */
+.status-badge.status-cancelled { background-color: #C53030; } /* Merah */
+
+/* Aturan lama yang mungkin menyebabkan masalah (jika ada, hapus atau sesuaikan) */
+/* .status-badge { width: 80px; } */ /* Hindari lebar tetap */
+
+.filter-grid-improved {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr); /* Tetap 6 kolom */
+  gap: 1.5rem 1rem;
+  align-items: end; /* Atau baseline, sesuai preferensi */
+}
+
+/* Helper class span */
+.filter-grid-improved .span-2 { grid-column: span 2; }
+.filter-grid-improved .span-3 { grid-column: span 3; }
+.filter-grid-improved .span-4 { grid-column: span 4; }
+.filter-grid-improved .span-6 { grid-column: span 6; }
+
+/* file: src/renderer/src/assets/main.css */
+
+/* ======================================================= */
+/* == REFINED STYLING UNTUK FILTER PANEL (Layout Baru)   == */
+/* ======================================================= */
+
+.refined-filter .filter-header {
+  margin-bottom: 1.5rem; /* Jarak lebih lega ke grid */
+}
+
+.filter-grid-refined {
+  display: grid;
+  /* Definisikan 4 kolom utama yang fleksibel */
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.25rem 1.5rem; /* Jarak vertikal, jarak horizontal */
+  align-items: end; /* Ratakan item ke bawah */
+}
+
+/* --- Layout Spesifik untuk Item Grid --- */
+
+/* Urutkan: ambil 1 kolom */
+.filter-grid-refined .sort-group {
+  grid-column: span 1;
+}
+
+/* Pencarian: ambil 3 kolom di samping Urutkan */
+.filter-grid-refined .search-group {
+  grid-column: span 3;
+}
+
+/* Filter Dropdown (Status, Prio, Kayu, Produk): Masing-masing 1 kolom (total 4) */
+/* Tidak perlu span khusus */
+
+/* Filter Tanggal: Masing-masing ambil 2 kolom agar berdampingan */
+.filter-grid-refined .date-filter-group {
+  grid-column: span 2;
+}
+
+
+/* --- Styling Internal Form Group & Elemen --- */
+
+.filter-grid-refined .form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.filter-grid-refined .form-group label {
+  margin-bottom: 8px;
+  display: block;
+}
+
+/* Samakan tinggi input & select */
+.filter-grid-refined .form-group input,
+.filter-grid-refined .form-group select {
+  height: 42px;
+  box-sizing: border-box;
+  width: 100%;
+  /* Pastikan padding, border, font-size konsisten dengan style umum Anda */
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  font-size: 14px;
+}
+
+/* Styling grup input tanggal (tetap sama) */
+.date-range-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.date-range-group span {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.date-range-group input[type="date"] {
+  flex: 1;
+}
+
+
+/* --- Penyesuaian Responsif --- */
+
+@media (max-width: 992px) {
+  .filter-grid-refined {
+    /* Di tablet, gunakan 2 kolom */
+    grid-template-columns: repeat(2, 1fr);
+  }
+  /* Semua item filter mengambil lebar penuh (span 2) */
+  .filter-grid-refined .sort-group,
+  .filter-grid-refined .search-group,
+  .filter-grid-refined .date-filter-group {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 576px) {
+  .filter-grid-refined {
+    /* Di mobile, gunakan 1 kolom */
+    grid-template-columns: 1fr;
+  }
+  /* Semua item filter mengambil lebar penuh (span 1) */
+  .filter-grid-refined .sort-group,
+  .filter-grid-refined .search-group,
+  .filter-grid-refined .date-filter-group {
+    grid-column: span 1;
+  }
+   /* Tumpuk tanggal input di mobile */
+  .date-range-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+   .date-range-group span {
+    text-align: center;
+    margin: 0.25rem 0;
+  }
+}
