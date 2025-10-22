@@ -1,6 +1,5 @@
 // file: src/renderer/src/App.tsx
-
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { POHeader } from './types'
 import Navbar from './components/Navbar'
 import POListPage from './pages/POListPage'
@@ -11,55 +10,73 @@ import DashboardPage from './pages/DashboardPage'
 import RevisionHistoryPage from './pages/RevisionHistoryPage'
 import UpdateProgressPage from './pages/UpdateProgressPage'
 import AnalysisPage from './pages/AnalysisPage'
-
-// Impor semua fungsi dari apiService
+import Chatbot from './components/Chatbot'
+import { useWindowWidth } from './hooks/useWindowWidth'
 import * as apiService from './apiService'
 
+// Definisikan tipe untuk view agar lebih aman
+type AppView =
+  | 'dashboard'
+  | 'list'
+  | 'input'
+  | 'detail'
+  | 'tracking'
+  | 'history'
+  | 'updateProgress'
+  | 'analysis'
+  | 'aiChat'
+
 function App() {
-  const [view, setView] = useState<string>('dashboard')
-  const [purchaseOrders, setPurchaseOrders] = useState<POHeader[]>([])
+  const windowWidth = useWindowWidth()
+  const isMobile = windowWidth <= 768
+
+  // --- STATE UTAMA ---
+  const [view, setView] = useState<AppView>('dashboard')
+  // Gunakan HANYA SATU state untuk daftar PO
+  const [allPOs, setAllPOs] = useState<POHeader[]>([])
   const [editingPO, setEditingPO] = useState<POHeader | null>(null)
   const [selectedPoId, setSelectedPoId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [trackingPO, setTrackingPO] = useState<POHeader | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [previousView, setPreviousView] = useState<AppView>('dashboard')
 
+  // --- FUNGSI-FUNGSI ---
   const fetchPOs = async () => {
-    setIsLoading(true)
+    // Jangan set isLoading true di sini agar refresh terasa lebih halus
     try {
-      // Menggunakan apiService
       const pos: POHeader[] = await apiService.listPOs()
-      setPurchaseOrders(pos)
+      setAllPOs(pos) // <-- Gunakan setAllPOs
     } catch (error) {
       console.error('Gagal mengambil daftar PO:', error)
       alert(`Gagal mengambil daftar PO: ${(error as Error).message}`)
-    } finally {
-      setIsLoading(false)
     }
   }
 
   const handleRefresh = async () => {
-    setIsRefreshing(true) // Tampilkan loading
-    await fetchPOs()      // Panggil ulang fungsi fetch data
-    setIsRefreshing(false) // Sembunyikan loading
+    setIsRefreshing(true)
+    await fetchPOs()
+    setIsRefreshing(false)
   }
 
   useEffect(() => {
-    // Hanya fetch data jika berada di view yang relevan
-    if (['dashboard', 'list'].includes(view)) {
-      fetchPOs()
+    const initialFetch = async () => {
+      setIsLoading(true)
+      await fetchPOs()
+      setIsLoading(false)
     }
-  }, [view])
+    // Fetch data saat komponen pertama kali dimuat
+    initialFetch()
+  }, []) // Dependensi kosong agar hanya jalan sekali
 
   const handleDeletePO = async (poId: string) => {
-    const poToDelete = purchaseOrders.find((po) => po.id === poId)
+    const poToDelete = allPOs.find((po) => po.id === poId)
     const poInfo = poToDelete ? `${poToDelete.po_number} - ${poToDelete.project_name}` : poId
     const confirmMessage = `⚠️ PERINGATAN PENGHAPUSAN\n\nPO: ${poInfo}\n\nData yang akan dihapus PERMANEN:\n• Semua revisi PO\n• Semua item & progress\n• File PDF & foto dari Google Drive\n\nTindakan ini TIDAK DAPAT DIBATALKAN!\n\nApakah Anda yakin ingin melanjutkan?`
 
     if (window.confirm(confirmMessage)) {
       setIsLoading(true)
       try {
-        // Menggunakan apiService
         const result = await apiService.deletePO(poId)
         if (result.success) {
           alert(`✅ PENGHAPUSAN BERHASIL\n\n${result.message}`)
@@ -79,55 +96,56 @@ function App() {
     setEditingPO(po)
     setView('input')
   }
-
   const handleShowInputForm = () => {
     setEditingPO(null)
     setView('input')
   }
-
   const handleShowDetail = (po: POHeader) => {
     setSelectedPoId(po.id)
     setView('detail')
   }
-
   const handleShowHistory = () => {
-    if (selectedPoId) {
-      setView('history')
-    }
+    if (selectedPoId) setView('history')
+  }
+  const handleBackToList = () => {
+    handleNavigate('list')
+  }
+  const handleSelectPOForTracking = (po: POHeader) => {
+    setTrackingPO(po)
+    setView('updateProgress')
+  }
+  const handleShowProgress = (po: POHeader) => {
+    setTrackingPO(po)
+    setView('updateProgress')
   }
 
-  const handleNavigate = (targetView: 'dashboard' | 'list' | 'tracking' | 'analysis'): void => {
+  const handleNavigate = (targetView: AppView): void => {
+    if (targetView === 'aiChat' && view !== 'aiChat') {
+      setPreviousView(view)
+    }
     setSelectedPoId(null)
     setTrackingPO(null)
     setEditingPO(null)
     setView(targetView)
   }
 
-  const handleBackToList = () => {
-    handleNavigate('list')
+  const handleMaximizeChat = () => {
+    handleNavigate('aiChat')
   }
-
-  const handleSelectPOForTracking = (po: POHeader) => {
-    setTrackingPO(po)
-    setView('updateProgress')
-  }
-
-  const handleShowProgress = (po: POHeader) => {
-    setTrackingPO(po)
-    setView('updateProgress')
+  const handleMinimizeChat = () => {
+    setView(previousView)
   }
 
   const getCurrentPO = () => {
     if (!selectedPoId) return null
-    return purchaseOrders.find((p) => p.id === selectedPoId) || null
+    return allPOs.find((p) => p.id === selectedPoId) || null
   }
 
   const renderContent = () => {
     const currentPO = getCurrentPO()
-
     switch (view) {
       case 'dashboard':
-        return <DashboardPage poList={purchaseOrders} isLoading={isLoading} />
+        return <DashboardPage poList={allPOs} isLoading={isLoading} />
       case 'input':
         return <InputPOPage onSaveSuccess={handleBackToList} editingPO={editingPO} />
       case 'detail':
@@ -152,11 +170,13 @@ function App() {
         return <UpdateProgressPage po={trackingPO} onBack={() => setView('tracking')} />
       case 'analysis':
         return <AnalysisPage />
+      case 'aiChat':
+        return <Chatbot mode="page" allPOs={allPOs} onMinimize={handleMinimizeChat} />
       case 'list':
       default:
         return (
           <POListPage
-            poList={purchaseOrders}
+            poList={allPOs}
             onAddPO={handleShowInputForm}
             onDeletePO={handleDeletePO}
             onEditPO={handleEditPO}
@@ -173,10 +193,13 @@ function App() {
       <Navbar
         currentView={view}
         onNavigate={handleNavigate}
-        onRefresh={handleRefresh}      // <-- TAMBAHKAN INI
-        isRefreshing={isRefreshing}  // <-- TAMBAHKAN INI
+        onRefresh={handleRefresh}
+        isRefreshing={isRefreshing}
       />
       <main className="main-content">{renderContent()}</main>
+      {!isMobile && view !== 'aiChat' && (
+        <Chatbot mode="widget" allPOs={allPOs} onMaximize={handleMaximizeChat} />
+      )}
     </div>
   )
 }

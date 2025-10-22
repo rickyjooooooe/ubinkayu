@@ -1,0 +1,240 @@
+/* ========================================= */
+/* == STYLING UNTUK KOMPONEN CHATBOT (ALL) == */
+/* ========================================= */
+
+/* --- Styling Dasar (Digunakan oleh Keduanya) --- */
+
+.chat-messages {
+  flex: 1; /* Mengisi ruang vertikal */
+  padding: 1rem; /* Padding default */
+  overflow-y: auto; /* Aktifkan scroll */
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem; /* Jarak antar pesan default */
+  background-color: #f8f9fa; /* Latar belakang area chat sedikit abu */
+}
+
+/* Styling Bubble Pesan */
+.message {
+  padding: 0.8rem 1.1rem; /* Padding di dalam bubble */
+  border-radius: 20px; /* Sudut lebih bulat */
+  max-width: 80%; /* Lebar maksimum pesan */
+  word-wrap: break-word;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); /* Shadow halus */
+}
+
+.message.bot {
+  background-color: #ffffff; /* Bubble bot putih */
+  color: var(--text-primary);
+  border-bottom-left-radius: 5px; /* Sudut tajam untuk "ekor" */
+  align-self: flex-start; /* Rata kiri */
+}
+
+.message.user {
+  background-color: var(--primary-color); /* Bubble user oranye */
+  color: white;
+  border-bottom-right-radius: 5px; /* Sudut tajam untuk "ekor" */
+  align-self: flex-end; /* Rata kanan */
+}
+
+/* Area Input */
+.chat-input {
+  display: flex;
+  align-items: flex-end; /* Ratakan tombol dengan bawah textarea */
+  padding: 0.75rem 1rem; /* Padding default */
+  border-top: 1px solid var(--border-color);
+  background-color: #ffffff; /* Latar putih untuk input area */
+  gap: 0.75rem; /* Jarak antara textarea dan tombol */
+}
+
+.chat-input textarea {
+  flex: 1; /* Mengisi sisa ruang horizontal */
+  border: 1px solid var(--border-color);
+  border-radius: 22px; /* Sesuaikan dengan tinggi */
+  padding: 0.7rem 1.2rem;
+  resize: none;
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  max-height: 100px; /* Batas tinggi jika banyak baris */
+  min-height: 44px; /* Samakan dengan tinggi tombol */
+  box-sizing: border-box;
+  outline: none; /* Hilangkan outline default */
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.chat-input textarea:focus {
+   border-color: var(--primary-color);
+   box-shadow: 0 0 0 2px rgba(247, 147, 30, 0.1);
+}
+
+.chat-input button {
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 1.3rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+  flex-shrink: 0;
+  padding: 0;
+}
+.chat-input button:hover {
+  background-color: var(--primary-hover);
+  transform: scale(1.05);
+}
+.chat-input button:active {
+  transform: scale(0.95);
+}
+.chat-input button:disabled {
+  background-color: #a0aec0;
+  cursor: not-allowed;
+  transform: scale(1);
+}
+
+/* --- Styling Spesifik untuk Mode Halaman Penuh --- */
+
+.ai-chat-page-container .page-header {
+  margin-bottom: 1.5rem;
+}
+.ai-chat-page-container .page-header h1 {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ai-chat-card {
+  margin-bottom: 0;
+  padding: 0;
+  height: calc(100vh - 220px); /* Sesuaikan tinggi */
+  min-height: 450px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.ai-chat-card .chat-messages {
+  padding: 1.5rem;
+  gap: 1rem;
+}
+.ai-chat-card .chat-input {
+  padding: 1rem 1.5rem;
+}
+.ai-chat-card .chat-input textarea {
+  font-size: 1rem;
+}
+
+/* --- Styling Spesifik untuk Mode Widget Mengambang --- */
+
+.chatbot-widget-container {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 1050;
+}
+
+.chatbot-fab {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  font-size: 1.8rem;
+  cursor: pointer;
+  transition: transform 0.2s ease, background-color 0.2s ease;
+}
+.chatbot-fab:hover {
+  background-color: var(--primary-hover);
+  transform: scale(1.05);
+}
+
+.chatbot-window {
+  position: absolute;
+  bottom: calc(100% + 1rem);
+  right: 0;
+  width: 350px;
+  max-height: 500px;
+  background-color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(10px);
+  animation: slideUpFadeIn 0.3s ease-out forwards;
+}
+
+.chatbot-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background-color: #f9fafb;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+.chatbot-header h4 { margin: 0; font-size: 1rem; font-weight: 600; }
+.chatbot-header button {
+  background: none; border: none; font-size: 1.2rem;
+  color: var(--text-secondary); cursor: pointer; padding: 0.25rem;
+}
+
+/* --- Animasi --- */
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.spin-icon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes slideUpFadeIn {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* --- Penyesuaian Responsif --- */
+
+@media (max-width: 768px) {
+  /* Sembunyikan FAB di mobile karena navigasi ada di navbar bawah */
+  .chatbot-widget-container .chatbot-fab {
+    display: none;
+  }
+
+  /* Penyesuaian untuk mode halaman di mobile */
+  .ai-chat-card {
+    height: calc(100vh - 160px); /* Sesuaikan tinggi agar pas */
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+  }
+  .ai-chat-card .chat-messages {
+    padding: 1rem;
+  }
+  .ai-chat-card .chat-input {
+    padding: 0.75rem 1rem;
+  }
+}
+
+/* Styling Scrollbar (Opsional) */
+.chat-messages::-webkit-scrollbar { width: 6px; }
+.chat-messages::-webkit-scrollbar-track { background: transparent; }
+.chat-messages::-webkit-scrollbar-thumb { background-color: rgba(0, 0, 0, 0.2); border-radius: 10px; }
+.chat-messages::-webkit-scrollbar-thumb:hover { background-color: rgba(0, 0, 0, 0.4); }

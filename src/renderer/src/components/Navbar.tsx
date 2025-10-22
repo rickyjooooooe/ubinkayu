@@ -7,102 +7,93 @@ import {
   LuListOrdered,
   LuTrendingUp,
   LuActivity,
-  LuRefreshCw, // <-- Impor ikon refresh
-  LuLoader    // <-- Impor ikon loading
+  LuRefreshCw,
+  LuLoader, // Ganti nama impor agar konsisten
+  LuBrainCircuit
 } from 'react-icons/lu'
+// Impor hook
+import { useWindowWidth } from '../hooks/useWindowWidth'
 import './Navbar.css'
 
-// Perbarui interface untuk menerima props baru
 interface NavbarProps {
   currentView: string
-  onNavigate: (view: 'dashboard' | 'list' | 'tracking' | 'analysis') => void
+  onNavigate: (view: 'dashboard' | 'list' | 'tracking' | 'analysis' | 'aiChat') => void
   onRefresh: () => void
   isRefreshing: boolean
 }
 
 const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, onRefresh, isRefreshing }) => {
-  const handleLinkClick = (view: 'dashboard' | 'list' | 'tracking' | 'analysis') => {
+  // --- DETEKSI UKURAN LAYAR ---
+  const windowWidth = useWindowWidth()
+  const isMobile = windowWidth <= 768 // Sesuaikan breakpoint ini jika perlu (samakan dengan CSS)
+
+  const handleLinkClick = (view: 'dashboard' | 'list' | 'tracking' | 'analysis' | 'aiChat') => {
     onNavigate(view)
   }
 
-  const getLinkClass = (viewName: 'dashboard' | 'list' | 'tracking' | 'analysis') => {
+  const getLinkClass = (viewName: 'dashboard' | 'list' | 'tracking' | 'analysis' | 'aiChat') => {
     const listViews = ['list', 'input', 'detail', 'history']
     const trackingViews = ['tracking', 'updateProgress']
 
     if (viewName === 'list' && listViews.includes(currentView)) return 'active'
     if (viewName === 'tracking' && trackingViews.includes(currentView)) return 'active'
+    if (viewName === 'aiChat' && currentView === 'aiChat') return 'active' // Cek untuk AI
     if (viewName === currentView) return 'active'
 
     return ''
   }
 
+  // Definisikan SEMUA link yang mungkin ada
+  const allNavLinks = [
+    { id: 'dashboard', label: 'Dashboard', Icon: LuLayoutDashboard },
+    { id: 'list', label: 'Purchase Orders', Icon: LuListOrdered },
+    { id: 'tracking', label: 'Progress', Icon: LuActivity },
+    { id: 'analysis', label: 'Analysis', Icon: LuTrendingUp },
+    { id: 'aiChat', label: 'AI Assist', Icon: LuBrainCircuit, mobileOnly: true } // <-- Tandai mobileOnly
+  ]
+
+  // --- FILTER LINK BERDASARKAN UKURAN LAYAR ---
+  const linksToRender = isMobile
+    ? allNavLinks // Tampilkan semua di mobile
+    : allNavLinks.filter((link) => !link.mobileOnly) // Sembunyikan yang mobileOnly di desktop
+
   return (
-    // Gunakan React Fragment agar bisa merender Navbar dan FAB secara bersamaan
-    <>
-      <nav className="navbar">
-        <div className="navbar-brand">
-          <img src={logo} alt="Ubinkayu Logo" className="navbar-logo" />
-        </div>
+    // Navbar tetap di atas untuk desktop, berubah jadi bawah di mobile via CSS
+    <nav className="navbar">
+      <div className="navbar-brand">
+        <img src={logo} alt="Ubinkayu Logo" className="navbar-logo" />
+      </div>
 
-        <div className="navbar-links">
-          {/* ... link navigasi tetap sama ... */}
-           <a
-            href="#"
-            onClick={() => handleLinkClick('dashboard')}
-            className={`nav-link ${getLinkClass('dashboard')}`}
-          >
-            <LuLayoutDashboard className="nav-icon" />
-            <span>Dashboard</span>
-          </a>
+      <div className="navbar-links">
+        {/* Gunakan linksToRender untuk map */}
+        {linksToRender.map((link) => (
           <a
+            key={link.id}
             href="#"
-            onClick={() => handleLinkClick('list')}
-            className={`nav-link ${getLinkClass('list')}`}
+            onClick={() => handleLinkClick(link.id as any)} // Cast 'as any' sementara
+            className={`nav-link ${getLinkClass(link.id as any)}`} // Cast 'as any' sementara
           >
-            <LuListOrdered className="nav-icon" />
-            <span>Purchase Orders</span>
+            <link.Icon className="nav-icon" />
+            {/* Ganti span biasa jadi span dengan class agar bisa ditarget CSS */}
+            <span className="nav-link-label">{link.label}</span>
           </a>
-          <a
-            href="#"
-            onClick={() => handleLinkClick('tracking')}
-            className={`nav-link ${getLinkClass('tracking')}`}
-          >
-            <LuActivity className="nav-icon" />
-            <span>Progress Tracking</span>
-          </a>
-          <a
-            href="#"
-            onClick={() => handleLinkClick('analysis')}
-            className={`nav-link ${getLinkClass('analysis')}`}
-          >
-            <LuTrendingUp className="nav-icon" />
-            <span>Product Analysis</span>
-          </a>
-        </div>
+        ))}
+      </div>
 
-        {/* -- Tombol Refresh untuk Desktop -- */}
-        <div className="navbar-actions">
-          <button
-            className="btn btn-secondary refresh-btn-desktop"
-            onClick={onRefresh}
-            disabled={isRefreshing}
-          >
-            {isRefreshing ? <LuLoader className="spin-icon" /> : <LuRefreshCw />}
-            <span>{isRefreshing ? 'Memuat...' : 'Refresh'}</span>
-          </button>
-        </div>
-      </nav>
-
-      {/* -- Floating Action Button (FAB) untuk Mobile -- */}
-      <button
-        className="refresh-fab-mobile"
-        onClick={onRefresh}
-        disabled={isRefreshing}
-        aria-label="Refresh Data"
-      >
-        {isRefreshing ? <LuLoader className="spin-icon" /> : <LuRefreshCw />}
-      </button>
-    </>
+      {/* Tombol Refresh Desktop (Tetap ada, akan disembunyikan via CSS di mobile) */}
+      <div className="navbar-actions">
+        <button
+          className="btn btn-secondary refresh-btn-desktop"
+          onClick={onRefresh}
+          disabled={isRefreshing}
+        >
+          {isRefreshing ? <LuLoader className="spin-icon" /> : <LuRefreshCw />}
+          {/* Sembunyikan teks di mobile jika perlu (bisa via CSS) */}
+          <span className="refresh-btn-text">{isRefreshing ? 'Memuat...' : 'Refresh'}</span>
+        </button>
+      </div>
+      {/* FAB Refresh sudah dihapus, tidak perlu lagi */}
+    </nav>
   )
 }
 

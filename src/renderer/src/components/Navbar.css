@@ -68,7 +68,7 @@
     right: 0;
     border-top: 1px solid #e0e0e0; /* Garis batas di atas */
     border-bottom: none;
-    padding: 0.5rem 0;
+    padding: 0.3rem 0;
     z-index: 1000; /* Pastikan selalu di atas konten lain */
   }
 
@@ -83,9 +83,10 @@
     flex-direction: column; /* Susun ikon dan teks secara vertikal */
     justify-content: center;
     align-items: center;
-    gap: 4px;
-    font-size: 0.75rem; /* Perkecil font */
-    padding: 0.25rem;
+    gap: 2px;
+    font-size: 0.65rem; /* Perkecil font */
+    padding: 0.2rem;
+    flex: 1;
   }
 
   /* Hilangkan border bawah di mobile dan ganti dengan styling lain */
