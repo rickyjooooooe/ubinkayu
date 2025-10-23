@@ -9,9 +9,13 @@ interface FilterPanelProps {
   poCount: { displayed: number; total: number }
   availableWoodTypes?: string[]
   availableProductTypes?: string[]
-  // [TAMBAH] Prop baru untuk total kubikasi & kayu terpilih
   filteredWoodKubikasi?: number | null;
   selectedWoodType?: string;
+  // [TAMBAH] Prop baru untuk opsi filter
+  availableMarketing?: string[];
+  availableRevisers?: string[];
+  availableFinishing?: string[];
+  availableSample?: string[];
 }
 
 const FilterPanel: React.FC<FilterPanelProps> = ({
@@ -20,9 +24,13 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   poCount,
   availableWoodTypes = [],
   availableProductTypes = [],
-  // [TAMBAH] Destructure prop baru
   filteredWoodKubikasi,
-  selectedWoodType
+  selectedWoodType,
+  // [TAMBAH] Destructure prop baru
+  availableMarketing = [],
+  availableRevisers = [],
+  availableFinishing = [],
+  availableSample = []
 }) => {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     onFilterChange(e.target.name, e.target.value)
@@ -32,7 +40,6 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
     <Card className="filter-panel refined-filter">
       <div className="filter-header">
         <h3>📊 Sort & Filter Purchase Order</h3>
-        {/* Pindahkan hitungan PO ke sini agar ringkasan bisa di bawahnya */}
         <span>
           Menampilkan {poCount.displayed} dari {poCount.total} PO
         </span>
@@ -44,11 +51,18 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
         <div className="form-group sort-group">
           <label>Urutkan Berdasarkan</label>
           <select name="sortBy" value={filters.sortBy} onChange={handleInputChange}>
-            <option value="deadline-asc">Tanggal Kirim (Terdekat)</option>
-            <option value="deadline-desc">Tanggal Kirim (Terjauh)</option>
-            <option value="created-desc">PO Terbaru</option>
-            <option value="created-asc">PO Terlama</option>
-            <option value="priority">Prioritas (Urgent &gt; High &gt; Normal)</option>
+            {/* Opsi yang sudah ada */}
+            <option value="created-desc">PO Terbaru (Tgl Masuk)</option>
+            <option value="created-asc">PO Terlama (Tgl Masuk)</option>
+            <option value="deadline-asc">Target Kirim (Terdekat)</option>
+            <option value="deadline-desc">Target Kirim (Terjauh)</option>
+            <option value="priority">Prioritas (Urgent {'>'} High {'>'} Normal)</option>
+            
+            {/* [TAMBAH] Opsi Sort Baru */}
+            <option value="revisi-desc">Tgl Revisi (Terbaru)</option>
+            <option value="revisi-asc">Tgl Revisi (Terlama)</option>
+            <option value="marketing-asc">Marketing (A-Z)</option>
+            <option value="marketing-desc">Marketing (Z-A)</option>
           </select>
         </div>
         <div className="form-group search-group">
@@ -67,8 +81,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
             <option value="all">Semua Status</option>
             <option value="Open">Open</option>
             <option value="In Progress">In Progress</option>
-            <option value="Completed">Completed</option>
-            <option value="Cancelled">Cancelled</option>
+            {/* 'Completed' dan 'Cancelled' seharusnya ada di tab "PO Selesai" */}
           </select>
         </div>
         <div className="form-group">
@@ -82,7 +95,6 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
         </div>
         <div className="form-group">
           <label>Jenis Kayu</label>
-          {/* Pastikan name="woodType" sesuai dengan state filter Anda */}
           <select name="woodType" value={filters.woodType || 'all'} onChange={handleInputChange}>
             <option value="all">Semua Jenis Kayu</option>
             {availableWoodTypes.map((woodType) => (<option key={woodType} value={woodType}>{woodType}</option>))}
@@ -90,10 +102,40 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
         </div>
         <div className="form-group">
           <label>Produk</label>
-          {/* Pastikan name="productType" sesuai dengan state filter Anda */}
           <select name="productType" value={filters.productType || 'all'} onChange={handleInputChange}>
             <option value="all">Semua Produk</option>
             {availableProductTypes.map((productType) => (<option key={productType} value={productType}>{productType}</option>))}
+          </select>
+        </div>
+        
+        {/* [TAMBAH] Filter Dropdown Baru */}
+        <div className="form-group">
+          <label>Finishing</label>
+          <select name="finishing" value={filters.finishing || 'all'} onChange={handleInputChange}>
+            <option value="all">Semua Finishing</option>
+            {availableFinishing.map((name) => (<option key={name} value={name}>{name}</option>))}
+          </select>
+        </div>
+        <div className="form-group">
+          <label>Sample</label>
+          <select name="sample" value={filters.sample || 'all'} onChange={handleInputChange}>
+            <option value="all">Semua Sample</option>
+            {availableSample.map((name) => (<option key={name} value={name}>{name}</option>))}
+          </select>
+        </div>
+        <div className="form-group">
+          <label>Marketing</label>
+          <select name="marketing" value={filters.marketing || 'all'} onChange={handleInputChange}>
+            <option value="all">Semua Marketing</option>
+            {availableMarketing.map((name) => (<option key={name} value={name}>{name}</option>))}
+          </select>
+        </div>
+        <div className="form-group">
+          <label>Terakhir Direvisi Oleh</label>
+          <select name="lastRevisedBy" value={filters.lastRevisedBy || 'all'} onChange={handleInputChange}>
+            <option value="all">Semua Perevisi</option>
+            {availableRevisers.map((name) => (<option key={name} value={name}>{name}</option>))}
+            <option value="N/A">Belum Direvisi</option>
           </select>
         </div>
 
@@ -116,7 +158,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
 
       </div> {/* Akhir filter-grid-refined */}
 
-      {/* [BAGIAN BARU] Tampilkan ringkasan kubikasi jika filter kayu aktif */}
+      {/* Ringkasan Kubikasi */}
       {filteredWoodKubikasi !== null && filteredWoodKubikasi !== undefined && selectedWoodType && selectedWoodType !== 'all' && (
         <div className="filter-summary">
           <p>
