@@ -5,6 +5,7 @@ import fs from 'node:fs'
 import { app, dialog } from 'electron'
 import { google } from 'googleapis'
 import { generatePOJpeg } from './jpegGenerator.js'
+import stream from 'node:stream'
 
 const SPREADSHEET_ID = '1Bp5rETvaAe9nT4DrNpm-WsQqQlPNaau4gIzw1nA5Khk'
 const PO_ARCHIVE_FOLDER_ID = '1-1Gw1ay4iQoFNFe2KcKDgCwOIi353QEC'
@@ -21,14 +22,16 @@ const PRODUCTION_STAGES = [
 ]
 
 const formatDate = (dateString) => {
-  if (!dateString) return '-';
+  if (!dateString) return '-'
   try {
     // Format YYYY-MM-DD dari ISO string
-    const isoDate = new Date(dateString).toISOString().split('T')[0];
-    const [year, month, day] = isoDate.split('-');
-    return `${day}/${month}/${year}`; // Format DD/MM/YYYY
-  } catch (e) { return '-'; }
-};
+    const isoDate = new Date(dateString).toISOString().split('T')[0]
+    const [year, month, day] = isoDate.split('-')
+    return `${day}/${month}/${year}` // Format DD/MM/YYYY
+  } catch (e) {
+    return '-'
+  }
+}
 
 const DEFAULT_STAGE_DURATIONS = {
   Pembahanan: 7, // 1 minggu
@@ -65,7 +68,7 @@ function getAuth() {
     key: creds.private_key,
     scopes: [
       'https://www.googleapis.com/auth/spreadsheets',
-      'https://www.googleapis.com/auth/drive.file'
+      'https://www.googleapis.com/auth/drive'
     ]
   })
 }
@@ -160,31 +163,123 @@ async function getLivePOItems(poId, doc) {
 }
 
 async function generateAndUploadPO(poData, revisionNumber) {
+  let auth
+  let filePath
+
   try {
+    // 1. Generate JPEG
+    // @ts-ignore
     const pdfResult = await generatePOJpeg(poData, revisionNumber, false)
-    if (!pdfResult.success) throw new Error('Gagal membuat file PDF lokal.')
-    const auth = getAuth()
-    const drive = google.drive({ version: 'v3', auth })
-    const fileName = path.basename(pdfResult.path)
-    const ext = path.extname(fileName).toLowerCase()
+    if (!pdfResult.success || !pdfResult.path) {
+      throw new Error('Gagal membuat file JPEG lokal atau path tidak ditemukan.')
+    }
+    filePath = pdfResult.path
 
-    let mimeType = 'application/octet-stream'
-    if (ext === '.jpeg' || ext === '.jpg') mimeType = 'image/jpeg'
-    else if (ext === '.png') mimeType = 'image/png'
-    else if (ext === '.pdf') mimeType = 'application/pdf'
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`File JPEG tidak ditemukan di path: ${filePath}`)
+    }
 
-    const response = await drive.files.create({
-      requestBody: { name: fileName, mimeType, parents: [PO_ARCHIVE_FOLDER_ID] },
-      media: { mimeType, body: fs.createReadStream(pdfResult.path) },
-      fields: 'id, webViewLink',
-      supportsAllDrives: true
+    // 2. Dapatkan objek auth dan authorize
+    console.log('🔄 Mendapatkan otentikasi baru sebelum upload/get...')
+    auth = getAuth() // Panggil fungsi getAuth Anda
+    await auth.authorize()
+    console.log('✅ Otorisasi ulang berhasil.')
+
+    const fileName = path.basename(filePath)
+    const mimeType = 'image/jpeg'
+
+    console.log(`🚀 Mengunggah file via auth.request: ${fileName} ke Drive...`)
+
+    // --- Upload via auth.request (Sama seperti sebelumnya) ---
+    const fileStream = fs.createReadStream(filePath)
+    const metadata = {
+      name: fileName,
+      mimeType: mimeType,
+      parents: [PO_ARCHIVE_FOLDER_ID]
+    }
+    const boundary = `----UbinkayuERPBoundary${Date.now()}----`
+    const readable = new stream.PassThrough()
+    // ... (Kode untuk menulis metadata dan pipe fileStream ke readable - sama seperti sebelumnya)
+    readable.write(`--${boundary}\r\n`)
+    readable.write('Content-Type: application/json; charset=UTF-8\r\n\r\n')
+    readable.write(JSON.stringify(metadata) + '\r\n\r\n')
+    readable.write(`--${boundary}\r\n`)
+    readable.write(`Content-Type: ${mimeType}\r\n\r\n`)
+    fileStream.pipe(readable, { end: false })
+    fileStream.on('end', () => {
+      readable.write(`\r\n--${boundary}--\r\n`)
+      readable.end()
+    })
+    fileStream.on('error', (err) => {
+      readable.destroy(err)
     })
 
-    fs.unlinkSync(pdfResult.path)
-    return { success: true, link: response.data.webViewLink }
+    const createResponse = await auth.request({
+      url: `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true`,
+      method: 'POST',
+      headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+      data: readable,
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity
+    })
+
+    // --- Ambil webViewLink via auth.request ---
+    const fileId = createResponse?.data?.id
+    if (!fileId) {
+      console.error('❌ Upload berhasil, tetapi ID file tidak ditemukan:', createResponse.data)
+      throw new Error('Upload berhasil tetapi ID file tidak didapatkan.')
+    }
+    console.log(
+      `✅ File berhasil diunggah (ID: ${fileId}). Mengambil webViewLink via auth.request...`
+    )
+
+    // Panggil files.get endpoint menggunakan auth.request
+    const getResponse = await auth.request({
+      url: `https://www.googleapis.com/drive/v3/files/${fileId}`,
+      method: 'GET',
+      params: {
+        fields: 'webViewLink', // Minta hanya webViewLink
+        supportsAllDrives: true // Tetap perlu untuk Shared Drive
+      }
+    })
+
+    const webViewLink = getResponse?.data?.webViewLink
+    if (!webViewLink) {
+      console.error('❌ Gagal mendapatkan webViewLink via auth.request:', getResponse.data)
+      throw new Error('Gagal mendapatkan link file setelah upload berhasil.')
+    }
+    console.log(`✅ Link file didapatkan via auth.request: ${webViewLink}`)
+
+    return { success: true, link: webViewLink }
   } catch (error) {
-    console.error('❌ Proses Generate & Upload PO Gagal:', error)
+    // ... (Error handling sama seperti sebelumnya)
+    console.error('❌ Proses Generate & Upload PO Gagal:', error.message)
+    // @ts-ignore
+    if (error.response && error.response.data && error.response.data.error) {
+      // @ts-ignore
+      console.error(
+        '   -> Detail Error Google API:',
+        JSON.stringify(error.response.data.error, null, 2)
+      )
+      // @ts-ignore
+    } else if (error.response) {
+      // @ts-ignore
+      console.error(`   -> Status Error HTTP: ${error.response.status}`)
+      // @ts-ignore
+      console.error('   -> Data Error:', error.response.data)
+    }
+    // @ts-ignore
     return { success: false, error: error.message }
+  } finally {
+    // Hapus file lokal
+    if (filePath && fs.existsSync(filePath)) {
+      try {
+        fs.unlinkSync(filePath)
+        console.log(`🗑️ File lokal ${path.basename(filePath)} dihapus.`)
+      } catch (unlinkErr) {
+        console.warn(`⚠️ Gagal menghapus file lokal ${path.basename(filePath)}:`, unlinkErr.message)
+      }
+    }
   }
 }
 

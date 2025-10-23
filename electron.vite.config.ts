@@ -10,8 +10,10 @@ export default defineConfig({
         external: [
           'google-spreadsheet',
           'google-auth-library',
-          'pdfkit', // ⬅️ tambahin ini
-          'fs-extra' // ⬅️ kalau kamu pakai fs-extra
+          'pdfkit',
+          'fs-extra', // Jika Anda pakai
+          'canvas', // Jika Anda pakai canvas di main process (sepertinya tidak)
+          'stream' // <-- TAMBAHKAN BARIS INI
         ]
       }
     }

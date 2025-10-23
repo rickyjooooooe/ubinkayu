@@ -62,7 +62,28 @@ const PODetailPage: React.FC<PODetailPageProps> = ({ po, onBackToList, onShowHis
     `status-badge status-${(s || 'open').toLowerCase().replace(' ', '-')}`
 
   const handleOpenFile = async () => {
-    // ... (logika handleOpenFile tetap sama)
+    if (!po || !po.pdf_link) {
+      alert('Link file PDF tidak ditemukan untuk PO ini.')
+      return
+    }
+
+    // Cek sederhana apakah link valid (dimulai dengan http)
+    if (!po.pdf_link.startsWith('http')) {
+      alert(`Link file tidak valid atau masih dalam proses pembuatan:\n${po.pdf_link}`)
+      return
+    }
+
+    try {
+      // Gunakan apiService untuk membuka link (berfungsi di Electron & Web)
+      const result = await apiService.openExternalLink(po.pdf_link)
+      if (!result.success) {
+        // Handle jika apiService mengembalikan error (misal, URL tidak valid di Electron)
+        throw new Error(result.error || 'Gagal membuka link.')
+      }
+    } catch (error) {
+      console.error('Gagal membuka file:', error)
+      alert(`Gagal membuka link file:\n${(error as Error).message}`)
+    }
   }
 
   return (
