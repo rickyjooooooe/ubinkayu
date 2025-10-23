@@ -1,6 +1,7 @@
-// file: src/renderer/src/App.tsx
+/* eslint-disable prettier/prettier */
+/* eslint-disable @typescript-eslint/explicit-function-return-type */
+
 import React, { useState, useEffect } from 'react'
-// 'POItem' dihapus dari sini karena tidak digunakan secara langsung
 import { POHeader, Message } from './types'
 import Navbar from './components/Navbar'
 import POListPage from './pages/POListPage'
@@ -14,7 +15,6 @@ import AnalysisPage from './pages/AnalysisPage'
 import Chatbot from './components/Chatbot'
 import { useWindowWidth } from './hooks/useWindowWidth'
 import * as apiService from './apiService'
-// 'ollamaApiService' dihapus, karena kita sudah menggabungkannya ke apiService.ollamaChat
 
 // Definisikan tipe untuk view
 type AppView =
@@ -28,8 +28,6 @@ type AppView =
   | 'analysis'
   | 'aiChat'
 
-// 'formatDate' dihapus, karena logika tanggal sekarang ada di backend (handleOllamaChat)
-
 // Definisikan pesan awal di luar komponen
 const initialChatMessage: Message = {
   sender: 'bot',
@@ -42,7 +40,10 @@ function App() {
 
   // --- STATE APLIKASI ---
   const [view, setView] = useState<AppView>('dashboard')
-  const [allPOs, setAllPOs] = useState<POHeader[]>([]) // State tunggal untuk PO
+
+  // [PERBAIKAN] Hapus deklarasi duplikat. Cukup satu state untuk allPOs.
+  const [allPOs, setAllPOs] = useState<POHeader[]>([])
+
   const [editingPO, setEditingPO] = useState<POHeader | null>(null)
   const [selectedPoId, setSelectedPoId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -58,6 +59,7 @@ function App() {
   // --- FUNGSI DATA PO ---
   const fetchPOs = async () => {
     try {
+      // @ts-ignore
       const pos: POHeader[] = await apiService.listPOs()
       setAllPOs(pos)
     } catch (error) {
@@ -81,7 +83,7 @@ function App() {
     initialFetch()
   }, [])
 
-  // --- FUNGSI HANDLER YANG HILANG (DIISI KEMBALI) ---
+  // --- FUNGSI HANDLER ---
   const handleDeletePO = async (poId: string) => {
     const poToDelete = allPOs.find((po) => po.id === poId)
     const poInfo = poToDelete ? `${poToDelete.po_number} - ${poToDelete.project_name}` : poId
@@ -90,11 +92,15 @@ function App() {
     if (window.confirm(confirmMessage)) {
       setIsLoading(true)
       try {
+        // @ts-ignore
         const result = await apiService.deletePO(poId)
         if (result.success) {
           alert(`✅ PENGHAPUSAN BERHASIL\n\n${result.message}`)
-          fetchPOs()
+          
+          // [PERBAIKAN] Panggil fetchPOs() cukup sekali
+          await fetchPOs() // Muat ulang daftar PO
         } else {
+          // @ts-ignore
           throw new Error(result.error)
         }
       } catch (error) {
@@ -126,8 +132,12 @@ function App() {
     }
   }
 
-  const handleBackToList = () => {
-    handleNavigate('list')
+  // [PERBAIKAN] Ini adalah versi yang benar untuk auto-refresh
+  const handleBackToList = async () => {
+    setIsLoading(true) // Tampilkan loading spinner
+    await fetchPOs() // Ambil data PO terbaru
+    setIsLoading(false) // Sembunyikan loading spinner
+    handleNavigate('list') // Pindah halaman
   }
 
   const handleSelectPOForTracking = (po: POHeader) => {
@@ -174,6 +184,7 @@ function App() {
     }
 
     try {
+      // @ts-ignore
       const aiResponse = await apiService.ollamaChat(query)
       if (aiResponse) {
         return aiResponse
@@ -182,7 +193,6 @@ function App() {
       }
     } catch (error) {
       console.error('Error di fallback AI:', error)
-      // --- PERBAIKAN ERROR UNKNOWN (TS18046) ---
       return `Maaf, terjadi kesalahan: ${(error as Error).message}`
     }
   }
@@ -267,13 +277,14 @@ function App() {
       default:
         return (
           <POListPage
-            poList={allPOs}
+            poList={allPOs} // Kirim data PO yang sudah di-refresh
             onAddPO={handleShowInputForm}
+            // @ts-ignore
             onDeletePO={handleDeletePO}
             onEditPO={handleEditPO}
             onShowDetail={handleShowDetail}
             onShowProgress={handleShowProgress}
-            isLoading={isLoading}
+            isLoading={isLoading} // Kirim status loading
           />
         )
     }

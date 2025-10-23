@@ -5,9 +5,8 @@ import React, { useState, useMemo } from 'react'
 import { Card } from '../components/Card'
 import { Button } from '../components/Button'
 import FilterPanel from '../components/FilterPanel'
-import { POHeader } from '../types'
+import { POHeader, POItem } from '../types' // Import POItem
 import POTable from '../components/POTable' // Tabel untuk PO Aktif tetap dipakai
-// Hapus import CompletedPOTable
 
 interface POListPageProps {
   poList: POHeader[]
@@ -30,6 +29,8 @@ const POListPage: React.FC<POListPageProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active')
 
+  // [DIHAPUS] State poListData dan filterOptions dihapus karena kita menggunakan props 'poList'
+
   const [filters, setFilters] = useState({
     sortBy: 'created-desc',
     searchQuery: '',
@@ -39,8 +40,13 @@ const POListPage: React.FC<POListPageProps> = ({
     dateTo: '',
     deadlineDate: '',
     woodType: 'all',
-    productType: 'all'
+    productType: 'all',
+    marketing: 'all',   // Filter Marketing baru
+    lastRevisedBy: 'all' // Filter Perevisi baru
   })
+
+  // [DIHAPUS] useEffect untuk fetchData() dihapus.
+  // Komponen ini sekarang menerima data dari props, tidak mengambil sendiri.
 
   // Pisahkan PO berdasarkan tab aktif
   const listByTab = useMemo(() => {
@@ -48,23 +54,35 @@ const POListPage: React.FC<POListPageProps> = ({
       return poList.filter((po) => po.status !== 'Completed' && po.status !== 'Cancelled')
     }
     return poList.filter((po) => po.status === 'Completed')
-  }, [poList, activeTab])
+  }, [poList, activeTab]) // Bergantung pada poList dari props
 
   // Ambil opsi unik untuk filter
-  const { availableWoodTypes, availableProductTypes } = useMemo(() => {
+  const { availableWoodTypes, availableProductTypes, availableMarketing, availableRevisers } = useMemo(() => {
     const woodTypes = new Set<string>()
     const productTypes = new Set<string>()
-    poList.forEach((po) => {
-      ;(po.items || []).forEach((item) => {
+    const marketingNames = new Set<string>()
+    const reviserNames = new Set<string>()
+
+    poList.forEach((po) => { // Menggunakan poList dari props
+      // @ts-ignore
+      if (po.acc_marketing) marketingNames.add(po.acc_marketing);
+      // @ts-ignore
+      if (po.lastRevisedBy && po.lastRevisedBy !== 'N/A') reviserNames.add(po.lastRevisedBy);
+
+      (po.items || []).forEach((item) => {
         if (item.wood_type) woodTypes.add(item.wood_type)
         if (item.product_name) productTypes.add(item.product_name)
+        // @ts-ignore
+        if (item.marketing) marketingNames.add(item.marketing); // Ambil juga dari item
       })
     })
     return {
       availableWoodTypes: Array.from(woodTypes).sort(),
-      availableProductTypes: Array.from(productTypes).sort()
+      availableProductTypes: Array.from(productTypes).sort(),
+      availableMarketing: Array.from(marketingNames).sort(),
+      availableRevisers: Array.from(reviserNames).sort()
     }
-  }, [poList])
+  }, [poList]) // Bergantung pada poList dari props
 
   const handleFilterChange = (name: string, value: any) => {
     setFilters((prev) => ({ ...prev, [name]: value }))
@@ -73,8 +91,8 @@ const POListPage: React.FC<POListPageProps> = ({
   // Filter dan sort PO
   const filteredAndSortedPOs = useMemo(() => {
     let processedPOs = [...listByTab]
-    // ... (Logika filter dan sort tidak berubah) ...
-     if (filters.searchQuery) {
+    
+    if (filters.searchQuery) {
       const query = filters.searchQuery.toLowerCase()
       processedPOs = processedPOs.filter(
         (po) =>
@@ -92,16 +110,6 @@ const POListPage: React.FC<POListPageProps> = ({
         (po) => (po.priority || 'Normal').toLowerCase() === filters.priority.toLowerCase()
       )
     }
-    if (filters.woodType !== 'all') {
-      processedPOs = processedPOs.filter((po) =>
-        (po.items || []).some((item) => item.wood_type === filters.woodType)
-      )
-    }
-    if (filters.productType !== 'all') {
-      processedPOs = processedPOs.filter((po) =>
-        (po.items || []).some((item) => item.product_name === filters.productType)
-      )
-    }
     if (filters.dateFrom) {
        processedPOs = processedPOs.filter(po => new Date(po.created_at) >= new Date(filters.dateFrom));
     }
@@ -117,6 +125,30 @@ const POListPage: React.FC<POListPageProps> = ({
         return poDeadlineDate === filters.deadlineDate
       })
     }
+    
+    // Filter Item (Kayu, Produk, Marketing)
+    if (filters.woodType !== 'all' || filters.productType !== 'all' || filters.marketing !== 'all') {
+       processedPOs = processedPOs.filter(po => {
+          return (po.items || []).some(item =>
+             (filters.woodType === 'all' || item.wood_type === filters.woodType) &&
+             (filters.productType === 'all' || item.product_name === filters.productType) &&
+             // @ts-ignore
+             (filters.marketing === 'all' || item.marketing === filters.marketing)
+          );
+       });
+    }
+
+    // Filter Perevisi Terakhir
+    if (filters.lastRevisedBy !== 'all') {
+       if (filters.lastRevisedBy === 'N/A') {
+          // @ts-ignore
+          processedPOs = processedPOs.filter(po => !po.lastRevisedBy || po.lastRevisedBy === 'N/A');
+       } else {
+          // @ts-ignore
+          processedPOs = processedPOs.filter(po => po.lastRevisedBy === filters.lastRevisedBy);
+       }
+    }
+    
     const priorityMap: Record<string, number> = { urgent: 1, high: 2, normal: 3 }
     switch (filters.sortBy) {
       case 'deadline-asc':
@@ -175,7 +207,7 @@ const POListPage: React.FC<POListPageProps> = ({
 
   // Fungsi render konten (termasuk kedua tabel)
   const renderContent = () => {
-    if (isLoading) {
+    if (isLoading) { // Menggunakan isLoading dari props
       return <p>⏳ Loading data PO dari Google Sheets...</p>
     }
     if (filteredAndSortedPOs.length === 0) {
@@ -190,11 +222,11 @@ const POListPage: React.FC<POListPageProps> = ({
       )
     }
 
-    // [DIUBAH] Render tabel "PO Selesai" langsung di sini
+    // Render tabel "PO Selesai" langsung di sini
     if (activeTab === 'completed') {
       return (
-        <div className="po-table-container"> {/* Gunakan class yang sama */}
-          <table className="po-table"> {/* Gunakan class yang sama */}
+        <div className="po-table-container">
+          <table className="po-table">
             <thead>
               <tr>
                 <th>Customer</th>
@@ -216,7 +248,9 @@ const POListPage: React.FC<POListPageProps> = ({
                       <span>PO: {po.po_number}</span>
                     </div>
                   </td>
+                  {/* @ts-ignore */}
                   <td>{po.lastRevisedBy && po.lastRevisedBy !== 'N/A' ? po.lastRevisedBy : '-'}</td>
+                  {/* @ts-ignore */}
                   <td>{formatDateTime(po.lastRevisedDate)}</td>
                   <td>{formatDate(po.created_at)}</td>
                   <td>{formatDate(po.deadline)}</td>
@@ -250,21 +284,18 @@ const POListPage: React.FC<POListPageProps> = ({
                   </td>
                 </tr>
               ))}
-              {filteredAndSortedPOs.length === 0 && ( // Pengecekan ini sebenarnya sudah ada di atas
-                 <tr><td colSpan={8}>Tidak ada PO yang sudah selesai.</td></tr>
-              )}
             </tbody>
           </table>
         </div>
       );
     } else { // Jika tab 'active'
       return (
-        <POTable // Tetap gunakan komponen POTable untuk PO Aktif
+        <POTable // Gunakan komponen POTable untuk PO Aktif
           poList={filteredAndSortedPOs}
           onShowDetail={onShowDetail}
           onEditPO={onEditPO}
-          onDeletePO={(poId) => { // Pastikan poInfo dikirim
-              const poInfo = poList.find(p => p.id === poId);
+          onDeletePO={(poId) => {
+              const poInfo = poList.find(p => p.id === poId); // Gunakan poList dari props
               const infoString = poInfo ? `${poInfo.po_number} - ${poInfo.project_name}` : poId;
               return onDeletePO(poId, infoString);
           }}
@@ -290,6 +321,8 @@ const POListPage: React.FC<POListPageProps> = ({
         poCount={{ displayed: filteredAndSortedPOs.length, total: listByTab.length }}
         availableWoodTypes={availableWoodTypes}
         availableProductTypes={availableProductTypes}
+        availableMarketing={availableMarketing}   // <-- Teruskan prop
+        availableRevisers={availableRevisers}     // <-- Teruskan prop
         filteredWoodKubikasi={filteredWoodKubikasi}
         selectedWoodType={filters.woodType}
       />

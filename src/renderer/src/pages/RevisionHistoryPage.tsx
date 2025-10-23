@@ -1,41 +1,38 @@
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/explicit-function-return-type */
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 
 import React, { useState, useEffect } from 'react'
-import { POItem, PORevision, RevisionHistoryItem } from '../types'
-import * as apiService from '../apiService'
+import { Card } from '../components/Card'
 import { Button } from '../components/Button'
+import { POItem, PORevision, RevisionHistoryItem } from '../types'
+import * as apiService from '../apiService' // Pastikan ini diimpor
 
-// --- START: Component & Service Definitions ---
-// The following are defined here to resolve import errors.
-
-
-const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({
-  children,
-  className
-}) => <div className={`card-container ${className || ''}`}>{children}</div>
-
-// --- END: Component & Service Definitions ---
-
-// --- START: Helper Functions for Comparison ---
+// --- [BARU] Helper Functions untuk Perbandingan Keseluruhan ---
 
 interface ComparisonResult {
   headerChanges: string[]
   added: POItem[]
   removed: POItem[]
-  modified: { item: POItem; changes: string[] }[]
+  modified: {
+    item: POItem
+    changes: string[]
+  }[]
 }
 
+// [BARU] Fungsi untuk membandingkan informasi dasar PO
 const findHeaderChanges = (current: PORevision, previous: PORevision): string[] => {
   const changes: string[] = []
+  // Definisikan label yang lebih mudah dibaca untuk setiap field
   const fieldLabels: { [key in keyof PORevision]?: string } = {
     project_name: 'Customer',
     priority: 'Prioritas',
     deadline: 'Deadline',
     notes: 'Catatan',
-    acc_marketing: 'Marketing'
+    acc_marketing: 'Marketing' // Pastikan 'acc_marketing' ada di tipe PORevision
   }
 
+  // Loop melalui field yang ingin kita bandingkan
   for (const key in fieldLabels) {
     const field = key as keyof PORevision
     if (current[field] !== previous[field]) {
@@ -53,14 +50,7 @@ const generateItemKey = (item: POItem): string => {
 
 const findItemChanges = (newItem: POItem, oldItem: POItem): string[] => {
   const changes: string[] = []
-  const fieldsToCompare: (keyof POItem)[] = [
-    'color',
-    'finishing',
-    'sample',
-    'quantity',
-    'satuan',
-    'notes'
-  ]
+  const fieldsToCompare: (keyof POItem)[] = ['color', 'finishing', 'sample', 'quantity', 'satuan', 'notes']
 
   fieldsToCompare.forEach((field) => {
     if (newItem[field] !== oldItem[field]) {
@@ -70,11 +60,12 @@ const findItemChanges = (newItem: POItem, oldItem: POItem): string[] => {
   return changes
 }
 
-const compareRevisions = (
-  current: RevisionHistoryItem,
-  previous: RevisionHistoryItem
-): ComparisonResult => {
+// [DIUBAH] Nama fungsi utama menjadi compareRevisions
+const compareRevisions = (current: RevisionHistoryItem, previous: RevisionHistoryItem): ComparisonResult => {
+  // 1. Panggil fungsi baru untuk membandingkan Header
   const headerChanges = findHeaderChanges(current.revision, previous.revision)
+
+  // 2. Logika perbandingan item yang sudah ada
   const currentMap = new Map(current.items.map((item) => [generateItemKey(item), item]))
   const previousMap = new Map(previous.items.map((item) => [generateItemKey(item), item]))
 
@@ -100,10 +91,11 @@ const compareRevisions = (
     }
   })
 
+  // 3. Gabungkan semua hasil perubahan
   return { headerChanges, added, removed, modified }
 }
 
-// --- END: Helper Functions ---
+// --- Akhir Helper Functions ---
 
 interface RevisionHistoryPageProps {
   poId: string | null
@@ -120,6 +112,7 @@ const RevisionHistoryPage: React.FC<RevisionHistoryPageProps> = ({ poId, poNumbe
       const fetchHistoryData = async () => {
         setIsLoading(true)
         try {
+          // @ts-ignore
           const data = await apiService.getRevisionHistory(poId)
           setHistory(data)
         } catch (error) {
@@ -134,10 +127,15 @@ const RevisionHistoryPage: React.FC<RevisionHistoryPageProps> = ({ poId, poNumbe
 
   const formatDate = (d: string | undefined | null) =>
     d
-      ? new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })
+      ? new Date(d).toLocaleDateString('id-ID', {
+          day: '2-digit',
+          month: 'long',
+          year: 'numeric'
+        })
       : '-'
 
   const handleOpenPdf = (url: string) => {
+    // @ts-ignore
     apiService.openExternalLink(url)
   }
 
@@ -166,21 +164,24 @@ const RevisionHistoryPage: React.FC<RevisionHistoryPageProps> = ({ poId, poNumbe
 
           return (
             <Card key={revItem.revision.revision_number} className="revision-history-card">
+              {/* Header Revisi (Tampilan Tidak Berubah) */}
               <div className="revision-header">
                 <div className="revision-title-group">
                   <h3>Revisi #{revItem.revision.revision_number}</h3>
-                  {index === 0 && (
-                    <span className="status-badge status-completed">Versi Terbaru</span>
-                  )}
+                  {index === 0 && <span className="status-badge status-completed">Versi Terbaru</span>}
                 </div>
+                {/* [PERBAIKAN] Mengembalikan grup tombol/aksi ke sini */}
                 <div className="revision-actions-group">
                   <span>Dibuat pada: {formatDate(revItem.revision.created_at)}</span>
-                  {/* [TAMBAHKAN INI] Tampilkan nama perevisi jika ada */}
-                    {revItem.revision.revised_by && (
-                      <span className="reviser-info">
-                        <strong>Direvisi oleh:</strong> {revItem.revision.revised_by}
-                      </span>
-                    )}
+                  
+                  {/* Tampilkan nama perevisi jika ada */}
+                  {revItem.revision.revised_by && (
+                    <span className="reviser-info">
+                      <strong>Direvisi oleh:</strong> {revItem.revision.revised_by}
+                    </span>
+                  )}
+
+                  {/* Tombol Buka PDF dikembalikan */}
                   {revItem.revision.pdf_link && revItem.revision.pdf_link.startsWith('http') && (
                     <Button onClick={() => handleOpenPdf(revItem.revision.pdf_link!)}>
                       📄 Buka File Revisi Ini
@@ -188,7 +189,8 @@ const RevisionHistoryPage: React.FC<RevisionHistoryPageProps> = ({ poId, poNumbe
                   )}
                 </div>
               </div>
-
+              
+              {/* Detail Revisi (Tampilan Tidak Berubah) */}
               <div className="revision-details">
                 <p>
                   <strong>Customer:</strong> {revItem.revision.project_name || '-'}
@@ -202,13 +204,18 @@ const RevisionHistoryPage: React.FC<RevisionHistoryPageProps> = ({ poId, poNumbe
                 <p>
                   <strong>Deadline:</strong> {formatDate(revItem.revision.deadline)}
                 </p>
+                {/* [TAMBAH] Tampilkan Marketing */}
+                 <p>
+                  <strong>Marketing:</strong> {revItem.revision.acc_marketing || '-'}
+                </p>
                 {revItem.revision.notes && (
                   <p>
                     <strong>Catatan:</strong> {revItem.revision.notes}
                   </p>
                 )}
               </div>
-
+              
+              {/* JSX untuk menampilkan CATATAN perubahan */}
               {!previousRevision ? (
                 <p>
                   <em>Ini adalah versi awal.</em>
@@ -216,22 +223,23 @@ const RevisionHistoryPage: React.FC<RevisionHistoryPageProps> = ({ poId, poNumbe
               ) : hasChanges && changes ? (
                 <div className="revision-changes-summary">
                   <h4>Ringkasan Perubahan dari Versi Sebelumnya:</h4>
+                  
                   {changes.headerChanges.length > 0 && (
-                    <div className="change-section">
-                      <h5>(~) Informasi Dasar Diubah:</h5>
-                      <ul>
-                        {changes.headerChanges.map((change, i) => (
-                          <li key={i}>{change}</li>
-                        ))}
-                      </ul>
-                    </div>
+                     <div className="change-section">
+                        <h5>(~) Informasi Dasar Diubah:</h5>
+                        <ul>
+                           {changes.headerChanges.map((change, i) => (
+                              <li key={i} className="change-modified">{change}</li>
+                           ))}
+                        </ul>
+                     </div>
                   )}
                   {changes.added.length > 0 && (
                     <div className="change-section">
                       <h5>(+) Item Ditambahkan:</h5>
                       <ul>
                         {changes.added.map((item) => (
-                          <li key={item.id}>
+                          <li key={item.id} className="change-added">
                             {item.product_name} ({item.quantity} {item.satuan})
                           </li>
                         ))}
@@ -243,7 +251,7 @@ const RevisionHistoryPage: React.FC<RevisionHistoryPageProps> = ({ poId, poNumbe
                       <h5>(-) Item Dihapus:</h5>
                       <ul>
                         {changes.removed.map((item) => (
-                          <li key={item.id}>
+                          <li key={item.id} className="change-removed">
                             {item.product_name} ({item.quantity} {item.satuan})
                           </li>
                         ))}
@@ -255,7 +263,7 @@ const RevisionHistoryPage: React.FC<RevisionHistoryPageProps> = ({ poId, poNumbe
                       <h5>(~) Item Diubah:</h5>
                       <ul>
                         {changes.modified.map((mod) => (
-                          <li key={mod.item.id}>
+                          <li key={mod.item.id} className="change-modified">
                             <strong>{mod.item.product_name}:</strong>
                             <ul>
                               {mod.changes.map((change, i) => (
@@ -274,9 +282,10 @@ const RevisionHistoryPage: React.FC<RevisionHistoryPageProps> = ({ poId, poNumbe
                 </p>
               )}
 
+              {/* Tabel Item (Tampilan Tidak Berubah) */}
               <h4>Item pada revisi ini:</h4>
-              <div className="po-table-container">
-                <table className="simple-table">
+              <div className="table-responsive"> {/* [UBAH] po-table-container -> table-responsive */}
+                <table className="simple-table item-table"> {/* [UBAH] simple-table -> item-table */}
                   <thead>
                     <tr>
                       <th>Produk</th>
@@ -297,8 +306,8 @@ const RevisionHistoryPage: React.FC<RevisionHistoryPageProps> = ({ poId, poNumbe
                         <td>{item.profile || '-'}</td>
                         <td>{item.color || '-'}</td>
                         <td>{item.finishing || '-'}</td>
-                        <td>{`${item.thickness_mm} x ${item.width_mm} x ${item.length_mm}`}</td>
-                        <td>{`${item.quantity} ${item.satuan}`}</td>
+                        <td>{`${item.thickness_mm || 0} x ${item.width_mm || 0} x ${item.length_mm || 0}`}</td>
+                        <td>{`${item.quantity || 0} ${item.satuan || ''}`}</td>
                         <td>{item.notes || '-'}</td>
                       </tr>
                     ))}
