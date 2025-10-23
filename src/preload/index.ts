@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { contextBridge, ipcRenderer } from 'electron'
 
 console.log('✅ --- PRELOAD SCRIPT STARTED ---')
@@ -39,7 +38,8 @@ const api = {
 
   // --- Fungsi untuk File ---
   openFileDialog: () => ipcRenderer.invoke('app:open-file-dialog'),
-  readFileAsBase64: (filePath) => ipcRenderer.invoke('app:read-file-base64', filePath)
+  readFileAsBase64: (filePath) => ipcRenderer.invoke('app:read-file-base64', filePath),
+  ollamaChat: (prompt) => ipcRenderer.invoke('ai:ollamaChat', prompt)
 }
 
 try {

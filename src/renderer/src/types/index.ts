@@ -118,3 +118,8 @@ export interface DeleteResult {
   }
   error?: string
 }
+
+export interface Message {
+  sender: 'user' | 'bot'
+  text: string
+}

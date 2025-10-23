@@ -25,7 +25,8 @@ import {
   getProductSalesAnalysis,
   addNewProduct,
   getSalesItemData,
-  updateStageDeadline
+  updateStageDeadline,
+  handleOllamaChat
 } from '../../electron/sheet.js'
 
 if (process.platform === 'win32') {
@@ -120,6 +121,10 @@ app.whenReady().then(() => {
 
   // Handler untuk update deadline (dari branch 'Erp1-Mobile-Vercel-2')
   ipcMain.handle('progress:updateDeadline', (_event, data) => updateStageDeadline(data));
+
+  ipcMain.handle('ai:ollamaChat', async (_event, prompt) => {
+    return await handleOllamaChat(prompt);
+  });
 
   createWindow()
   app.on('activate', () => {

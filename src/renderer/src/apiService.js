@@ -167,36 +167,36 @@ export function getSalesItemData() {
 
 export function openExternalLink(url) {
   if (window.api) {
-    return window.api.openExternalLink(url);
+    return window.api.openExternalLink(url)
   }
   // Implementasi untuk web: buka di tab baru
-  window.open(url, '_blank');
-  return Promise.resolve({ success: true });
+  window.open(url, '_blank')
+  return Promise.resolve({ success: true })
 }
 
 export function openFileDialog() {
   if (window.api) {
-    return window.api.openFileDialog();
+    return window.api.openFileDialog()
   }
   // Di web, kita tidak bisa melakukan ini. Beri peringatan dan kembalikan null.
-  console.warn('Fungsi pilih file hanya tersedia di aplikasi desktop.');
-  return Promise.resolve(null);
+  console.warn('Fungsi pilih file hanya tersedia di aplikasi desktop.')
+  return Promise.resolve(null)
 }
 
 export function readFileAsBase64(filePath) {
   if (window.api) {
-    return window.api.readFileAsBase64(filePath);
+    return window.api.readFileAsBase64(filePath)
   }
-  console.warn('Fungsi baca file hanya tersedia di aplikasi desktop.');
-  return Promise.resolve(null);
+  console.warn('Fungsi baca file hanya tersedia di aplikasi desktop.')
+  return Promise.resolve(null)
 }
 
 export function addNewProduct(data) {
-  if (window.api) return window.api.addNewProduct(data);
+  if (window.api) return window.api.addNewProduct(data)
   return fetchAPI(createApiEndpoint('addNewProduct'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
+    body: JSON.stringify(data)
   })
 }
 
@@ -207,4 +207,20 @@ export function updateStageDeadline(data) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   })
+}
+
+export async function ollamaChat(prompt) {
+  if (window.api) {
+    return window.api.ollamaChat(prompt) // Panggil Electron
+  }
+
+  // --- UBAH BAGIAN INI ---
+  // Panggil Vercel (Opsi 1 atau 2)
+  const result = await fetchAPI(createApiEndpoint('ollamaChat'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt })
+  })
+  return result.response // Kembalikan teks jawaban
+  // --- AKHIR PERUBAHAN ---
 }

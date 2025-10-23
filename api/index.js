@@ -59,6 +59,8 @@ export default async function handler(req, res) {
 
       case 'addNewProduct':
         return await Controller.handleAddNewProduct(req, res)
+      case 'ollamaChat':
+        return await Controller.handleOllamaChat(req, res)
 
       default:
         return res.status(404).json({ error: 'Action not found' })
