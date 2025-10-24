@@ -5,7 +5,7 @@ import React, { useState, useMemo } from 'react'
 import { Card } from '../components/Card'
 import { Button } from '../components/Button'
 import FilterPanel from '../components/FilterPanel'
-import { POHeader, POItem } from '../types' // Import POItem
+import { POHeader} from '../types' // Import POItem
 import POTable from '../components/POTable' // Tabel untuk PO Aktif tetap dipakai
 
 interface POListPageProps {
@@ -59,10 +59,10 @@ const POListPage: React.FC<POListPageProps> = ({
   }, [poList, activeTab]) // Bergantung pada poList dari props
 
   // [DIUBAH] Ambil semua opsi unik untuk filter
-  const { 
-    availableWoodTypes, 
-    availableProductTypes, 
-    availableMarketing, 
+  const {
+    availableWoodTypes,
+    availableProductTypes,
+    availableMarketing,
     availableRevisers,
     availableFinishing,
     availableSample
@@ -107,7 +107,7 @@ const POListPage: React.FC<POListPageProps> = ({
   // Filter dan sort PO
   const filteredAndSortedPOs = useMemo(() => {
     let processedPOs = [...listByTab]
-    
+
     if (filters.searchQuery) {
       const query = filters.searchQuery.toLowerCase()
       processedPOs = processedPOs.filter(
@@ -143,8 +143,8 @@ const POListPage: React.FC<POListPageProps> = ({
     }
     // [DIUBAH] Filter item diperluas
     if (
-      filters.woodType !== 'all' || 
-      filters.productType !== 'all' || 
+      filters.woodType !== 'all' ||
+      filters.productType !== 'all' ||
       filters.marketing !== 'all' ||
       filters.finishing !== 'all' ||
       filters.sample !== 'all'
@@ -173,7 +173,7 @@ const POListPage: React.FC<POListPageProps> = ({
           processedPOs = processedPOs.filter(po => po.lastRevisedBy === filters.lastRevisedBy);
        }
     }
-    
+
     // --- Sorting Logic ---
     const priorityMap: Record<string, number> = { urgent: 1, high: 2, normal: 3 }
     switch (filters.sortBy) {
@@ -195,7 +195,7 @@ const POListPage: React.FC<POListPageProps> = ({
             (priorityMap[(b.priority || 'normal').toLowerCase()] || 4)
         )
         break;
-      
+
       // [TAMBAH] Logika Sort Baru
       case 'revisi-desc':
         // @ts-ignore
