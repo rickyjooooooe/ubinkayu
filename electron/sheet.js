@@ -898,55 +898,155 @@ export async function getRevisionHistory(poId) {
 }
 
 export async function updateItemProgress(data) {
+  let auth // Deklarasikan auth di luar try
+  let photoLink = null // Default link foto null
+  let filePath = null // Path foto lokal
+  const { poId, itemId, poNumber, stage, notes, photoPath } = data // Ambil photoPath dari data
+
   try {
-    const { poId, itemId, poNumber, stage, notes, photoPath } = data
-    let photoLink = null
+    // --- Bagian Upload Foto (jika ada) ---
     if (photoPath) {
-      if (!fs.existsSync(photoPath)) throw new Error(`File foto tidak ditemukan: ${photoPath}`)
+      filePath = photoPath // Simpan path untuk unlink
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`File foto tidak ditemukan: ${filePath}`)
+      }
 
-      const auth = getAuth()
-      const drive = google.drive({ version: 'v3', auth })
-      const timestamp = new Date().toISOString().replace(/:/g, '-')
-      const fileName = `PO-${poNumber}_ITEM-${itemId}_${timestamp}.jpg`
+      // 1. Dapatkan auth dan authorize
+      console.log('🔄 Mendapatkan otentikasi baru sebelum upload foto progress...')
+      auth = getAuth() // Panggil fungsi getAuth Anda
+      await auth.authorize()
+      console.log('✅ Otorisasi ulang berhasil.')
 
-      console.log(`Mengunggah foto progress: ${fileName}`)
-      const response = await drive.files.create({
-        requestBody: {
-          name: fileName,
-          mimeType: 'image/jpeg',
-          parents: [PROGRESS_PHOTOS_FOLDER_ID]
-        },
-        media: {
-          mimeType: 'image/jpeg',
-          body: fs.createReadStream(photoPath)
-        },
-        fields: 'id, webViewLink',
-        supportsAllDrives: true
+      const fileName = `PO-${poNumber}_ITEM-${itemId}_${new Date().toISOString().replace(/:/g, '-')}.jpg`
+      const mimeType = 'image/jpeg' // Asumsi foto selalu JPEG
+
+      console.log(`🚀 Mengunggah foto progress via auth.request: ${fileName} ke Drive...`)
+
+      // --- Gunakan auth.request untuk Upload ---
+      const fileStream = fs.createReadStream(filePath)
+      const metadata = {
+        name: fileName,
+        mimeType: mimeType,
+        parents: [PROGRESS_PHOTOS_FOLDER_ID] // Gunakan folder ID foto progress
+      }
+      const boundary = `----UbinkayuProgressBoundary${Date.now()}----`
+      const readable = new stream.PassThrough()
+
+      // Tulis bagian metadata dan file (sama seperti generateAndUploadPO)
+      readable.write(`--${boundary}\r\n`)
+      readable.write('Content-Type: application/json; charset=UTF-8\r\n\r\n')
+      readable.write(JSON.stringify(metadata) + '\r\n\r\n')
+      readable.write(`--${boundary}\r\n`)
+      readable.write(`Content-Type: ${mimeType}\r\n\r\n`)
+      fileStream.pipe(readable, { end: false })
+      fileStream.on('end', () => {
+        readable.write(`\r\n--${boundary}--\r\n`)
+        readable.end()
+      })
+      fileStream.on('error', (err) => {
+        console.error('❌ Error membaca stream file foto:', err)
+        readable.destroy(err)
       })
 
-      photoLink = response.data.webViewLink
-      console.log(`✅ Foto progress berhasil diunggah. Link: ${photoLink}`)
+      // Panggil API create
+      const createResponse = await auth.request({
+        url: `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true`,
+        method: 'POST',
+        headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+        data: readable,
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity
+      })
+
+      // --- Ambil webViewLink via auth.request ---
+      const fileId = createResponse?.data?.id
+      if (!fileId) {
+        console.error(
+          '❌ Upload foto progress berhasil, tetapi ID file tidak ditemukan:',
+          createResponse.data
+        )
+        throw new Error('Upload foto berhasil tetapi ID file tidak didapatkan.')
+      }
+      console.log(`✅ Foto progress berhasil diunggah (ID: ${fileId}). Mengambil webViewLink...`)
+
+      // Panggil files.get endpoint menggunakan auth.request
+      const getResponse = await auth.request({
+        url: `https://www.googleapis.com/drive/v3/files/${fileId}`,
+        method: 'GET',
+        params: {
+          fields: 'webViewLink',
+          supportsAllDrives: true
+        }
+      })
+
+      const webViewLink = getResponse?.data?.webViewLink
+      if (!webViewLink) {
+        console.error('❌ Gagal mendapatkan webViewLink foto progress:', getResponse.data)
+        throw new Error('Gagal mendapatkan link foto setelah upload berhasil.')
+      }
+      photoLink = webViewLink // Simpan link foto
+      console.log(`✅ Link foto progress didapatkan: ${photoLink}`)
+
+      // Jangan hapus file lokal di sini, biarkan di finally
+    } // Akhir dari blok if (photoPath)
+
+    // --- Bagian Simpan Log ke Google Sheet ---
+    // Jika tidak ada upload foto, kita tetap butuh auth untuk Sheet
+    if (!auth) {
+      console.log('🔄 Mendapatkan otentikasi untuk Google Sheet...')
+      auth = getAuth()
+      await auth.authorize() // Authorize jika belum
+      console.log('✅ Otorisasi Sheet berhasil.')
     }
 
-    const doc = await openDoc()
-    const progressSheet = await getSheet(doc, 'progress_tracking')
-    const nextId = await getNextIdFromSheet(progressSheet)
+    const doc = await openDoc() // Pastikan openDoc menggunakan auth atau sudah terkonfigurasi
+    const progressSheet = await getSheet(doc, 'progress_tracking') // Pastikan getSheet menggunakan doc
+    const nextId = await getNextIdFromSheet(progressSheet) // Pastikan getNextIdFromSheet menggunakan sheet
 
+    console.log(`📝 Menyimpan log progress ke Sheet... (Stage: ${stage})`)
     await progressSheet.addRow({
       id: nextId,
       purchase_order_id: poId,
       purchase_order_item_id: itemId,
       stage: stage,
-      notes: notes,
-      photo_url: photoLink,
+      notes: notes || '', // Pastikan notes dihandle jika kosong
+      photo_url: photoLink, // Gunakan link yang didapat (bisa null jika tidak ada foto)
       created_at: new Date().toISOString()
     })
-    console.log(`✅ Log progress untuk item ID ${itemId} berhasil disimpan.`)
+    console.log(`✅ Log progress untuk item ID ${itemId} berhasil disimpan ke Sheet.`)
 
     return { success: true }
   } catch (err) {
     console.error('❌ Gagal update item progress:', err.message)
+    // @ts-ignore
+    if (err.response && err.response.data && err.response.data.error) {
+      // @ts-ignore
+      console.error(
+        '   -> Detail Error Google API:',
+        JSON.stringify(err.response.data.error, null, 2)
+      )
+      // @ts-ignore
+    } else if (err.response) {
+      // @ts-ignore
+      console.error(`   -> Status Error HTTP: ${err.response.status}`)
+      // @ts-ignore
+      console.error('   -> Data Error:', err.response.data)
+    }
+    // @ts-ignore
     return { success: false, error: err.message }
+  } finally {
+    // Hapus file foto lokal jika ada path-nya
+    if (filePath && fs.existsSync(filePath)) {
+      try {
+        fs.unlinkSync(filePath)
+        console.log(`🗑️ File foto lokal ${path.basename(filePath)} dihapus.`)
+      } catch (unlinkErr) {
+        console.warn(
+          `⚠️ Gagal menghapus file foto lokal ${path.basename(filePath)}:`,
+          unlinkErr.message
+        )
+      }
+    }
   }
 }
 
