@@ -6,7 +6,6 @@ import { app, dialog } from 'electron'
 import { google } from 'googleapis'
 import { generatePOJpeg } from './jpegGenerator.js'
 import stream from 'node:stream'
-import { tmpdir } from 'node:os'
 
 const SPREADSHEET_ID = '1Bp5rETvaAe9nT4DrNpm-WsQqQlPNaau4gIzw1nA5Khk'
 const PO_ARCHIVE_FOLDER_ID = '1-1Gw1ay4iQoFNFe2KcKDgCwOIi353QEC'
@@ -56,8 +55,8 @@ function getAuth() {
     const title = 'Error Kredensial Kritis'
     const content = `File credentials.json tidak dapat ditemukan di aplikasi.\n\nLokasi yang dicari:\n${credPath}`
 
-    console.error(content)
-    dialog.showErrorBox(title, content)
+    console.error(content) // Tetap log di terminal
+    dialog.showErrorBox(title, content) // <-- INI AKAN MEMUNCULKAN POPUP ERROR
 
     throw new Error('File credentials.json tidak ditemukan.')
   }
@@ -69,50 +68,9 @@ function getAuth() {
     key: creds.private_key,
     scopes: [
       'https://www.googleapis.com/auth/spreadsheets',
-      'https://www.googleapis.com/auth/drive.file',
-      'https://www.googleapis.com/auth/drive.readonly'
+      'https://www.googleapis.com/auth/drive'
     ]
   })
-}
-
-/**
- * @param {string} fileId
- * @returns {Promise<string>}
- */
-async function downloadDriveFile(fileId) {
-  const tempPath = path.join(tmpdir(), `po_temp_${fileId}_${Date.now()}.jpg`);
-
-  return new Promise(async (resolve, reject) => {
-    try {
-      const auth = getAuth();
-      await auth.authorize();
-
-      const drive = google.drive({ version: 'v3', auth });
-      const dest = fs.createWriteStream(tempPath);
-
-      console.log(`[downloadDriveFile] Mendownload file Drive ${fileId} ke ${tempPath}...`);
-
-      const response = await drive.files.get(
-        { fileId: fileId, alt: 'media', supportsAllDrives: true },
-        { responseType: 'stream' }
-      );
-
-      response.data
-        .on('end', () => {
-          console.log(`[downloadDriveFile] Berhasil download file ${fileId}.`);
-          resolve(tempPath);
-        })
-        .on('error', (err) => {
-          console.error('[downloadDriveFile] Gagal stream download:', err);
-          reject(new Error('Gagal download file stream.'));
-        })
-        .pipe(dest);
-    } catch (error) {
-      console.error('[downloadDriveFile] Gagal get file:', error.message);
-      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-      reject(new Error('Gagal mengambil file dari Drive.'));
-    }
-  });
 }
 
 async function openDoc() {
@@ -636,9 +594,7 @@ export async function saveNewPO(data) {
 }
 
 export async function updatePO(data) {
-  console.log('TITIK B (Backend): Menerima data revisi:', data)
-  let tempPhotoPath = null;
-
+  console.log('TITIK B (Backend): Menerima data:', data)
   try {
     const doc = await openDoc()
     const now = new Date().toISOString()
@@ -662,8 +618,8 @@ export async function updatePO(data) {
       kubikasi_total: data.kubikasi_total ?? prev.kubikasi_total ?? 0,
       acc_marketing: data.marketing ?? prev.acc_marketing ?? '',
       created_at: now,
-      pdf_link: 'processing...',
-      revised_by: data.revisedBy || 'Unknown'
+      pdf_link: 'generating...',
+      revised_by: data.revisedBy || 'Unknown' // <--
     })
 
     const itemsWithIds = []
@@ -687,65 +643,46 @@ export async function updatePO(data) {
       await itemSheet.addRows(itemsToAdd)
     }
 
-    const poDataForJpeg = {
-      po_number: data.nomorPo ?? prev.po_number,
-      project_name: data.namaCustomer ?? prev.project_name,
-      deadline: data.tanggalKirim ?? prev.deadline,
-      priority: data.prioritas ?? prev.priority,
-      items: itemsWithIds,
-      notes: data.catatan ?? prev.notes,
-      created_at: now,
-      kubikasi_total: data.kubikasi_total ?? prev.kubikasi_total ?? 0,
-      marketing: data.acc_marketing,
-      poPhotoPath: null
-    }
-
     if (data.poPhotoBase64) {
-      console.log(`[updatePO] 📸 Terdeteksi foto baru (Base64). Menyimpan ke file temp...`);
-      tempPhotoPath = path.join(tmpdir(), `po_new_${Date.now()}.jpg`);
-      fs.writeFileSync(tempPhotoPath, Buffer.from(data.poPhotoBase64, 'base64'));
-      poDataForJpeg.poPhotoPath = tempPhotoPath;
+      console.log(`[updatePO] 📸 Terdeteksi foto baru (base64), membuat JPEG baru...`)
 
-    }
-    else if (prev.pdf_link && !prev.pdf_link.startsWith('ERROR:')) {
-      console.log(`[updatePO] 🖼️ Tidak ada foto baru. Mencoba download foto lama dari: ${prev.pdf_link}`);
-      const fileId = extractGoogleDriveFileId(prev.pdf_link);
+      const poDataForJpeg = {
+        po_number: data.nomorPo ?? prev.po_number,
+        project_name: data.namaCustomer ?? prev.project_name,
+        deadline: data.tanggalKirim ?? prev.deadline,
+        priority: data.prioritas ?? prev.priority,
+        items: itemsWithIds,
+        notes: data.catatan ?? prev.notes,
+        created_at: now,
+        kubikasi_total: data.kubikasi_total ?? prev.kubikasi_total ?? 0,
 
-      if (fileId) {
-        try {
-          tempPhotoPath = await downloadDriveFile(fileId);
-          poDataForJpeg.poPhotoPath = tempPhotoPath;
-        } catch (downloadError) {
-          console.warn(`[updatePO] Gagal download foto lama (${fileId}): ${downloadError.message}. Melanjutkan tanpa foto.`);
-          poDataForJpeg.poPhotoPath = null;
-        }
-      } else {
-        console.warn(`[updatePO] Link PDF lama ada, tapi tidak bisa ekstrak File ID: ${prev.pdf_link}`);
+        poPhotoPath: data.poPhotoPath,
+        poPhotoBase64: data.poPhotoBase64,
+
+        marketing: data.acc_marketing
       }
-    }
-    else {
-      console.log(`[updatePO] ☕ Tidak ada foto baru dan tidak ada foto lama. Melanjutkan tanpa foto.`);
-      poDataForJpeg.poPhotoPath = null;
-    }
 
-    const uploadResult = await generateAndUploadPO(poDataForJpeg, newRev);
+      const uploadResult = await generateAndUploadPO(poDataForJpeg, newRev)
 
-    if (uploadResult.success) {
-      newRevisionRow.set('pdf_link', uploadResult.link);
+      if (uploadResult.success) {
+        newRevisionRow.set('pdf_link', uploadResult.link)
+      } else {
+        newRevisionRow.set('pdf_link', `ERROR: ${uploadResult.error}`)
+      }
+      await newRevisionRow.save()
     } else {
-      newRevisionRow.set('pdf_link', `ERROR: ${uploadResult.error}`);
+      console.log(
+        `[updatePO] 🖼️ Tidak ada foto baru. Menyalin link dari revisi ${latest}: ${prev.pdf_link}`
+      )
+
+      newRevisionRow.set('pdf_link', prev.pdf_link || null)
+      await newRevisionRow.save()
     }
-    await newRevisionRow.save();
 
     return { success: true, revision_number: newRev }
   } catch (err) {
     console.error('❌ updatePO error:', err.message)
     return { success: false, error: err.message }
-  } finally {
-    if (tempPhotoPath && fs.existsSync(tempPhotoPath)) {
-      fs.unlinkSync(tempPhotoPath);
-      console.log(`[updatePO] 🗑️ File temp ${tempPhotoPath} dihapus.`);
-    }
   }
 }
 
@@ -1693,8 +1630,8 @@ export async function handleOllamaChat(prompt) {
         const topCustomer =
           Object.keys(customerData).length > 0
             ? Object.keys(customerData).reduce((a, b) =>
-              customerData[a] > customerData[b] ? a : b
-            )
+                customerData[a] > customerData[b] ? a : b
+              )
             : 'N/A'
         return topCustomer !== 'N/A'
           ? `Customer terbesar (m³) dari PO Selesai adalah: ${topCustomer} (${customerData[topCustomer].toFixed(3)} m³).`
