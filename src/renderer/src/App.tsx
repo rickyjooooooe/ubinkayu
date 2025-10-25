@@ -96,7 +96,7 @@ function App() {
         const result = await apiService.deletePO(poId)
         if (result.success) {
           alert(`✅ PENGHAPUSAN BERHASIL\n\n${result.message}`)
-          
+
           // [PERBAIKAN] Panggil fetchPOs() cukup sekali
           await fetchPOs() // Muat ulang daftar PO
         } else {
@@ -124,12 +124,6 @@ function App() {
   const handleShowDetail = (po: POHeader) => {
     setSelectedPoId(po.id)
     setView('detail')
-  }
-
-  const handleShowHistory = () => {
-    if (selectedPoId) {
-      setView('history')
-    }
   }
 
   // [PERBAIKAN] Ini adalah versi yang benar untuk auto-refresh
@@ -236,14 +230,14 @@ function App() {
         return <DashboardPage poList={allPOs} isLoading={isLoading} />
       case 'input':
         return <InputPOPage onSaveSuccess={handleBackToList} editingPO={editingPO} />
-      case 'detail':
-        return (
-          <PODetailPage
-            po={currentPO}
-            onBackToList={handleBackToList}
-            onShowHistory={handleShowHistory}
-          />
-        )
+        case 'detail':
+          return (
+            <PODetailPage
+              po={currentPO}
+              onBackToList={handleBackToList}
+              // onShowHistory prop removed
+            />
+          )
       case 'tracking':
         return <ProgressTrackingPage onSelectPO={handleSelectPOForTracking} />
       case 'history':

@@ -5,7 +5,7 @@ import React, { useState, useMemo } from 'react';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import FilterPanel from '../components/FilterPanel';
-import { POHeader, POItem } from '../types'; // Import POItem juga (jika belum)
+import { POHeader } from '../types'; // Import POItem juga (jika belum)
 import POTable from '../components/POTable';
 
 interface POListPageProps {

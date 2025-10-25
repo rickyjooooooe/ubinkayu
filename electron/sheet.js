@@ -1406,123 +1406,249 @@ export async function getAttentionData() {
   }
 }
 
+const formatDateForAnalysis = (dateString) => {
+  if (!dateString) return null
+  try {
+    const date = new Date(dateString)
+    if (isNaN(date.getTime())) return null
+    return date.toISOString().split('T')[0] // Format YYYY-MM-DD
+  } catch {
+    return null
+  }
+}
+
+const getYearMonth = (dateString) => {
+  const date = formatDateForAnalysis(dateString)
+  return date ? date.substring(0, 7) : null // Ambil YYYY-MM
+}
+
 export async function getProductSalesAnalysis() {
   try {
     const doc = await openDoc()
-    const itemSheet = await getSheet(doc, 'purchase_order_items')
-    const poSheet = await getSheet(doc, 'purchase_orders')
-    const productSheet = await getSheet(doc, 'product_master')
-
-    const [itemRows, poRows, productRows] = await Promise.all([
+    const [itemSheet, poSheet, productSheet] = await Promise.all([
+      getSheet(doc, 'purchase_order_items'),
+      getSheet(doc, 'purchase_orders'),
+      getSheet(doc, 'product_master')
+    ])
+    // Ambil data mentah sekali saja
+    const [rawItemRows, rawPoRows, rawProductRows] = await Promise.all([
       itemSheet.getRows(),
       poSheet.getRows(),
       productSheet.getRows()
     ])
 
-    const poMap = new Map()
-    poRows.forEach((r) => {
-      const poId = r.get('id')
-      const rev = toNum(r.get('revision_number'))
-      if (!poMap.has(poId) || rev > poMap.get(poId).revision_number) {
-        poMap.set(poId, r.toObject())
+    // Konversi ke Objek Biasa sekali saja
+    const itemRows = rawItemRows.map((r) => r.toObject())
+    const poRows = rawPoRows.map((r) => r.toObject())
+    const productRows = rawProductRows.map((r) => r.toObject())
+
+    // Buat Map PO Revisi Terbaru (semua status kecuali Cancelled)
+    const latestPoMap = poRows.reduce((map, po) => {
+      const poId = po.id
+      const rev = toNum(po.revision_number)
+      if (po.status !== 'Cancelled') {
+        // @ts-ignore
+        if (!map.has(poId) || rev > map.get(poId).revision_number) {
+          // Simpan seluruh objek PO terbaru
+          map.set(poId, { ...po, revision_number: rev }) // Pastikan revision_number adalah number
+        }
       }
-    })
+      return map
+    }, new Map())
 
-    const salesData = {}
-    const salesByDate = []
-    const woodTypeData = {}
-    const customerData = {}
+    // --- Inisialisasi Struktur Data Baru ---
+    const salesByProduct = {}
+    const salesByMarketing = {}
+    const monthlySalesByProduct = {}
+    const monthlySalesByMarketing = {}
+    const woodTypeDistribution = {}
+    const customerByKubikasi = {}
+    const salesByDateForTrend = []
+    const soldProductNames = new Set()
 
+    // --- Proses Item ---
     itemRows.forEach((item) => {
-      const productName = item.get('product_name')
-      const quantity = toNum(item.get('quantity'), 0)
-      const woodType = item.get('wood_type')
-      const kubikasi = toNum(item.get('kubikasi'), 0)
-      const poId = item.get('purchase_order_id')
-      const po = poMap.get(poId)
-
-      if (!productName || !po) return
-
-      if (!salesData[productName]) {
-        salesData[productName] = { totalQuantity: 0, name: productName }
-      }
-      salesData[productName].totalQuantity += quantity
-
-      salesByDate.push({
-        date: new Date(po.created_at),
-        name: productName,
-        quantity: quantity
-      })
-
-      if (woodType) {
-        woodTypeData[woodType] = (woodTypeData[woodType] || 0) + quantity
+      const po = latestPoMap.get(item.purchase_order_id)
+      // Pastikan item berasal dari PO revisi terbaru yang valid (tidak cancelled)
+      // @ts-ignore
+      if (!po || toNum(item.revision_number) !== po.revision_number) {
+        return
       }
 
-      const customerName = po.project_name
-      if (customerName) {
-        customerData[customerName] = (customerData[customerName] || 0) + kubikasi
+      const productName = item.product_name
+      const quantity = toNum(item.quantity, 0)
+      const kubikasi = toNum(item.kubikasi, 0)
+      const woodType = item.wood_type
+      const yearMonth = getYearMonth(po.created_at)
+
+      if (!productName || quantity <= 0) return
+
+      soldProductNames.add(productName)
+
+      // 1. Agregasi Total per Produk
+      salesByProduct[productName] = salesByProduct[productName] || {
+        totalQuantity: 0,
+        totalKubikasi: 0,
+        name: productName
       }
+      salesByProduct[productName].totalQuantity += quantity
+      salesByProduct[productName].totalKubikasi += kubikasi
+
+      // 3. Agregasi Bulanan per Produk (Quantity)
+      if (yearMonth) {
+        monthlySalesByProduct[yearMonth] = monthlySalesByProduct[yearMonth] || {}
+        monthlySalesByProduct[yearMonth][productName] =
+          (monthlySalesByProduct[yearMonth][productName] || 0) + quantity
+      }
+
+      // 5. Distribusi Kayu (Quantity)
+      if (woodType)
+        woodTypeDistribution[woodType] = (woodTypeDistribution[woodType] || 0) + quantity
+
+      // 7. Data untuk Tren Produk
+      try {
+        salesByDateForTrend.push({ date: new Date(po.created_at), name: productName, quantity })
+      } catch {}
     })
 
-    const topSellingProducts = Object.values(salesData)
+    // --- Proses Agregasi per PO (Marketing & Customer) ---
+    latestPoMap.forEach((po) => {
+      const marketingName = po.acc_marketing || 'N/A'
+      const customerName = po.project_name
+      const kubikasiTotalPO = toNum(po.kubikasi_total, 0)
+      const yearMonth = getYearMonth(po.created_at)
+
+      // Agregasi Total per Marketing
+      salesByMarketing[marketingName] = salesByMarketing[marketingName] || {
+        totalKubikasi: 0,
+        poCount: 0,
+        name: marketingName
+      }
+      salesByMarketing[marketingName].totalKubikasi += kubikasiTotalPO
+      salesByMarketing[marketingName].poCount += 1
+
+      // Agregasi Bulanan per Marketing
+      if (yearMonth) {
+        monthlySalesByMarketing[yearMonth] = monthlySalesByMarketing[yearMonth] || {}
+        monthlySalesByMarketing[yearMonth][marketingName] =
+          (monthlySalesByMarketing[yearMonth][marketingName] || 0) + kubikasiTotalPO
+      }
+
+      // Agregasi Customer
+      if (customerName)
+        customerByKubikasi[customerName] = (customerByKubikasi[customerName] || 0) + kubikasiTotalPO
+    })
+
+    // --- Finalisasi Hasil ---
+    const topSellingProducts = Object.values(salesByProduct)
       .sort((a, b) => b.totalQuantity - a.totalQuantity)
       .slice(0, 10)
 
-    const woodTypeDistribution = Object.keys(woodTypeData)
-      .map((name) => ({
-        name,
-        value: woodTypeData[name]
-      }))
+    const salesByMarketingSorted = Object.values(salesByMarketing).sort(
+      (a, b) => b.totalKubikasi - a.totalKubikasi
+    )
+
+    const woodTypeDistributionSorted = Object.entries(woodTypeDistribution)
+      .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value)
 
-    const topCustomers = Object.keys(customerData)
-      .map((name) => ({
-        name,
-        totalKubikasi: customerData[name]
-      }))
+    const topCustomers = Object.entries(customerByKubikasi)
+      .map(([name, totalKubikasi]) => ({ name, totalKubikasi }))
       .sort((a, b) => b.totalKubikasi - a.totalKubikasi)
-      .slice(0, 5)
+      .slice(0, 10)
 
-    const today = new Date()
-    const thirtyDaysAgo = new Date(new Date().setDate(today.getDate() - 30))
-    const sixtyDaysAgo = new Date(new Date().setDate(today.getDate() - 60))
+    // Format data bulanan untuk Recharts
+    const allMonths = new Set([
+      ...Object.keys(monthlySalesByProduct),
+      ...Object.keys(monthlySalesByMarketing)
+    ])
+    const sortedMonths = Array.from(allMonths).sort()
 
-    const salesLast30 = {}
-    const salesPrev30 = {}
-
-    salesByDate.forEach((sale) => {
-      if (sale.date >= thirtyDaysAgo) {
-        salesLast30[sale.name] = (salesLast30[sale.name] || 0) + sale.quantity
-      } else if (sale.date >= sixtyDaysAgo) {
-        salesPrev30[sale.name] = (salesPrev30[sale.name] || 0) + sale.quantity
-      }
+    // Ambil semua nama produk dan marketing unik dari data bulanan
+    const allProductKeys = new Set() // <-- Hapus <string>
+    sortedMonths.forEach((month) => {
+      if (monthlySalesByProduct[month])
+        Object.keys(monthlySalesByProduct[month]).forEach((p) => allProductKeys.add(p))
+    })
+    sortedMonths.forEach((month) => {
+      if (monthlySalesByProduct[month])
+        Object.keys(monthlySalesByProduct[month]).forEach((p) => allProductKeys.add(p))
+    })
+    const allMarketingKeys = new Set() // <-- Hapus <string>
+    sortedMonths.forEach((month) => {
+      if (monthlySalesByMarketing[month])
+        Object.keys(monthlySalesByMarketing[month]).forEach((m) => allMarketingKeys.add(m))
+    })
+    sortedMonths.forEach((month) => {
+      if (monthlySalesByMarketing[month])
+        Object.keys(monthlySalesByMarketing[month]).forEach((m) => allMarketingKeys.add(m))
     })
 
+    const monthlyProductChartData = sortedMonths.map((month) => {
+      const monthData = { month }
+      allProductKeys.forEach((prodKey) => {
+        monthData[prodKey] = monthlySalesByProduct[month]?.[prodKey] || 0 // Isi 0 jika tidak ada data
+      })
+      return monthData
+    })
+
+    const monthlyMarketingChartData = sortedMonths.map((month) => {
+      const monthData = { month }
+      allMarketingKeys.forEach((markKey) => {
+        monthData[markKey] = monthlySalesByMarketing[month]?.[markKey] || 0 // Isi 0 jika tidak ada data
+      })
+      return monthData
+    })
+
+    // Kalkulasi Tren
+    const todayTrend = new Date(),
+      thirtyDaysAgo = new Date(new Date().setDate(todayTrend.getDate() - 30)),
+      sixtyDaysAgo = new Date(new Date().setDate(todayTrend.getDate() - 60))
+    const salesLast30 = {},
+      salesPrev30 = {}
+    salesByDateForTrend.forEach((sale) => {
+      if (sale.date >= thirtyDaysAgo)
+        salesLast30[sale.name] = (salesLast30[sale.name] || 0) + sale.quantity
+      else if (sale.date >= sixtyDaysAgo)
+        salesPrev30[sale.name] = (salesPrev30[sale.name] || 0) + sale.quantity
+    })
     const trendingProducts = Object.keys(salesLast30)
       .map((name) => {
-        const last30 = salesLast30[name]
-        const prev30 = salesPrev30[name] || 0
-        const change = prev30 === 0 && last30 > 0 ? 100 : ((last30 - prev30) / (prev30 || 1)) * 100
+        const last30 = salesLast30[name] || 0 // Pastikan ada nilai default 0
+        const prev30 = salesPrev30[name] || 0 // Pastikan ada nilai default 0
+        const change =
+          prev30 === 0 && last30 > 0 ? 100 : ((last30 - prev30) / (prev30 === 0 ? 1 : prev30)) * 100 // Hindari pembagian 0
         return { name, last30, prev30, change }
       })
-      .filter((p) => p.change > 20 && p.last30 > p.prev30)
+      .filter((p) => p.change > 10 && p.last30 > p.prev30) // Filter > 10% dan lebih besar dari sebelumnya
       .sort((a, b) => b.change - a.change)
 
-    const allProductNames = productRows.map((r) => r.get('product_name'))
-    const soldProductNames = new Set(Object.keys(salesData))
-    const neverSoldProducts = allProductNames.filter((name) => !soldProductNames.has(name))
+    // Produk Kurang Laris
+    const allMasterProductNames = productRows.map((p) => p.product_name).filter(Boolean)
+    const slowMovingProducts = allMasterProductNames.filter((name) => !soldProductNames.has(name))
 
-    return {
+    // Susun hasil akhir
+    const analysisResult = {
       topSellingProducts,
-      woodTypeDistribution,
+      salesByMarketing: salesByMarketingSorted,
+      monthlyProductChartData,
+      monthlyMarketingChartData,
+      woodTypeDistribution: woodTypeDistributionSorted,
       topCustomers,
       trendingProducts,
-      slowMovingProducts: neverSoldProducts
+      slowMovingProducts
     }
+
+    console.log('📊 Analisis Penjualan Dihasilkan:', analysisResult) // Log hasil
+    return analysisResult // Return untuk Electron
   } catch (err) {
     console.error('❌ Gagal melakukan analisis penjualan produk:', err.message)
+    // Return struktur kosong agar frontend tidak error
     return {
       topSellingProducts: [],
+      salesByMarketing: [],
+      monthlyProductChartData: [],
+      monthlyMarketingChartData: [],
       woodTypeDistribution: [],
       topCustomers: [],
       trendingProducts: [],

@@ -32,7 +32,7 @@ const findHeaderChanges = (current: PORevision, previous: PORevision): string[] 
     deadline: 'Deadline',
     notes: 'Catatan',
     acc_marketing: 'Marketing',
-    alamat_kirim: 'Alamat Kirim' // Tambahkan jika ada di PORevision
+    alamat_kirim: 'Alamat Kirim' // <-- Ensure this is present
   };
 
   for (const key in fieldLabels) {

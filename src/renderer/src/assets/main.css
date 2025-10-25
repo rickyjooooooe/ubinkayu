@@ -2885,3 +2885,34 @@ body {
      padding: 0.75rem 1rem;
    }
 }
+
+.recommendation-card {
+  margin-top: 1.5rem;
+  background-color: #EBF8FF; /* Biru muda */
+  border-left: 4px solid #3182CE; /* Biru tua */
+  display: flex; /* Aktifkan flexbox */
+  align-items: center; /* Sejajarkan ikon dan teks */
+  gap: 1.5rem; /* Jarak antara ikon dan teks */
+  padding: 1.5rem; /* Padding internal */
+}
+
+.recommendation-icon {
+    font-size: 2.5rem; /* Ukuran ikon */
+    color: #2C5282; /* Warna ikon (biru lebih tua) */
+    flex-shrink: 0; /* Mencegah ikon mengecil */
+}
+
+.recommendation-content h4 {
+  margin-top: 0;
+  margin-bottom: 0.5rem; /* Jarak judul ke teks */
+  color: #2B6CB0; /* Warna judul (biru lebih tua) */
+}
+
+.recommendation-content p {
+    margin: 0;
+    line-height: 1.6;
+    color: #4A5568; /* Warna teks abu-abu */
+}
+.recommendation-content strong {
+    color: #2C5282; /* Warna teks tebal (biru lebih tua) */
+}
