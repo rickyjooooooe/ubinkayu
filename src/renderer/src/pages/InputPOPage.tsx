@@ -307,7 +307,7 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO }) =
           prioritas: editingPO.priority || 'Normal',
           alamatKirim: (editingPO as any).alamatKirim || '',
           catatan: editingPO.notes || '',
-          marketing: (editingPO as any).marketing || ''
+          marketing: (editingPO as any).acc_marketing || ''
         })
 
         if (isElectron && editingPO.photo_url) {

@@ -506,7 +506,9 @@ export async function listPOs() {
         completed_at: completed_at,
         pdf_link: poObject.pdf_link || null,
         lastRevisedBy: lastRevisedBy,
-        lastRevisedDate: lastRevisedDate
+        lastRevisedDate: lastRevisedDate,
+        acc_marketing: poObject.acc_marketing || ''// Pastikan field ini ada
+
       }
     })
 

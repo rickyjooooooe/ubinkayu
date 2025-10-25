@@ -96,7 +96,21 @@ const compareRevisions = (current: RevisionHistoryItem, previous: RevisionHistor
 }
 
 // --- Akhir Helper Functions ---
+// [BARU] Fungsi helper untuk membuat deskripsi item yang detail
+const formatItemDescription = (item: POItem): string => {
+  const parts = [
+    item.product_name || 'Item',
+    item.wood_type ? `(${item.wood_type})` : '',
+    item.profile || '',
+    item.color || '',
+    item.finishing || '',
+    `${item.thickness_mm || 0}x${item.width_mm || 0}x${item.length_mm || 0}`,
+    item.notes || ''
+  ];
 
+  // Filter bagian yang kosong dan gabungkan dengan koma
+  return parts.filter(Boolean).join(', ');
+}
 interface RevisionHistoryPageProps {
   poId: string | null
   poNumber: string | null
@@ -173,7 +187,7 @@ const RevisionHistoryPage: React.FC<RevisionHistoryPageProps> = ({ poId, poNumbe
                 {/* [PERBAIKAN] Mengembalikan grup tombol/aksi ke sini */}
                 <div className="revision-actions-group">
                   <span>Dibuat pada: {formatDate(revItem.revision.created_at)}</span>
-                  
+
                   {/* Tampilkan nama perevisi jika ada */}
                   {revItem.revision.revised_by && (
                     <span className="reviser-info">
@@ -189,7 +203,7 @@ const RevisionHistoryPage: React.FC<RevisionHistoryPageProps> = ({ poId, poNumbe
                   )}
                 </div>
               </div>
-              
+
               {/* Detail Revisi (Tampilan Tidak Berubah) */}
               <div className="revision-details">
                 <p>
@@ -214,16 +228,15 @@ const RevisionHistoryPage: React.FC<RevisionHistoryPageProps> = ({ poId, poNumbe
                   </p>
                 )}
               </div>
-              
+
               {/* JSX untuk menampilkan CATATAN perubahan */}
-              {!previousRevision ? (
-                <p>
-                  <em>Ini adalah versi awal.</em>
-                </p>
+             {/* [DIROMBAK] JSX untuk menampilkan CATATAN perubahan */}
+             {!previousRevision ? (
+                <p><em>Ini adalah versi awal.</em></p>
               ) : hasChanges && changes ? (
                 <div className="revision-changes-summary">
                   <h4>Ringkasan Perubahan dari Versi Sebelumnya:</h4>
-                  
+
                   {changes.headerChanges.length > 0 && (
                      <div className="change-section">
                         <h5>(~) Informasi Dasar Diubah:</h5>
@@ -238,9 +251,11 @@ const RevisionHistoryPage: React.FC<RevisionHistoryPageProps> = ({ poId, poNumbe
                     <div className="change-section">
                       <h5>(+) Item Ditambahkan:</h5>
                       <ul>
+                        {/* [PERBAIKAN] Menggunakan formatItemDescription */}
                         {changes.added.map((item) => (
                           <li key={item.id} className="change-added">
-                            {item.product_name} ({item.quantity} {item.satuan})
+                            {formatItemDescription(item)}
+                            <strong> — {item.quantity} {item.satuan}</strong>
                           </li>
                         ))}
                       </ul>
@@ -250,9 +265,11 @@ const RevisionHistoryPage: React.FC<RevisionHistoryPageProps> = ({ poId, poNumbe
                     <div className="change-section">
                       <h5>(-) Item Dihapus:</h5>
                       <ul>
+                        {/* [PERBAIKAN] Menggunakan formatItemDescription */}
                         {changes.removed.map((item) => (
                           <li key={item.id} className="change-removed">
-                            {item.product_name} ({item.quantity} {item.satuan})
+                            {formatItemDescription(item)}
+                            <strong> — {item.quantity} {item.satuan}</strong>
                           </li>
                         ))}
                       </ul>
@@ -277,15 +294,13 @@ const RevisionHistoryPage: React.FC<RevisionHistoryPageProps> = ({ poId, poNumbe
                   )}
                 </div>
               ) : (
-                <p>
-                  <em>Tidak ada perubahan dari versi sebelumnya.</em>
-                </p>
+                <p><em>Tidak ada perubahan dari versi sebelumnya.</em></p>
               )}
 
-              {/* Tabel Item (Tampilan Tidak Berubah) */}
+              {/* Tabel Item (Tidak Berubah) */}
               <h4>Item pada revisi ini:</h4>
-              <div className="table-responsive"> {/* [UBAH] po-table-container -> table-responsive */}
-                <table className="simple-table item-table"> {/* [UBAH] simple-table -> item-table */}
+              <div className="table-responsive">
+                <table className="simple-table item-table">
                   <thead>
                     <tr>
                       <th>Produk</th>
