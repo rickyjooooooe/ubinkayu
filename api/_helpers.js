@@ -37,17 +37,28 @@ export const DEFAULT_STAGE_DURATIONS = {
   'Siap Kirim': 0
 }
 
-// Fungsi untuk otentikasi
+// file: api/_helpers.js
 export function getAuth() {
-  // 1. Decode dulu dari Base64 untuk mendapatkan kembali string asli dengan \n
-  const decodedKey = Buffer.from(process.env.GOOGLE_PRIVATE_KEY, 'base64').toString('utf8')
+  // 1. Decode dulu dari Base64
+  // Tambah fallback string kosong '' untuk mencegah error jika env var tidak ada
+  const decodedKey = Buffer.from(process.env.GOOGLE_PRIVATE_KEY || '', 'base64').toString('utf8')
 
-  // 2. Baru ganti \n dengan karakter baris baru asli
+  // 2. Baru ganti literal "\\n" dengan karakter newline asli "\n"
   const formattedKey = decodedKey.replace(/\\n/g, '\n')
 
+  // 3. Pastikan email juga ada
+  const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
+  // Tambah cek dasar untuk memastikan env vars ada dan valid
+  if (!email || !formattedKey || formattedKey.length < 100) {
+    console.error(
+      '❌ Vercel Auth Error: Missing or invalid GOOGLE_SERVICE_ACCOUNT_EMAIL or GOOGLE_PRIVATE_KEY environment variable.'
+    )
+    throw new Error('Server configuration error: Missing credentials.')
+  }
+
   return new JWT({
-    email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    key: formattedKey, // <-- Gunakan kunci yang sudah diformat
+    email: email,
+    key: formattedKey, // Gunakan kunci yang sudah diformat
     scopes: [
       'https://www.googleapis.com/auth/spreadsheets',
       'https://www.googleapis.com/auth/drive'
