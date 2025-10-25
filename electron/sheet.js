@@ -507,8 +507,7 @@ export async function listPOs() {
         pdf_link: poObject.pdf_link || null,
         lastRevisedBy: lastRevisedBy,
         lastRevisedDate: lastRevisedDate,
-        acc_marketing: poObject.acc_marketing || ''// Pastikan field ini ada
-
+        acc_marketing: poObject.acc_marketing || '' // Pastikan field ini ada
       }
     })
 
@@ -1595,11 +1594,17 @@ export async function handleOllamaChat(prompt) {
   let allPOs
   try {
     allPOs = await listPOs() // Panggil fungsi listPOs yang sudah ada
-    if (!allPOs || allPOs.length === 0) {
+    // Validasi data PO (pastikan array dan bukan kosong jika diperlukan)
+    if (!Array.isArray(allPOs)) {
+      console.error('listPOs did not return an array.')
+      allPOs = [] // Fallback ke array kosong
+    }
+    if (allPOs.length === 0) {
       // Tetap izinkan pertanyaan dasar
-      if (['bantuan', 'help', 'siapa', 'halo'].some((k) => prompt.toLowerCase().includes(k))) {
+      if (
+        ['bantuan', 'help', 'siapa', 'halo', 'info'].some((k) => prompt.toLowerCase().includes(k))
+      ) {
         // Lanjutkan ke AI untuk general/help
-        allPOs = [] // Kirim array kosong agar tidak error di switch case
       } else {
         return 'Maaf, data PO belum tersedia untuk dianalisis saat ini.'
       }
@@ -1610,13 +1615,28 @@ export async function handleOllamaChat(prompt) {
     return 'Maaf, saya gagal mengambil data PO terbaru untuk menjawab pertanyaan Anda.'
   }
 
+  const now = new Date()
+  const currentHour = now.getHours() // Jam (0-23)
+  // const today = now.toISOString().split('T')[0]
+  let timeOfDayGreeting = 'Halo!' // Default greeting
+  if (currentHour >= 4 && currentHour < 11) {
+    timeOfDayGreeting = 'Selamat pagi!'
+  } else if (currentHour >= 11 && currentHour < 15) {
+    timeOfDayGreeting = 'Selamat siang!'
+  } else if (currentHour >= 15 && currentHour < 19) {
+    timeOfDayGreeting = 'Selamat sore!'
+  } else {
+    timeOfDayGreeting = 'Selamat malam!'
+  }
+
   const today = new Date().toISOString().split('T')[0]
   const systemPrompt = `Anda adalah Asisten ERP Ubinkayu. Tugas Anda adalah mengubah pertanyaan pengguna menjadi JSON 'perintah' berdasarkan alat (tools) yang tersedia.
 Hari ini adalah ${today}.
 
 Alat (Tools) yang Tersedia:
-1. "getTotalPO": Menghitung jumlah total SEMUA PO, SEMUA PO aktif (status BUKAN Completed/Cancelled), dan SEMUA PO selesai.
+1. "getTotalPO": Menghitung jumlah total SEMUA PO, SEMUA PO aktif (status BUKAN Completed/Cancelled), dan SEMUA PO selesai. Memberikan rincian jumlah Open & In Progress untuk PO Aktif.
    - Keywords: "jumlah po", "total po", "ada berapa po", "semua po aktif", "berapa po aktif", "jumlah po yang sedang berjalan", "how many purchase orders".
+   - **PENTING:** Gunakan tool ini jika user bertanya jumlah PO "aktif" secara umum.
    - JANGAN gunakan tool ini jika user HANYA bertanya tentang PO Urgent atau status spesifik (Open/In Progress).
    - JSON: {"tool": "getTotalPO"}
 2. "getTopProduct": Menemukan produk terlaris dari PO yang sudah selesai.
@@ -1625,19 +1645,21 @@ Alat (Tools) yang Tersedia:
 3. "getTopCustomer": Menemukan customer terbesar (volume m³) dari PO yang sudah selesai.
    - Keywords: "customer terbesar", "top customer", "biggest customer".
    - JSON: {"tool": "getTopCustomer"}
-4. "getPOStatus": Mencari status RINGKAS PO berdasarkan nomor.
-   - Keywords: "status po", "cek po", "check purchase order", "progress po [nomor]".
-   - AI HARUS mengekstrak "param" (nomor PO).
-   - JSON: {"tool": "getPOStatus", "param": "NOMOR_PO_DI_SINI"}
-5. "findPODetails": Mencari DETAIL PO berdasarkan nomor PO ATAU nama customer. Jika ditemukan, jelaskan detailnya (customer, tanggal, status, progress, item).
+4. "getPOStatus": Mencari status RINGKAS PO berdasarkan nomor PO yang **VALID**.
+   - Keywords: "status po [nomor]", "cek po [nomor]", "progress po [nomor]". (Format lebih ketat)
+   - AI **HARUS** mengekstrak nomor PO dari query pengguna dan memasukkannya ke "param".
+   - Jika pengguna hanya bilang "status po" tanpa nomor, JANGAN gunakan tool ini, kembalikan 'unknown'.
+   - JSON: {"tool": "getPOStatus", "param": "NOMOR_PO_EKSTRAKSI"}
+5. "findPODetails": Mencari DETAIL PO berdasarkan nomor PO ATAU nama customer. Jika ditemukan, jelaskan detailnya.
    - Keywords: "cari PO", "find PO", "apakah ada PO", "detail PO", "PO customer [nama]", "PO nomor [nomor]", "info PO [nomor/nama]".
-   - AI HARUS mengekstrak "param" yang berisi "poNumber" ATAU "customerName". Prioritaskan poNumber jika keduanya disebut.
+   - AI **HARUS** mengekstrak "param" yang berisi "poNumber" ATAU "customerName". Prioritaskan poNumber jika keduanya disebut.
    - JSON: {"tool": "findPODetails", "param": {"poNumber": "...", "customerName": "..."}}
 6. "getUrgentPOs": Menampilkan daftar PO aktif yang prioritasnya HANYA Urgent.
    - Keywords: "po urgent", "urgent orders", "hanya yang urgent", "prioritas urgent".
    - JSON: {"tool": "getUrgentPOs"}
 7. "getNearingDeadline": Menampilkan PO aktif yang akan deadline (dalam 7 hari).
    - Keywords: "deadline dekat", "nearing deadline", "akan jatuh tempo".
+   - JANGAN gunakan tool ini jika user bertanya PO yang DIBUAT minggu/bulan ini.
    - JSON: {"tool": "getNearingDeadline"}
 8. "getNewestPOs": Menampilkan 3 PO yang baru saja dibuat.
    - Keywords: "po terbaru", "order terbaru", "newest po".
@@ -1645,32 +1667,42 @@ Alat (Tools) yang Tersedia:
 9. "getOldestPO": Menampilkan PO terlama.
    - Keywords: "po terlama", "order pertama", "oldest po".
    - JSON: {"tool": "getOldestPO"}
-10. "getPOsByDateRange": Mencari PO berdasarkan rentang tanggal masuk.
-    - Keywords: "po bulan oktober", "po tanggal 20 okt", "po minggu lalu", "po 2025".
-    - AI HARUS mengekstrak 'startDate' dan 'endDate' dalam format YYYY-MM-DD. Gunakan ${today} sebagai referensi.
-    - Jika hanya satu tanggal (misal "po 20 oktober 2025"), 'startDate' dan 'endDate' harus sama ("2025-10-20").
+10. "getPOsByDateRange": Mencari PO berdasarkan rentang tanggal masuk (TANGGAL PEMBUATAN PO).
+    - Keywords: "po bulan oktober", "po tanggal 20 okt", "po 2025", "po kemarin", "po hari ini", "po minggu ini".
+    - AI **HARUS** mengekstrak 'startDate' dan 'endDate' dalam format YYYY-MM-DD. Gunakan ${today} sebagai referensi.
+    - Jika hanya satu tanggal (misal "po 20 okt 2025"), 'startDate' dan 'endDate' HARUS sama ("2025-10-20").
+    - AI **HARUS MENCOBA** menginterpretasi tanggal relatif seperti "kemarin", "hari ini", "minggu lalu". Jika ${today} adalah 2025-10-25: "kemarin" -> startDate/endDate=2025-10-24; "hari ini" -> startDate/endDate=2025-10-25; "minggu ini" -> hitung awal/akhir minggu dari ${today}.
     - JSON: {"tool": "getPOsByDateRange", "startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD"}
 11. "getPOByStatusCount": Menghitung jumlah PO aktif dengan status spesifik (Open atau In Progress).
     - Keywords: "berapa po open", "jumlah po in progress", "yang statusnya open", "yang sedang dikerjakan".
-    - AI HARUS mengekstrak "param" (status yang diminta: "Open" atau "In Progress"). Case insensitive tidak masalah.
+    - AI **HARUS** mengekstrak "param" (status yang diminta: "Open" atau "In Progress").
     - JSON: {"tool": "getPOByStatusCount", "param": "STATUS_DIMINTA"}
-12. "help": Memberikan bantuan atau daftar perintah yang bisa dilakukan.
+12. "getApplicationHelp": Memberikan penjelasan cara menggunakan fitur aplikasi ERP.
+      - Keywords: "cara buat po", "bagaimana input po", "cara update progress", "bagaimana revisi po", "cara tambah produk", "panduan aplikasi", "alur kerja", "step by step [fitur]", "tutorial [fitur]", "gimana cara [fitur]".
+      - AI HARUS mengekstrak "topic" dari pertanyaan pengguna (misal: "buat PO", "update progress", "revisi PO", "tambah produk", "tambah master produk"). Jika tidak jelas, biarkan kosong.
+      - JSON: {"tool": "getApplicationHelp", "topic": "NAMA_FITUR_DIMINTA"}
+13. "help": Memberikan bantuan atau daftar perintah yang bisa dilakukan.
     - Keywords: "bantuan", "help", "apa yang bisa kamu lakukan", "perintah".
     - JSON: {"tool": "help"}
-13. "general": Untuk pertanyaan umum atau sapaan yang tidak terkait langsung dengan data PO.
+14. "general": Untuk pertanyaan umum atau sapaan yang tidak terkait langsung dengan data PO.
     - Keywords: "halo", "kamu siapa", "dengan siapa ini", "terima kasih".
     - JSON: {"tool": "general"}
 
 ATURAN KETAT:
-- JANGAN menjawab pertanyaan secara langsung.
-- HANYA kembalikan JSON.
-- Jika pertanyaan "po bulan oktober ini", AI harus mengerti ini tahun 2025 dan kembalikan: {"tool": "getPOsByDateRange", "startDate": "2025-10-01", "endDate": "2025-10-31"}
-- Jika pertanyaan "po terbaru", kembalikan: {"tool": "getNewestPOs"}
-- Jika pertanyaan "halo", kembalikan: {"tool": "general"}
-- Jika user tanya "berapa po open?", kembalikan: {"tool": "getPOByStatusCount", "param": "Open"}
- - Jika user tanya "detail po 123", kembalikan: {"tool": "findPODetails", "param": {"poNumber": "123", "customerName": null}}
- - Jika user tanya "apakah ada po customer PT ABC?", kembalikan: {"tool": "findPODetails", "param": {"poNumber": null, "customerName": "PT ABC"}}
-- Jika tidak yakin, kembalikan: {"tool": "unknown"}
+- JANGAN menjawab pertanyaan secara langsung. HANYA kembalikan JSON.
+- Jika user bertanya "berapa po aktif?" atau "jumlah po aktif", KEMBALIKAN: {"tool": "getTotalPO"}
+- Jika user tanya "status po 123", KEMBALIKAN: {"tool": "getPOStatus", "param": "123"}
+- Jika user tanya "detail po customer PT ABC", KEMBALIKAN: {"tool": "findPODetails", "param": {"poNumber": null, "customerName": "PT ABC"}}
+// Hapus formatting Markdown
+- Jika user bertanya tentang PO yang mungkin tidak ada (misal "status po 999", "cari PO xyz"), TETAP pilih tool getPOStatus atau findPODetails dan ekstrak parameternya. Biarkan backend menangani jika data tidak ditemukan.
+- Contoh Tanggal Relatif (jika ${today} adalah 2025-10-25):
+    - "po kemarin": {"tool": "getPOsByDateRange", "startDate": "2025-10-24", "endDate": "2025-10-24"}
+    - "po hari ini": {"tool": "getPOsByDateRange", "startDate": "2025-10-25", "endDate": "2025-10-25"}
+    - "po minggu ini" (Asumsi Minggu awal): {"tool": "getPOsByDateRange", "startDate": "2025-10-19", "endDate": "2025-10-25"}
+- Jika tidak yakin tool mana yang paling cocok, KEMBALIKAN: {"tool": "unknown"}
+- Jika user tanya "cara buat po", KEMBALIKAN: {"tool": "getApplicationHelp", "topic": "buat PO"}
+  - Jika user tanya "gimana cara nambah produk master?", KEMBALIKAN: {"tool": "getApplicationHelp", "topic": "tambah produk"} // Contoh baru
+  - Jika user tanya "step by step update progress", KEMBALIKAN: {"tool": "getApplicationHelp", "topic": "update progress"} // Contoh baru
 `
 
   let aiDecision
@@ -1691,6 +1723,10 @@ ATURAN KETAT:
       throw new Error(`Ollama API error: ${errorData.error || response.statusText}`)
     }
     const data = await response.json()
+    // Tambahkan validasi JSON dasar
+    if (typeof data.response !== 'string' || !data.response.startsWith('{')) {
+      throw new Error('Ollama tidak mengembalikan format JSON yang valid.')
+    }
     aiDecision = JSON.parse(data.response)
   } catch (err) {
     console.error('Error klasifikasi Ollama:', err)
@@ -1707,10 +1743,8 @@ ATURAN KETAT:
 
   // 4. Jalankan Alat (Tools) di JavaScript berdasarkan keputusan AI
   try {
-    // Hapus: let responseText = '';
     switch (aiDecision.tool) {
       case 'getTotalPO': {
-        // ... (logika sama) ...
         const totalPOs = allPOs.length
         const activePOsList = allPOs.filter(
           (po) => po.status !== 'Completed' && po.status !== 'Cancelled'
@@ -1718,9 +1752,8 @@ ATURAN KETAT:
         const activePOsCount = activePOsList.length
         const completedPOs = allPOs.filter((po) => po.status === 'Completed').length
         const openCount = activePOsList.filter((po) => po.status === 'Open').length
-        const inProgressCount = activePOsList.filter((po) => po.status === 'In Progress').length // Atau hitung: activePOsCount - openCount
+        const inProgressCount = activePOsList.filter((po) => po.status === 'In Progress').length
 
-        // Return langsung dengan detail
         return (
           `Saat ini ada ${totalPOs} total PO di database.\n\n` +
           `- ${activePOsCount} PO sedang aktif (${openCount} Open, ${inProgressCount} In Progress).\n` +
@@ -1728,7 +1761,6 @@ ATURAN KETAT:
         )
       }
       case 'getTopProduct': {
-        // ... (logika sama) ...
         const completedPOs = allPOs.filter((po) => po.status === 'Completed')
         if (completedPOs.length === 0) return 'Belum ada data PO Selesai untuk dianalisis.'
         const salesData = {}
@@ -1748,7 +1780,6 @@ ATURAN KETAT:
           : 'Tidak dapat menemukan produk terlaris.'
       }
       case 'getTopCustomer': {
-        // ... (logika sama) ...
         const completedPOs = allPOs.filter((po) => po.status === 'Completed')
         if (completedPOs.length === 0) return 'Belum ada data PO Selesai untuk dianalisis.'
         const customerData = {}
@@ -1768,9 +1799,10 @@ ATURAN KETAT:
           : 'Tidak dapat menemukan customer terbesar.'
       }
       case 'getPOStatus': {
-        // ... (logika sama) ...
         const poNumber = aiDecision.param
-        if (!poNumber) return 'Mohon sebutkan nomor PO yang ingin dicek.'
+        if (!poNumber || poNumber === 'NOMOR_PO_EKSTRAKSI') {
+          return 'Mohon sebutkan nomor PO yang valid (contoh: status po 123).'
+        }
         const latestPO = allPOs
           .filter((po) => po.po_number === poNumber)
           .sort((a, b) => Number(b.revision_number || 0) - Number(a.revision_number || 0))[0]
@@ -1778,14 +1810,11 @@ ATURAN KETAT:
           ? `Status PO ${poNumber} (${latestPO.project_name}) adalah: ${latestPO.status || 'Open'}. Progress: ${latestPO.progress?.toFixed(0) || 0}%.`
           : `PO ${poNumber} tidak ditemukan.`
       }
-
-      // --- PERUBAHAN DI CASE findPODetails ---
       case 'findPODetails': {
         const params = aiDecision.param
         const poNumber = params?.poNumber
         const customerName = params?.customerName
         let foundPOs = []
-        let responseText = '' // Deklarasi di sini
 
         if (poNumber) {
           const poMap = new Map()
@@ -1817,13 +1846,15 @@ ATURAN KETAT:
         if (foundPOs.length === 1) {
           const po = foundPOs[0]
           const itemsSummary = (po.items || [])
-            .map((item) => `- ${item.product_name} (${item.quantity} ${item.satuan})`)
+            .map(
+              (item) =>
+                `- ${item.product_name || 'Item Tanpa Nama'} (${item.quantity || 0} ${item.satuan || 'unit'})`
+            ) // Handle item kosong
             .join('\n')
-          // Return langsung
           return (
             `✅ PO ditemukan:\n` +
-            `Nomor PO: ${po.po_number}\n` +
-            `Customer: ${po.project_name}\n` +
+            `Nomor PO: ${po.po_number || 'N/A'}\n` +
+            `Customer: ${po.project_name || 'N/A'}\n` +
             `Tgl Masuk: ${formatDate(po.created_at)}\n` +
             `Target Kirim: ${formatDate(po.deadline)}\n` +
             `Status: ${po.status || 'Open'}\n` +
@@ -1832,39 +1863,43 @@ ATURAN KETAT:
             `Item:\n${itemsSummary || '(Tidak ada item)'}`
           )
         } else if (foundPOs.length > 1) {
-          const poList = foundPOs.map((po) => `- ${po.po_number} (${po.project_name})`).join('\n')
-          // Return langsung
-          return `Saya menemukan ${foundPOs.length} PO yang cocok:\n${poList}\n\nMohon sebutkan nomor PO spesifik yang ingin Anda lihat detailnya.`
+          const poList = foundPOs
+            .map((po) => `- ${po.po_number || 'N/A'} (${po.project_name || 'N/A'})`)
+            .slice(0, 5) // Batasi tampilan jika terlalu banyak
+            .join('\n')
+          let response = `Saya menemukan ${foundPOs.length} PO yang cocok:\n${poList}`
+          if (foundPOs.length > 5) response += `\n... dan lainnya.`
+          response += `\n\nMohon sebutkan nomor PO spesifik yang ingin Anda lihat detailnya.`
+          return response
         } else {
-          // Return langsung
           return `Maaf, PO dengan ${poNumber ? 'nomor ' + poNumber : 'customer ' + customerName} tidak ditemukan.`
         }
-        // Hapus break;
       }
-      // --- AKHIR PERUBAHAN ---
-
       case 'getUrgentPOs': {
-        // ... (logika sama) ...
         const urgentPOs = allPOs.filter(
           (po) => po.priority === 'Urgent' && po.status !== 'Completed' && po.status !== 'Cancelled'
         )
         if (urgentPOs.length > 0) {
           const poNumbers = urgentPOs
-            .map((po) => `- ${po.po_number} (${po.project_name})`)
+            .map((po) => `- ${po.po_number || 'N/A'} (${po.project_name || 'N/A'})`)
             .join('\n')
           return `Ada ${urgentPOs.length} PO aktif dengan prioritas Urgent:\n${poNumbers}`
         }
         return 'Saat ini tidak ada PO aktif dengan prioritas Urgent.'
       }
       case 'getNearingDeadline': {
-        // ... (logika sama) ...
         const todayDate = new Date()
         const nextWeek = new Date(todayDate.getTime() + 7 * 24 * 60 * 60 * 1000)
         const nearingPOs = allPOs
           .filter((po) => {
             if (!po.deadline || po.status === 'Completed' || po.status === 'Cancelled') return false
             try {
-              return new Date(po.deadline) >= todayDate && new Date(po.deadline) <= nextWeek
+              const deadlineDate = new Date(po.deadline)
+              return (
+                !isNaN(deadlineDate.getTime()) &&
+                deadlineDate >= todayDate &&
+                deadlineDate <= nextWeek
+              )
             } catch (e) {
               return false
             }
@@ -1872,44 +1907,62 @@ ATURAN KETAT:
           .sort((a, b) => new Date(a.deadline || 0).getTime() - new Date(b.deadline || 0).getTime())
         if (nearingPOs.length > 0) {
           const poDetails = nearingPOs
-            .map((po) => `- ${po.po_number} (${po.project_name}): ${formatDate(po.deadline)}`)
+            .map(
+              (po) =>
+                `- ${po.po_number || 'N/A'} (${po.project_name || 'N/A'}): ${formatDate(po.deadline)}`
+            )
             .join('\n')
           return `Ada ${nearingPOs.length} PO aktif yang mendekati deadline (7 hari):\n${poDetails}`
         }
         return 'Tidak ada PO aktif yang mendekati deadline dalam 7 hari ke depan.'
       }
       case 'getNewestPOs': {
-        // ... (logika sama) ...
         const sortedPOs = [...allPOs].sort(
           (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         )
         const newestPOs = sortedPOs.slice(0, 3)
         const poDetails = newestPOs
-          .map((po) => `- ${po.po_number} (${po.project_name}), Tgl: ${formatDate(po.created_at)}`)
+          .map(
+            (po) =>
+              `- ${po.po_number || 'N/A'} (${po.project_name || 'N/A'}), Tgl: ${formatDate(po.created_at)}`
+          )
           .join('\n')
         return `Berikut adalah 3 PO terbaru yang masuk:\n${poDetails}`
       }
       case 'getOldestPO': {
-        // ... (logika sama) ...
         const sortedPOs = [...allPOs].sort(
           (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         )
         const oldestPO = sortedPOs[0]
         if (oldestPO) {
-          return `PO terlama yang tercatat adalah:\n- Nomor PO: ${oldestPO.po_number}\n- Customer: ${oldestPO.project_name}\n- Tanggal Masuk: ${formatDate(oldestPO.created_at)}`
+          return `PO terlama yang tercatat adalah:\n- Nomor PO: ${oldestPO.po_number || 'N/A'}\n- Customer: ${oldestPO.project_name || 'N/A'}\n- Tanggal Masuk: ${formatDate(oldestPO.created_at)}`
         }
         return 'Tidak dapat menemukan data PO.'
       }
       case 'getPOsByDateRange': {
-        // ... (logika sama) ...
         const { startDate, endDate } = aiDecision
         if (!startDate || !endDate) return 'Maaf, tidak mengerti rentang tanggal.'
-        const start = new Date(startDate).getTime()
-        const end = new Date(endDate).getTime() + (24 * 60 * 60 * 1000 - 1)
+        // Validasi format tanggal YYYY-MM-DD
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+        if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
+          return 'Maaf, format tanggal yang diterima AI tidak valid. Seharusnya YYYY-MM-DD.'
+        }
+        let start, end
+        try {
+          start = new Date(startDate).getTime()
+          // Set end date ke akhir hari
+          end = new Date(endDate)
+          end.setHours(23, 59, 59, 999)
+          end = end.getTime()
+          if (isNaN(start) || isNaN(end)) throw new Error('Invalid date conversion')
+        } catch (e) {
+          return 'Maaf, terjadi kesalahan saat memproses rentang tanggal.'
+        }
+
         const foundPOs = allPOs.filter((po) => {
           try {
             const poDate = new Date(po.created_at).getTime()
-            return poDate >= start && poDate <= end
+            return !isNaN(poDate) && poDate >= start && poDate <= end
           } catch (e) {
             return false
           }
@@ -1922,7 +1975,7 @@ ATURAN KETAT:
           const poDetails = foundPOs
             .map(
               (po) =>
-                `- ${po.po_number} (${po.project_name}), Tgl Masuk: ${formatDate(po.created_at)}`
+                `- ${po.po_number || 'N/A'} (${po.project_name || 'N/A'}), Tgl Masuk: ${formatDate(po.created_at)}`
             )
             .slice(0, 10)
             .join('\n')
@@ -1933,7 +1986,6 @@ ATURAN KETAT:
         return `Tidak ada PO ditemukan untuk ${dateRangeStr}.`
       }
       case 'getPOByStatusCount': {
-        // ... (logika sama) ...
         const requestedStatus = aiDecision.param
         if (
           !requestedStatus ||
@@ -1952,20 +2004,42 @@ ATURAN KETAT:
         ).length
         return `Ada ${count} PO dengan status "${displayStatus}".`
       }
-      case 'help':
-        return 'Anda bisa bertanya tentang:\n- Jumlah total PO (detail status aktif)\n- Produk terlaris\n- Customer terbesar\n- Status PO [nomor PO]\n- Detail PO [nomor/nama customer]\n- PO Urgent\n- PO Deadline Dekat\n- PO terbaru / terlama\n- PO berdasarkan tanggal\n- Jumlah PO Open / In Progress'
-      case 'general': {
-        if (prompt.toLowerCase().includes('siapa')) return 'Saya Asisten AI Ubinkayu.'
-        if (prompt.toLowerCase().includes('terima kasih')) return 'Sama-sama!'
-        return 'Halo! Ada yang bisa saya bantu?'
+      case 'getApplicationHelp': {
+        const topic = aiDecision.topic?.toLowerCase() || ''
+        if (topic.includes('buat po') || topic.includes('input po')) {
+          return "Untuk membuat PO baru:\n1. Klik tombol '+ Tambah PO Baru' di halaman 'Purchase Orders'.\n2. Isi detail PO seperti Nomor PO, Nama Customer, Tanggal Kirim.\n3. Tambahkan minimal satu item di tabel bawah (isi Produk, Ukuran, Qty, dll.).\n4. Klik 'Simpan PO Baru'."
+        } else if (topic.includes('update progress')) {
+          return "Untuk update progress PO:\n1. Buka halaman 'Progress'.\n2. Cari PO yang ingin diupdate.\n3. Klik tombol 'Update Progress' pada kartu PO tersebut.\n4. Pilih item yang ingin diupdate.\n5. Pilih 'Tahap Berikutnya', tambahkan catatan (opsional), dan unggah foto (opsional).\n6. Klik tombol 'Simpan Progress ke [Nama Tahap]'."
+        } else if (topic.includes('revisi po')) {
+          return "Untuk merevisi PO yang sudah ada:\n1. Buka halaman 'Purchase Orders'.\n2. Cari PO yang ingin direvisi.\n3. Klik tombol 'Revisi' pada baris tabel PO tersebut.\n4. Form akan terisi data PO terakhir, ubah data header atau item sesuai kebutuhan.\n5. Jika ada foto referensi baru, unggah fotonya.\n6. Klik 'Simpan Revisi'. Anda akan diminta memasukkan nama perevisi."
+        } else if (topic.includes('tambah produk')) {
+          return "Untuk menambah produk baru ke daftar master:\n1. Saat berada di form Input/Revisi PO, klik tombol '+ Tambah Master Produk' di atas tabel item.\n2. Akan muncul jendela pop-up.\n3. Isi detail produk baru (Nama Produk wajib diisi).\n4. Klik 'Simpan Produk'. Produk baru akan tersedia di daftar dropdown."
+        } else {
+          return 'Saya bisa membantu menjelaskan cara:\n- Membuat PO baru\n- Update progress PO\n- Revisi PO\n- Menambah produk master.\n\nFitur mana yang ingin Anda ketahui?'
+        }
       }
-      default:
-        return "Maaf, saya tidak yakin. Coba tanyakan 'bantuan'."
+      case 'help':
+        return 'Anda bisa bertanya tentang:\n- Jumlah total PO (detail status aktif)\n- Produk terlaris/Customer terbesar (dari PO Selesai)\n- Status PO [nomor]\n- Detail PO [nomor/nama customer]\n- PO Urgent/Deadline Dekat\n- PO terbaru / terlama\n- PO berdasarkan tanggal\n- Jumlah PO Open / In Progress\n- Cara menggunakan aplikasi (misal: "cara buat po")'
+      case 'general': {
+        // Nomor jadi 14
+        if (prompt.toLowerCase().includes('siapa')) {
+          return 'Saya adalah Asisten AI Ubinkayu.'
+        }
+        if (prompt.toLowerCase().includes('terima kasih')) {
+          return 'Sama-sama! Senang bisa membantu.'
+        }
+        // Tambahkan sapaan berdasarkan waktu
+        return `${timeOfDayGreeting} Ada yang bisa saya bantu?`
+      }
+      case 'unknown': // Handle 'unknown' secara eksplisit
+        return "Maaf, saya tidak yakin bagaimana harus merespons itu. Coba tanyakan 'bantuan'."
+      default: // Default case jika tool tidak dikenal
+        console.warn('Menerima tool tidak dikenal dari AI:', aiDecision.tool)
+        return 'Maaf, terjadi kesalahan internal saat memproses permintaan Anda (tool tidak dikenal).'
     }
-    // Hapus: if (responseText) { return res.status(200).json({ response: responseText }); }
   } catch (execError) {
     console.error('Error saat menjalankan alat:', execError)
     // @ts-ignore
-    return `Maaf, terjadi kesalahan: ${execError.message}` // Kembalikan pesan error
+    return `Maaf, terjadi kesalahan saat memproses jawaban: ${execError.message}`
   }
 }
