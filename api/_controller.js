@@ -973,13 +973,13 @@ export async function handleOllamaChat(req, res) {
 
   // 2. Siapkan System Prompt untuk "Tool Use"
   const today = new Date().toISOString().split('T')[0]
-  // --- SALIN SYSTEM PROMPT LENGKAP DARI ELECTRON/SHEET.JS DI SINI ---
   const systemPrompt = `Anda adalah Asisten ERP Ubinkayu. Tugas Anda adalah mengubah pertanyaan pengguna menjadi JSON 'perintah' berdasarkan alat (tools) yang tersedia.
   Hari ini adalah ${today}.
 
   Alat (Tools) yang Tersedia:
-  1. "getTotalPO": Menghitung jumlah total PO, PO aktif, dan PO selesai.
-     - Keywords: "jumlah po", "total po", "ada berapa po", "how many purchase orders".
+  1. "getTotalPO": Menghitung jumlah total SEMUA PO, SEMUA PO aktif (status BUKAN Completed/Cancelled), dan SEMUA PO selesai.
+     - Keywords: "jumlah po", "total po", "ada berapa po", "semua po aktif", "berapa po aktif", "jumlah po yang sedang berjalan", "how many purchase orders".
+     - JANGAN gunakan tool ini jika user HANYA bertanya tentang PO Urgent.
      - JSON: {"tool": "getTotalPO"}
   2. "getTopProduct": Menemukan produk terlaris dari PO yang sudah selesai.
      - Keywords: "produk terlaris", "paling laku", "best selling product".
@@ -991,8 +991,8 @@ export async function handleOllamaChat(req, res) {
      - Keywords: "status po", "cek po", "check purchase order", "find po [nomor]".
      - AI HARUS mengekstrak "param" (nomor PO).
      - JSON: {"tool": "getPOStatus", "param": "NOMOR_PO_DI_SINI"}
-  5. "getUrgentPOs": Menampilkan daftar PO aktif yang urgent.
-     - Keywords: "po urgent", "urgent orders".
+  5. "getUrgentPOs": Menampilkan daftar PO aktif yang prioritasnya HANYA Urgent.
+     - Keywords: "po urgent", "urgent orders", "hanya yang urgent", "prioritas urgent".
      - JSON: {"tool": "getUrgentPOs"}
   6. "getNearingDeadline": Menampilkan PO aktif yang akan deadline (dalam 7 hari).
      - Keywords: "deadline dekat", "nearing deadline", "akan jatuh tempo".
@@ -1008,12 +1008,16 @@ export async function handleOllamaChat(req, res) {
      - AI HARUS mengekstrak 'startDate' dan 'endDate' dalam format YYYY-MM-DD. Gunakan ${today} sebagai referensi.
      - Jika hanya satu tanggal (misal "po 20 oktober 2025"), 'startDate' dan 'endDate' harus sama ("2025-10-20").
      - JSON: {"tool": "getPOsByDateRange", "startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD"}
-  10. "help": Memberikan bantuan.
+  10. "help": Memberikan bantuan atau daftar perintah yang bisa dilakukan.
       - Keywords: "bantuan", "help", "apa yang bisa kamu lakukan", "perintah".
       - JSON: {"tool": "help"}
-  11. "general": Untuk pertanyaan umum (misal: "kamu siapa?", "halo", "terima kasih").
+  11. "general": Untuk pertanyaan umum atau sapaan yang tidak terkait langsung dengan data PO.
       - Keywords: "halo", "kamu siapa", "dengan siapa ini", "terima kasih".
       - JSON: {"tool": "general"}
+  12. "getPOByStatusCount": Menghitung jumlah PO aktif dengan status spesifik (Open atau In Progress).
+    - Keywords: "berapa po open", "jumlah po in progress", "yang statusnya open", "yang sedang dikerjakan".
+    - AI HARUS mengekstrak "param" (status yang diminta: "Open" atau "In Progress"). Case insensitive tidak masalah.
+    - JSON: {"tool": "getPOByStatusCount", "param": "STATUS_DIMINTA"}
 
   ATURAN KETAT:
   - JANGAN menjawab pertanyaan secara langsung.
@@ -1228,6 +1232,30 @@ export async function handleOllamaChat(req, res) {
         } else {
           responseText = `Tidak ada PO yang ditemukan untuk rentang tanggal ${dateRangeStr}.`
         }
+        break
+      }
+
+      case 'getPOByStatusCount': {
+        const requestedStatus = aiDecision.param
+        if (
+          !requestedStatus ||
+          (requestedStatus.toLowerCase() !== 'open' &&
+            requestedStatus.toLowerCase() !== 'in progress')
+        ) {
+          responseText = 'Mohon sebutkan status yang ingin dihitung (Open atau In Progress).'
+          break
+        }
+        // Normalisasi status (misal: "open" -> "Open")
+        const normalizedStatus =
+          requestedStatus.charAt(0).toUpperCase() + requestedStatus.slice(1).toLowerCase()
+
+        const count = allPOs.filter(
+          // Filter hanya PO Aktif dengan status yang cocok
+          (po) =>
+            po.status === normalizedStatus && po.status !== 'Completed' && po.status !== 'Cancelled'
+        ).length
+
+        responseText = `Ada ${count} PO aktif dengan status "${normalizedStatus}".`
         break
       }
 
