@@ -229,24 +229,17 @@ function App() {
         return <DashboardPage poList={allPOs} isLoading={isLoading} />
       case 'input':
         return <InputPOPage onSaveSuccess={handleBackToList} editingPO={editingPO} />
-        case 'detail':
-          return (
-            <PODetailPage
-              po={currentPO}
-              onBackToList={handleBackToList}
-              // onShowHistory prop removed
-            />
-          )
-      case 'tracking':
-        return <ProgressTrackingPage onSelectPO={handleSelectPOForTracking} />
-      case 'history':
+      case 'detail':
         return (
-          <RevisionHistoryPage
-            poId={currentPO?.id || null}
-            poNumber={currentPO?.po_number || null}
-            onBack={() => setView('detail')}
+          <PODetailPage
+            po={currentPO} // Berikan objek POHeader utuh
+            onBackToList={handleBackToList} // Fungsi untuk kembali
+            // Pastikan tidak ada props lain seperti poId, poNumber, onBack, onShowHistory
           />
         )
+      case 'tracking':
+        return <ProgressTrackingPage onSelectPO={handleSelectPOForTracking} />
+
       case 'updateProgress':
         return <UpdateProgressPage po={trackingPO} onBack={() => setView('tracking')} />
       case 'analysis':

@@ -69,104 +69,167 @@ async function getItemsByRevision(poId, rev, doc) {
 
 // --- LOGIC FOR: listPOs ---
 export async function handleListPOs(req, res) {
-  const doc = await openDoc()
-  const poSheet = getSheet(doc, 'purchase_orders')
-  const itemSheet = getSheet(doc, 'purchase_order_items')
-  const progressSheet = getSheet(doc, 'progress_tracking')
-  const [poRows, itemRows, progressRows] = await Promise.all([
-    poSheet.getRows(),
-    itemSheet.getRows(),
-    progressSheet.getRows()
-  ])
-  const byId = new Map()
-  for (const r of poRows) {
-    const id = String(r.get('id')).trim()
-    const rev = toNum(r.get('revision_number'), -1)
-    const keep = byId.get(id)
-    if (!keep || rev > keep.rev) byId.set(id, { rev, row: r })
-  }
-  const latestPoRows = Array.from(byId.values()).map(({ row }) => row)
-  const progressByCompositeKey = progressRows.reduce((acc, row) => {
-    const poId = row.get('purchase_order_id'),
-      itemId = row.get('purchase_order_item_id'),
-      key = `${poId}-${itemId}`
-    if (!acc[key]) acc[key] = []
-    acc[key].push({ stage: row.get('stage'), created_at: row.get('created_at') })
-    return acc
-  }, {})
-  const itemsByPoId = itemRows.reduce((acc, item) => {
-    const poId = item.get('purchase_order_id')
-    if (!acc[poId]) acc[poId] = []
-    acc[poId].push(item.toObject())
-    return acc
-  }, {})
-  const latestItemRevisions = new Map()
-  itemRows.forEach((item) => {
-    const poId = item.get('purchase_order_id'),
-      rev = toNum(item.get('revision_number'), -1),
-      current = latestItemRevisions.get(poId)
-    if (!current || rev > current) latestItemRevisions.set(poId, rev)
-  })
-  const result = latestPoRows.map((po) => {
-    const poObject = po.toObject(),
-      poId = poObject.id,
-      latestRev = latestItemRevisions.get(poId) ?? -1
-    const poItems = (itemsByPoId[poId] || []).filter(
-      (item) => toNum(item.revision_number, -1) === latestRev
-    )
-    let poProgress = 0
-    if (poItems.length > 0) {
-      let totalPercentage = 0
-      poItems.forEach((item) => {
-        const itemId = item.id
-        const stages = PRODUCTION_STAGES
-        const compositeKey = `${poId}-${itemId}`
-        const itemProgressHistory = progressByCompositeKey[compositeKey] || []
-        let latestStageIndex = -1
-        if (itemProgressHistory.length > 0) {
-          const latestProgress = itemProgressHistory.sort(
-            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          )[0]
-          latestStageIndex = stages.indexOf(latestProgress.stage)
-        }
-        const itemPercentage =
-          latestStageIndex >= 0 ? ((latestStageIndex + 1) / stages.length) * 100 : 0
-        totalPercentage += itemPercentage
-      })
-      poProgress = totalPercentage / poItems.length
-    }
-    let finalStatus = poObject.status
-    let completed_at = null
+  // Log paling awal untuk menandakan fungsi dimulai
+  console.log('🏁 [Vercel] handleListPOs function started!')
 
-    if (finalStatus !== 'Cancelled') {
-      if (poProgress >= 100) {
-        finalStatus = 'Completed'
-        // --- TAMBAHKAN LOGIKA INI ---
-        // Cari tanggal update progress terakhir untuk PO ini
-        const allProgressForPO = progressRows
-          .filter((row) => row.get('purchase_order_id') === poId)
-          .map((row) => new Date(row.get('created_at')).getTime())
+  // Bungkus seluruh logika asli dalam try...catch
+  try {
+    const doc = await openDoc()
+    const poSheet = getSheet(doc, 'purchase_orders')
+    const itemSheet = getSheet(doc, 'purchase_order_items')
+    const progressSheet = getSheet(doc, 'progress_tracking')
 
-        if (allProgressForPO.length > 0) {
-          completed_at = new Date(Math.max(...allProgressForPO)).toISOString()
-        }
-        // --- AKHIR LOGIKA BARU ---
-      } else if (poProgress > 0) {
-        finalStatus = 'In Progress'
-      } else {
-        finalStatus = 'Open'
+    // Ambil data dari sheet
+    const [poRows, itemRows, progressRows] = await Promise.all([
+      poSheet.getRows(),
+      itemSheet.getRows(),
+      progressSheet.getRows()
+    ])
+
+    // --- Proses Data PO untuk mendapatkan revisi terbaru ---
+    const byId = new Map()
+    for (const r of poRows) {
+      const id = String(r.get('id')).trim()
+      const rev = toNum(r.get('revision_number'), -1)
+      // @ts-ignore - Abaikan potensi error TS jika 'rev' tidak ada di tipe 'keep'
+      const keep = byId.get(id)
+      if (!keep || rev > keep.rev) {
+        // Simpan baris GoogleSpreadsheetRow, bukan objek biasa
+        byId.set(id, { rev, row: r })
       }
     }
-    return {
-      ...poObject,
-      items: poItems,
-      progress: Math.round(poProgress),
-      status: finalStatus,
-      completed_at: completed_at,
-      pdf_link: po.get('pdf_link') || null
-    }
-  })
-  return res.status(200).json(result)
+    // Dapatkan array baris GoogleSpreadsheetRow revisi terbaru
+    const latestPoRows = Array.from(byId.values()).map(({ row }) => row)
+
+    // --- Siapkan data helper untuk progress dan item ---
+    const progressByCompositeKey = progressRows.reduce((acc, row) => {
+      const poId = row.get('purchase_order_id')
+      const itemId = row.get('purchase_order_item_id')
+      const key = `${poId}-${itemId}`
+      if (!acc[key]) acc[key] = []
+      acc[key].push({ stage: row.get('stage'), created_at: row.get('created_at') })
+      return acc
+    }, {})
+
+    // Ubah itemRows menjadi objek biasa untuk Map dan filter
+    const itemObjects = itemRows.map((item) => item.toObject())
+
+    const itemsByPoId = itemObjects.reduce((acc, item) => {
+      const poId = item.purchase_order_id // Akses properti objek
+      if (!acc[poId]) acc[poId] = []
+      acc[poId].push(item)
+      return acc
+    }, {})
+
+    const latestItemRevisions = new Map()
+    itemObjects.forEach((item) => {
+      // Gunakan itemObjects
+      const poId = item.purchase_order_id
+      const rev = toNum(item.revision_number, -1)
+      const current = latestItemRevisions.get(poId)
+      if (current === undefined || rev > current) {
+        // Periksa undefined
+        latestItemRevisions.set(poId, rev)
+      }
+    })
+
+    // --- Hitung hasil akhir ---
+    const result = latestPoRows.map((po) => {
+      // 'po' di sini adalah GoogleSpreadsheetRow
+      const poObject = po.toObject() // Konversi ke objek biasa SEKARANG
+      const poId = poObject.id
+      const latestRev = latestItemRevisions.get(poId) ?? -1
+
+      // Filter item dari itemsByPoId yang sudah berupa objek
+      const poItems = (itemsByPoId[poId] || []).filter(
+        (item) => toNum(item.revision_number, -1) === latestRev
+      )
+
+      // Hitung progress (logika sama seperti sebelumnya)
+      let poProgress = 0
+      if (poItems.length > 0) {
+        let totalPercentage = 0
+        poItems.forEach((item) => {
+          const itemId = item.id
+          const stages = PRODUCTION_STAGES // Pastikan ini terdefinisi/diimpor
+          const compositeKey = `${poId}-${itemId}`
+          const itemProgressHistory = progressByCompositeKey[compositeKey] || []
+          let latestStageIndex = -1
+          if (itemProgressHistory.length > 0) {
+            // Salin array sebelum sort
+            const latestProgress = [...itemProgressHistory].sort(
+              (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            )[0]
+            latestStageIndex = stages.indexOf(latestProgress.stage)
+          }
+          const itemPercentage =
+            latestStageIndex >= 0 ? ((latestStageIndex + 1) / stages.length) * 100 : 0
+          totalPercentage += itemPercentage
+        })
+        poProgress = totalPercentage / poItems.length
+      }
+
+      // Tentukan status final dan completed_at (logika sama seperti sebelumnya)
+      let finalStatus = poObject.status
+      let completed_at = null
+      if (finalStatus !== 'Cancelled') {
+        const roundedProgress = Math.round(poProgress) // Bulatkan sekali saja
+        if (roundedProgress >= 100) {
+          finalStatus = 'Completed'
+          const allProgressForPO = progressRows // Gunakan progressRows asli
+            .filter((row) => row.get('purchase_order_id') === poId)
+            .map((row) => {
+              try {
+                return new Date(row.get('created_at')).getTime()
+              } catch {
+                return 0
+              } // Handle invalid date strings
+            })
+            .filter((time) => time > 0) // Filter out invalid dates
+
+          if (allProgressForPO.length > 0) {
+            completed_at = new Date(Math.max(...allProgressForPO)).toISOString()
+          }
+        } else if (roundedProgress > 0) {
+          finalStatus = 'In Progress'
+        } else {
+          finalStatus = 'Open'
+        }
+      }
+
+      // Tambahkan field yang dibutuhkan frontend (konsisten dengan Electron)
+      const lastRevisedBy = poObject.revised_by || 'N/A'
+      const lastRevisedDate = poObject.created_at // Timestamp revisi terakhir
+
+      // Susun objek hasil
+      return {
+        ...poObject, // Sertakan semua data asli dari sheet
+        items: poItems, // Sertakan item yang sudah difilter
+        progress: Math.round(poProgress), // Progress yang dibulatkan
+        status: finalStatus,
+        completed_at: completed_at,
+        pdf_link: poObject.pdf_link || null, // Pastikan pdf_link diambil dari poObject
+        // Field tambahan untuk konsistensi
+        acc_marketing: poObject.acc_marketing || '',
+        alamat_kirim: poObject.alamat_kirim || '',
+        lastRevisedBy: lastRevisedBy,
+        lastRevisedDate: lastRevisedDate
+      }
+    }) // Akhir .map
+
+    // Kirim hasil JSON ke klien
+    return res.status(200).json(result)
+  } catch (err) {
+    // Blok catch untuk menangani error
+    console.error('💥 [Vercel] ERROR in handleListPOs:', err.message, err.stack) // Log error detail
+    // Kirim respons error ke klien
+    // @ts-ignore - Abaikan error TS jika 'message' tidak ada di tipe 'err'
+    return res.status(500).json({
+      success: false,
+      error: 'Internal Server Error processing listPOs',
+      details: err.message
+    })
+  }
 }
 
 // --- LOGIC FOR: saveNewPO ---
