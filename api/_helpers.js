@@ -40,37 +40,39 @@ export const DEFAULT_STAGE_DURATIONS = {
 
 // file: api/_helpers.js
 export function getAuth() {
-  const rawKey = process.env.GOOGLE_PRIVATE_KEY || '' // Ambil env var
+  console.log('🏁 [Vercel Auth] getAuth function started.') // Log 1: Fungsi dimulai
+
+  const rawKey = process.env.GOOGLE_PRIVATE_KEY || ''
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
 
-  // Cek awal apakah env vars ada
   if (!rawKey || !email) {
-    console.error(
-      '❌ Vercel Auth Error: GOOGLE_PRIVATE_KEY or GOOGLE_SERVICE_ACCOUNT_EMAIL is missing!'
-    )
+    console.error('❌ [Vercel Auth] FAIL: Missing env vars.')
     throw new Error('Server configuration error: Missing credentials.')
   }
+  console.log('✅ [Vercel Auth] Env vars retrieved for:', email) // Log 2: Env vars ada
 
   let formattedKey = ''
   try {
-    // 1. Decode Base64
+    console.log('⏳ [Vercel Auth] Attempting Base64 decode...') // Log 3: Sebelum decode
     const decodedKey = Buffer.from(rawKey, 'base64').toString('utf8')
-    // 2. Ganti literal \\n dengan newline \n
+    console.log('✅ [Vercel Auth] Base64 decoded.') // Log 4: Setelah decode
+    console.log('⏳ [Vercel Auth] Attempting newline replace...') // Log 5: Sebelum replace
     formattedKey = decodedKey.replace(/\\n/g, '\n')
+    console.log('✅ [Vercel Auth] Newlines replaced.') // Log 6: Setelah replace
 
-    // Cek dasar hasil format
     if (formattedKey.length < 100 || !formattedKey.includes('-----BEGIN PRIVATE KEY-----')) {
-      console.error('❌ Vercel Auth Error: Formatted key seems invalid after decoding/replacing.')
+      console.error('❌ [Vercel Auth] FAIL: Formatted key seems invalid.')
       throw new Error('Server configuration error: Invalid private key format.')
     }
-    console.log('🔑 Vercel Auth: Key formatted successfully for:', email) // Log sukses format
+    console.log('🔑 [Vercel Auth] Key formatted successfully.') // Log 7: Format OK
   } catch (e) {
-    console.error('❌ Vercel Auth Error: Failed during key decoding or formatting:', e.message)
+    console.error('❌ [Vercel Auth] FAIL: Error during key processing:', e.message) // Log 8: Error saat proses key
     throw new Error('Server configuration error: Key processing failed.')
   }
 
   try {
-    return new JWT({
+    console.log('⏳ [Vercel Auth] Creating JWT instance...') // Log 9: Sebelum JWT
+    const jwtInstance = new JWT({
       email: email,
       key: formattedKey,
       scopes: [
@@ -78,8 +80,10 @@ export function getAuth() {
         'https://www.googleapis.com/auth/drive'
       ]
     })
+    console.log('✅ [Vercel Auth] JWT instance created successfully.') // Log 10: JWT OK
+    return jwtInstance
   } catch (jwtError) {
-    console.error('❌ Vercel Auth Error: Failed to create JWT instance:', jwtError.message)
+    console.error('❌ [Vercel Auth] FAIL: Error creating JWT instance:', jwtError.message) // Log 11: Error JWT
     throw new Error('Server configuration error: JWT creation failed.')
   }
 }
