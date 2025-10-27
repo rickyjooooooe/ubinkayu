@@ -777,8 +777,9 @@ export async function handleGetAttentionData(req, res) {
 
 // --- LOGIC FOR: getProductSalesAnalysis ---
 export async function handleGetProductSalesAnalysis(req, res) {
+  // Log awal untuk Vercel
+  console.log('🏁 [Vercel] handleGetProductSalesAnalysis started!')
   try {
-    // Tambahkan try-catch
     const doc = await openDoc()
     const [itemSheet, poSheet, productSheet] = await Promise.all([
       getSheet(doc, 'purchase_order_items'),
@@ -800,31 +801,30 @@ export async function handleGetProductSalesAnalysis(req, res) {
     const latestPoMap = poRows.reduce((map, po) => {
       const poId = po.id
       const rev = toNum(po.revision_number)
-      // Kecualikan PO yang Cancelled
       if (po.status !== 'Cancelled') {
-        // @ts-ignore
-        if (!map.has(poId) || rev > map.get(poId).revision_number) {
-          map.set(poId, po)
+        const existing = map.get(poId)
+        if (!existing || rev > existing.revision_number) {
+          // Simpan seluruh objek PO terbaru
+          map.set(poId, { ...po, revision_number: rev })
         }
       }
       return map
     }, new Map())
 
     // --- Inisialisasi Struktur Data Baru ---
-    const salesByProduct = {} // { product_name: { totalQuantity: N, totalKubikasi: N } }
-    const salesByMarketing = {} // { marketing_name: { totalKubikasi: N, poCount: N } }
-    const monthlySalesByProduct = {} // { YYYY-MM: { product_name: quantity, ... } }
-    const monthlySalesByMarketing = {} // { YYYY-MM: { marketing_name: kubikasi, ... } }
-    const woodTypeDistribution = {} // { wood_type: quantity }
-    const customerByKubikasi = {} // { customer_name: kubikasi }
-    const salesByDateForTrend = [] // [{ date: Date, name: string, quantity: number }]
-    const soldProductNames = new Set() // Lacak produk terjual
+    const salesByProduct = {}
+    const salesByMarketing = {}
+    const monthlySalesByProduct = {}
+    const monthlySalesByMarketing = {}
+    const woodTypeDistribution = {}
+    const customerByKubikasi = {}
+    const salesByDateForTrend = []
+    const soldProductNames = new Set()
 
     // --- Proses Item ---
     itemRows.forEach((item) => {
       const po = latestPoMap.get(item.purchase_order_id)
-      // Pastikan item berasal dari PO revisi terbaru yang valid (tidak cancelled)
-      // @ts-ignore
+      // Pastikan item berasal dari PO revisi terbaru yang valid
       if (!po || toNum(item.revision_number) !== po.revision_number) {
         return
       }
@@ -833,11 +833,9 @@ export async function handleGetProductSalesAnalysis(req, res) {
       const quantity = toNum(item.quantity, 0)
       const kubikasi = toNum(item.kubikasi, 0)
       const woodType = item.wood_type
-      const marketingName = po.acc_marketing || 'N/A' // Ambil marketing dari header PO
-      const customerName = po.project_name
-      const yearMonth = getYearMonth(po.created_at) // Dapatkan YYYY-MM
+      const yearMonth = getYearMonth(po.created_at)
 
-      if (!productName || quantity <= 0) return // Lewati jika tidak valid
+      if (!productName || quantity <= 0) return
 
       soldProductNames.add(productName)
 
@@ -850,10 +848,6 @@ export async function handleGetProductSalesAnalysis(req, res) {
       salesByProduct[productName].totalQuantity += quantity
       salesByProduct[productName].totalKubikasi += kubikasi
 
-      // 2. Agregasi Total per Marketing (Kubikasi)
-      // Kita hitung per PO di luar loop item agar tidak double count
-      // salesByMarketing akan diisi setelah loop item
-
       // 3. Agregasi Bulanan per Produk (Quantity)
       if (yearMonth) {
         monthlySalesByProduct[yearMonth] = monthlySalesByProduct[yearMonth] || {}
@@ -861,15 +855,9 @@ export async function handleGetProductSalesAnalysis(req, res) {
           (monthlySalesByProduct[yearMonth][productName] || 0) + quantity
       }
 
-      // 4. Agregasi Bulanan per Marketing (Kubikasi)
-      // Kita hitung per PO di luar loop item
-
       // 5. Distribusi Kayu (Quantity)
       if (woodType)
         woodTypeDistribution[woodType] = (woodTypeDistribution[woodType] || 0) + quantity
-
-      // 6. Customer (Kubikasi)
-      // Kita hitung per PO di luar loop item
 
       // 7. Data untuk Tren Produk
       try {
@@ -907,12 +895,12 @@ export async function handleGetProductSalesAnalysis(req, res) {
 
     // --- Finalisasi Hasil ---
     const topSellingProducts = Object.values(salesByProduct)
-      .sort((a, b) => b.totalQuantity - a.totalQuantity) // Urutkan berdasarkan Quantity
+      .sort((a, b) => b.totalQuantity - a.totalQuantity)
       .slice(0, 10)
 
     const salesByMarketingSorted = Object.values(salesByMarketing).sort(
       (a, b) => b.totalKubikasi - a.totalKubikasi
-    ) // Urutkan berdasarkan Kubikasi
+    )
 
     const woodTypeDistributionSorted = Object.entries(woodTypeDistribution)
       .map(([name, value]) => ({ name, value }))
@@ -921,18 +909,43 @@ export async function handleGetProductSalesAnalysis(req, res) {
     const topCustomers = Object.entries(customerByKubikasi)
       .map(([name, totalKubikasi]) => ({ name, totalKubikasi }))
       .sort((a, b) => b.totalKubikasi - a.totalKubikasi)
-      .slice(0, 10) // Ambil Top 10
+      .slice(0, 10)
 
     // Format data bulanan untuk Recharts
-    const monthlyProductChartData = Object.entries(monthlySalesByProduct)
-      .map(([month, products]) => ({ month, ...products }))
-      .sort((a, b) => a.month.localeCompare(b.month)) // Urutkan berdasarkan bulan
+    const allMonths = new Set([
+      ...Object.keys(monthlySalesByProduct),
+      ...Object.keys(monthlySalesByMarketing)
+    ])
+    const sortedMonths = Array.from(allMonths).sort()
 
-    const monthlyMarketingChartData = Object.entries(monthlySalesByMarketing)
-      .map(([month, marketers]) => ({ month, ...marketers }))
-      .sort((a, b) => a.month.localeCompare(b.month)) // Urutkan berdasarkan bulan
+    const allProductKeys = new Set()
+    sortedMonths.forEach((month) => {
+      if (monthlySalesByProduct[month])
+        Object.keys(monthlySalesByProduct[month]).forEach((p) => allProductKeys.add(p))
+    })
+    const allMarketingKeys = new Set()
+    sortedMonths.forEach((month) => {
+      if (monthlySalesByMarketing[month])
+        Object.keys(monthlySalesByMarketing[month]).forEach((m) => allMarketingKeys.add(m))
+    })
 
-    // Kalkulasi Tren (sama seperti sebelumnya, tapi dari semua PO)
+    const monthlyProductChartData = sortedMonths.map((month) => {
+      const monthData = { month }
+      allProductKeys.forEach((prodKey) => {
+        monthData[prodKey] = monthlySalesByProduct[month]?.[prodKey] || 0
+      })
+      return monthData
+    })
+
+    const monthlyMarketingChartData = sortedMonths.map((month) => {
+      const monthData = { month }
+      allMarketingKeys.forEach((markKey) => {
+        monthData[markKey] = monthlySalesByMarketing[month]?.[markKey] || 0
+      })
+      return monthData
+    })
+
+    // Kalkulasi Tren
     const todayTrend = new Date(),
       thirtyDaysAgo = new Date(new Date().setDate(todayTrend.getDate() - 30)),
       sixtyDaysAgo = new Date(new Date().setDate(todayTrend.getDate() - 60))
@@ -946,42 +959,37 @@ export async function handleGetProductSalesAnalysis(req, res) {
     })
     const trendingProducts = Object.keys(salesLast30)
       .map((name) => {
-        /* ... logika kalkulasi change sama ... */
-        const last30 = salesLast30[name],
-          prev30 = salesPrev30[name] || 0
-        const change = prev30 === 0 && last30 > 0 ? 100 : ((last30 - prev30) / (prev30 || 1)) * 100
+        const last30 = salesLast30[name] || 0
+        const prev30 = salesPrev30[name] || 0
+        const change =
+          prev30 === 0 && last30 > 0 ? 100 : ((last30 - prev30) / (prev30 === 0 ? 1 : prev30)) * 100
         return { name, last30, prev30, change }
       })
-      .filter((p) => p.change > 10 && p.last30 > (prev30 || 0)) // Sedikit longgarkan filter
+      .filter((p) => p.change > 10 && p.last30 > p.prev30)
       .sort((a, b) => b.change - a.change)
 
-    // Produk Kurang Laris (sama seperti sebelumnya)
+    // Produk Kurang Laris
     const allMasterProductNames = productRows.map((p) => p.product_name).filter(Boolean)
     const slowMovingProducts = allMasterProductNames.filter((name) => !soldProductNames.has(name))
 
     // Susun hasil akhir
     const analysisResult = {
-      topSellingProducts, // Top 10 Produk (Qty)
-      salesByMarketing: salesByMarketingSorted, // Performa Marketing (Kubikasi)
-      monthlyProductChartData, // Data Chart Produk Bulanan (Qty)
-      monthlyMarketingChartData, // Data Chart Marketing Bulanan (Kubikasi)
-      woodTypeDistribution: woodTypeDistributionSorted, // Distribusi Kayu (Qty)
-      topCustomers, // Top 10 Customer (Kubikasi)
-      trendingProducts, // Produk Tren Naik (Qty)
-      slowMovingProducts // Produk Belum Terjual
+      topSellingProducts,
+      salesByMarketing: salesByMarketingSorted,
+      monthlyProductChartData,
+      monthlyMarketingChartData,
+      woodTypeDistribution: woodTypeDistributionSorted,
+      topCustomers,
+      trendingProducts,
+      slowMovingProducts
     }
 
-    // --- Return untuk Electron / Vercel ---
-    if (typeof res !== 'undefined') {
-      // Cek jika ini Vercel
-      return res.status(200).json(analysisResult)
-    } else {
-      // Jika ini Electron
-      return analysisResult
-    }
+    console.log('📊 [Vercel] Analisis Penjualan Dihasilkan.') // Log sukses Vercel
+    // --- Return untuk Vercel ---
+    return res.status(200).json(analysisResult)
   } catch (err) {
-    console.error('❌ Gagal melakukan analisis penjualan produk:', err.message)
-    // Return struktur kosong agar frontend tidak error
+    console.error('❌ [Vercel] Gagal melakukan analisis penjualan produk:', err.message, err.stack) // Log error + stack
+    // Return struktur kosong jika error
     const emptyResult = {
       topSellingProducts: [],
       salesByMarketing: [],
@@ -992,13 +1000,7 @@ export async function handleGetProductSalesAnalysis(req, res) {
       trendingProducts: [],
       slowMovingProducts: []
     }
-    if (typeof res !== 'undefined') {
-      // Vercel
-      return res.status(500).json(emptyResult) // Kirim error 500
-    } else {
-      // Electron
-      return emptyResult // Kembalikan objek kosong
-    }
+    return res.status(500).json(emptyResult) // Kirim error 500
   }
 }
 
