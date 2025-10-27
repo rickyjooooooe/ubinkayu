@@ -31,6 +31,22 @@ const formatDate = (dateString) => {
   }
 }
 
+const formatDateForAnalysis = (dateString) => {
+  if (!dateString) return null
+  try {
+    const date = new Date(dateString)
+    if (isNaN(date.getTime())) return null
+    return date.toISOString().split('T')[0] // Format YYYY-MM-DD
+  } catch {
+    return null
+  }
+}
+
+const getYearMonth = (dateString) => {
+  const date = formatDateForAnalysis(dateString)
+  return date ? date.substring(0, 7) : null // Ambil YYYY-MM
+}
+
 // --- HELPERS KHUSUS UNTUK FUNGSI TERTENTU ---
 async function latestRevisionNumberForPO(poId, doc) {
   const sh = await getSheet(doc, 'purchase_orders')
