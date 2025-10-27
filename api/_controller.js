@@ -6,13 +6,13 @@ import {
   toNum,
   getNextIdFromSheet,
   scrubItemPayload,
-  generateAndUploadPO,
   extractGoogleDriveFileId,
   deleteGoogleDriveFile,
   processBatch,
   PRODUCTION_STAGES,
   generatePOJpeg,
   getAuth,
+  PO_ARCHIVE_FOLDER_ID,
   PROGRESS_PHOTOS_FOLDER_ID,
   DEFAULT_STAGE_DURATIONS
 } from './_helpers.js'
@@ -248,121 +248,355 @@ export async function handleListPOs(req, res) {
   }
 }
 
+async function generateAndUploadPO(poData, revisionNumber) {
+  let auth
+  try {
+    // 1. Generate Buffer JPEG (panggil fungsi dari _helpers.js)
+    console.log('⏳ [Vercel] Generating JPEG buffer...')
+    // @ts-ignore
+    const jpegResult = await generatePOJpeg(poData, revisionNumber) // Tidak perlu argumen 'true'
+    if (!jpegResult.success || !jpegResult.buffer) {
+      throw new Error(jpegResult.error || 'Gagal membuat buffer JPEG.')
+    }
+    const jpegBuffer = jpegResult.buffer
+    const fileName = jpegResult.fileName // Ambil nama file dari hasil generate
+    console.log(`✅ [Vercel] JPEG buffer created: ${fileName}`)
+
+    // 2. Dapatkan objek auth dan authorize
+    console.log('🔄 [Vercel] Mendapatkan otentikasi baru sebelum upload/get...')
+    auth = getAuth() // Panggil fungsi getAuth dari _helpers.js
+    await auth.authorize()
+    console.log('✅ [Vercel] Otorisasi ulang berhasil.')
+
+    const mimeType = 'image/jpeg'
+
+    console.log(`🚀 [Vercel] Mengunggah file via auth.request: ${fileName} ke Drive...`)
+
+    // --- Upload via auth.request menggunakan Buffer ---
+    const metadata = {
+      name: fileName,
+      mimeType: mimeType,
+      parents: [PO_ARCHIVE_FOLDER_ID] // Pastikan konstanta ini diimpor/tersedia
+    }
+    const boundary = `----VercelBoundary${Date.now()}----`
+
+    // Buat multipart body langsung dari buffer
+    const metaPart = Buffer.from(
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n\r\n`
+    )
+    const mediaHeaderPart = Buffer.from(`--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`)
+    const endBoundaryPart = Buffer.from(`\r\n--${boundary}--\r\n`)
+
+    // Gabungkan buffer menjadi satu payload
+    const requestBody = Buffer.concat([metaPart, mediaHeaderPart, jpegBuffer, endBoundaryPart])
+
+    // Panggil API create menggunakan auth.request
+    const createResponse = await auth.request({
+      url: `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true`,
+      method: 'POST',
+      headers: {
+        'Content-Type': `multipart/related; boundary=${boundary}`,
+        'Content-Length': requestBody.length // Penting untuk Vercel
+      },
+      data: requestBody, // Kirim Buffer gabungan sebagai data
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity
+    })
+
+    // --- Ambil webViewLink via auth.request ---
+    const fileId = createResponse?.data?.id
+    if (!fileId) {
+      console.error(
+        '❌ [Vercel] Upload berhasil, tetapi ID file tidak ditemukan:',
+        createResponse.data
+      )
+      throw new Error('Upload berhasil tetapi ID file tidak didapatkan.')
+    }
+    console.log(
+      `✅ [Vercel] File berhasil diunggah (ID: ${fileId}). Mengambil webViewLink via auth.request...`
+    )
+
+    // Panggil files.get endpoint menggunakan auth.request
+    const getResponse = await auth.request({
+      url: `https://www.googleapis.com/drive/v3/files/${fileId}`,
+      method: 'GET',
+      params: {
+        fields: 'webViewLink',
+        supportsAllDrives: true
+      }
+    })
+
+    const webViewLink = getResponse?.data?.webViewLink
+    if (!webViewLink) {
+      console.error('❌ [Vercel] Gagal mendapatkan webViewLink via auth.request:', getResponse.data)
+      throw new Error('Gagal mendapatkan link file setelah upload berhasil.')
+    }
+    console.log(`✅ [Vercel] Link file didapatkan via auth.request: ${webViewLink}`)
+
+    // Tidak ada file lokal yang perlu dihapus di Vercel
+    return { success: true, link: webViewLink }
+  } catch (error) {
+    console.error('❌ [Vercel] Proses Generate & Upload PO Gagal:', error.message)
+    // @ts-ignore
+    if (error.response && error.response.data && error.response.data.error) {
+      // @ts-ignore
+      console.error(
+        '   -> Detail Error Google API:',
+        JSON.stringify(error.response.data.error, null, 2)
+      )
+      // @ts-ignore
+    } else if (error.response) {
+      // @ts-ignore
+      console.error(`   -> Status Error HTTP: ${error.response.status}`)
+      // @ts-ignore
+      console.error('   -> Data Error:', error.response.data)
+    }
+    // @ts-ignore
+    return { success: false, error: error.message } // Kembalikan objek error
+  }
+}
+
 // --- LOGIC FOR: saveNewPO ---
 export async function handleSaveNewPO(req, res) {
+  console.log('🏁 [Vercel] handleSaveNewPO started!') // Log awal
   const data = req.body
-  const doc = await openDoc()
-  const now = new Date().toISOString()
-  const poSheet = getSheet(doc, 'purchase_orders')
-  const itemSheet = getSheet(doc, 'purchase_order_items')
-  const poId = await getNextIdFromSheet(poSheet)
-  const newPoRow = await poSheet.addRow({
-    id: poId,
-    revision_number: 0,
-    po_number: data.nomorPo,
-    project_name: data.namaCustomer,
-    deadline: data.tanggalKirim || '',
-    status: 'Open',
-    priority: data.prioritas || '',
-    notes: data.catatan || '',
-    kubikasi_total: data.kubikasi_total || 0,
-    acc_marketing: data.marketing || '',
-    created_at: now,
-    pdf_link: 'generating...'
-  })
-  const itemsWithIds = []
-  let nextItemId = parseInt(await getNextIdFromSheet(itemSheet), 10)
-  const itemsToAdd = (data.items || []).map((raw) => {
-    const clean = scrubItemPayload(raw)
-    const newItem = {
-      id: nextItemId,
-      purchase_order_id: poId,
-      ...clean,
-      revision_id: 0,
+  let doc // Deklarasi di luar try
+  let newPoRow // Deklarasi di luar try
+
+  try {
+    doc = await openDoc() // Panggil openDoc di dalam try
+    const now = new Date().toISOString()
+    const poSheet = getSheet(doc, 'purchase_orders')
+    const itemSheet = getSheet(doc, 'purchase_order_items')
+    const poId = await getNextIdFromSheet(poSheet)
+
+    // Data untuk baris baru di sheet
+    const newPoRowData = {
+      id: poId,
       revision_number: 0,
-      kubikasi: raw.kubikasi || 0
+      po_number: data.nomorPo || `PO-${poId}`, // Fallback nomor PO
+      project_name: data.namaCustomer || 'N/A',
+      deadline: data.tanggalKirim || null, // Gunakan null jika kosong
+      status: 'Open',
+      priority: data.prioritas || 'Normal',
+      notes: data.catatan || '',
+      kubikasi_total: toNum(data.kubikasi_total, 0), // Pastikan number
+      acc_marketing: data.marketing || '',
+      created_at: now,
+      pdf_link: 'generating...', // Placeholder
+      alamat_kirim: data.alamatKirim || '',
+      revised_by: 'N/A' // Revisi awal
     }
-    itemsWithIds.push({ ...raw, id: nextItemId })
-    nextItemId++
-    return newItem
-  })
-  if (itemsToAdd.length > 0) await itemSheet.addRows(itemsToAdd)
-  const poDataForJpeg = {
-    ...data,
-    po_number: data.nomorPo,
-    project_name: data.namaCustomer,
-    items: itemsWithIds,
-    created_at: now
+
+    console.log('📝 [Vercel] Adding new PO row to sheet:', newPoRowData.po_number)
+    newPoRow = await poSheet.addRow(newPoRowData) // Tambah baris ke sheet
+
+    // Proses item
+    const itemsWithIds = []
+    let nextItemId = parseInt(await getNextIdFromSheet(itemSheet), 10)
+    const itemsToAdd = (data.items || []).map((raw) => {
+      const clean = scrubItemPayload(raw) // Bersihkan payload
+      const kubikasiItem = toNum(raw.kubikasi, 0) // Hitung kubikasi (atau ambil jika sudah ada)
+      const newItem = {
+        id: nextItemId,
+        purchase_order_id: poId,
+        revision_number: 0, // Set revisi item
+        kubikasi: kubikasiItem,
+        ...clean // Tambahkan field bersih lainnya
+        // Pastikan field lain (product_name, wood_type, dll.) ada di 'clean'
+      }
+      itemsWithIds.push({ ...raw, id: nextItemId, kubikasi: kubikasiItem }) // Untuk generator JPEG
+      nextItemId++
+      return newItem
+    })
+
+    if (itemsToAdd.length > 0) {
+      console.log(`➕ [Vercel] Adding ${itemsToAdd.length} items to sheet for PO ${poId}`)
+      await itemSheet.addRows(itemsToAdd)
+    } else {
+      console.warn(`⚠️ [Vercel] No items provided for new PO ${poId}`)
+    }
+
+    // Siapkan data untuk generateAndUploadPO
+    const poDataForUpload = {
+      // Ambil data dari newPoRowData agar konsisten dengan yang disimpan
+      po_number: newPoRowData.po_number,
+      project_name: newPoRowData.project_name,
+      deadline: newPoRowData.deadline,
+      priority: newPoRowData.priority,
+      notes: newPoRowData.notes,
+      created_at: newPoRowData.created_at,
+      kubikasi_total: newPoRowData.kubikasi_total,
+      acc_marketing: newPoRowData.acc_marketing,
+      alamat_kirim: newPoRowData.alamat_kirim,
+      // Data lain yang mungkin dibutuhkan generatePOJpeg
+      items: itemsWithIds,
+      poPhotoBase64: data.poPhotoBase64 // Ambil dari request body jika ada
+    }
+
+    console.log(`⏳ [Vercel] Calling generateAndUploadPO for PO ${poId}...`)
+    // Panggil fungsi generateAndUploadPO yang baru
+    const uploadResult = await generateAndUploadPO(poDataForUpload, 0) // Revisi 0
+
+    // Update link di sheet
+    console.log(`🔄 [Vercel] Updating pdf_link for PO ${poId}...`)
+    newPoRow.set(
+      'pdf_link',
+      uploadResult.success
+        ? uploadResult.link
+        : `ERROR: ${uploadResult.error || 'Unknown upload error'}`
+    )
+    await newPoRow.save()
+    console.log(`✅ [Vercel] pdf_link updated.`)
+
+    // Kirim respons sukses
+    return res.status(200).json({ success: true, poId, revision_number: 0 })
+  } catch (err) {
+    // Tangani error, catat, dan kirim respons error
+    console.error('💥 [Vercel] ERROR in handleSaveNewPO:', err.message, err.stack)
+    // Jika baris PO sudah terlanjur dibuat tapi upload gagal, update link error
+    if (newPoRow && !newPoRow.get('pdf_link')?.startsWith('http')) {
+      try {
+        // @ts-ignore
+        newPoRow.set('pdf_link', `ERROR: ${err.message}`)
+        await newPoRow.save()
+      } catch (saveErr) {
+        // @ts-ignore
+        console.error('   -> Failed to save error link back to sheet:', saveErr.message)
+      }
+    }
+    // @ts-ignore
+    return res
+      .status(500)
+      .json({ success: false, error: 'Internal Server Error saving PO', details: err.message })
   }
-  const uploadResult = await generateAndUploadPO(poDataForJpeg, 0)
-  newPoRow.set(
-    'pdf_link',
-    uploadResult.success ? uploadResult.link : `ERROR: ${uploadResult.error}`
-  )
-  await newPoRow.save()
-  return res.status(200).json({ success: true, poId, revision_number: 0 })
 }
 
 // --- LOGIC FOR: updatePO ---
 export async function handleUpdatePO(req, res) {
+  console.log('🏁 [Vercel] handleUpdatePO started!')
   const data = req.body
-  const doc = await openDoc()
-  const now = new Date().toISOString()
-  const poSheet = getSheet(doc, 'purchase_orders')
-  const itemSheet = getSheet(doc, 'purchase_order_items')
-  const latest = await latestRevisionNumberForPO(String(data.poId), doc)
-  const prevRow = latest >= 0 ? await getHeaderForRevision(String(data.poId), latest, doc) : null
-  const prev = prevRow ? prevRow.toObject() : {}
-  const newRev = latest >= 0 ? latest + 1 : 0
-  const newRevisionRow = await poSheet.addRow({
-    id: String(data.poId),
-    revision_number: newRev,
-    po_number: data.nomorPo ?? prev.po_number ?? '',
-    project_name: data.namaCustomer ?? prev.project_name ?? '',
-    deadline: data.tanggalKirim ?? prev.deadline ?? '',
-    status: data.status ?? prev.status ?? 'Open',
-    priority: data.prioritas ?? prev.priority ?? '',
-    notes: data.catatan ?? prev.notes ?? '',
-    kubikasi_total: data.kubikasi_total ?? prev.kubikasi_total ?? 0,
-    acc_marketing: data.marketing ?? prev.acc_marketing ?? '',
-    created_at: now,
-    pdf_link: 'generating...'
-  })
-  const itemsWithIds = []
-  let nextItemId = parseInt(await getNextIdFromSheet(itemSheet), 10)
-  const itemsToAdd = (data.items || []).map((raw) => {
-    const clean = scrubItemPayload(raw)
-    const newItem = {
-      id: nextItemId,
-      purchase_order_id: String(data.poId),
-      ...clean,
-      revision_id: newRev,
-      revision_number: newRev,
-      kubikasi: raw.kubikasi || 0
+  let doc
+  let newRevisionRow
+
+  try {
+    doc = await openDoc()
+    const now = new Date().toISOString()
+    const poSheet = getSheet(doc, 'purchase_orders')
+    const itemSheet = getSheet(doc, 'purchase_order_items')
+
+    // Dapatkan data revisi sebelumnya
+    const poId = String(data.poId) // Pastikan poId ada
+    if (!poId) {
+      throw new Error('PO ID is required for update.')
     }
-    itemsWithIds.push({ ...raw, id: nextItemId })
-    nextItemId++
-    return newItem
-  })
-  if (itemsToAdd.length > 0) await itemSheet.addRows(itemsToAdd)
-  const poDataForJpeg = {
-    po_number: data.nomorPo ?? prev.po_number,
-    project_name: data.namaCustomer ?? prev.project_name,
-    deadline: data.tanggalKirim ?? prev.deadline,
-    priority: data.prioritas ?? prev.priority,
-    items: itemsWithIds,
-    notes: data.catatan ?? prev.notes,
-    created_at: now,
-    kubikasi_total: data.kubikasi_total ?? prev.kubikasi_total ?? 0,
-    poPhotoBase64: data.poPhotoBase64
+
+    const latest = await latestRevisionNumberForPO(poId, doc)
+    const prevRow = latest >= 0 ? await getHeaderForRevision(poId, latest, doc) : null
+    const prev = prevRow ? prevRow.toObject() : {}
+    const newRev = latest >= 0 ? latest + 1 : 0
+
+    // Data untuk baris revisi baru di sheet
+    const newRevisionRowData = {
+      id: poId,
+      revision_number: newRev,
+      po_number: data.nomorPo ?? prev.po_number ?? `PO-${poId}`, // Pastikan ada nomor PO
+      project_name: data.namaCustomer ?? prev.project_name ?? 'N/A',
+      deadline: data.tanggalKirim ?? prev.deadline ?? null,
+      status: data.status ?? prev.status ?? 'Open',
+      priority: data.prioritas ?? prev.priority ?? 'Normal',
+      notes: data.catatan ?? prev.notes ?? '',
+      kubikasi_total: toNum(data.kubikasi_total, toNum(prev.kubikasi_total, 0)), // Ambil dari data baru atau lama
+      acc_marketing: data.marketing ?? prev.acc_marketing ?? '',
+      created_at: now, // Timestamp revisi
+      pdf_link: 'generating...',
+      revised_by: data.revisedBy || 'Unknown', // Nama perevisi
+      alamat_kirim: data.alamatKirim ?? prev.alamat_kirim ?? ''
+    }
+
+    console.log(`📝 [Vercel] Adding revision ${newRev} row to sheet for PO ${poId}`)
+    newRevisionRow = await poSheet.addRow(newRevisionRowData)
+
+    // Proses item untuk revisi baru
+    const itemsWithIds = []
+    let nextItemId = parseInt(await getNextIdFromSheet(itemSheet), 10)
+    const itemsToAdd = (data.items || []).map((raw) => {
+      const clean = scrubItemPayload(raw)
+      const kubikasiItem = toNum(raw.kubikasi, 0)
+      const newItem = {
+        id: nextItemId, // ID unik baru
+        purchase_order_id: poId,
+        revision_number: newRev, // Set revisi item baru
+        kubikasi: kubikasiItem,
+        ...clean
+      }
+      itemsWithIds.push({ ...raw, id: nextItemId, kubikasi: kubikasiItem })
+      nextItemId++
+      return newItem
+    })
+
+    if (itemsToAdd.length > 0) {
+      console.log(
+        `➕ [Vercel] Adding ${itemsToAdd.length} items to sheet for PO ${poId} Rev ${newRev}`
+      )
+      await itemSheet.addRows(itemsToAdd)
+    } else {
+      console.warn(`⚠️ [Vercel] No items provided for PO ${poId} Rev ${newRev}`)
+    }
+
+    // Siapkan data untuk generateAndUploadPO
+    const poDataForUpload = {
+      // Ambil data dari newRevisionRowData agar konsisten
+      po_number: newRevisionRowData.po_number,
+      project_name: newRevisionRowData.project_name,
+      deadline: newRevisionRowData.deadline,
+      priority: newRevisionRowData.priority,
+      notes: newRevisionRowData.notes,
+      created_at: newRevisionRowData.created_at, // Timestamp revisi
+      kubikasi_total: newRevisionRowData.kubikasi_total,
+      acc_marketing: newRevisionRowData.acc_marketing,
+      alamat_kirim: newRevisionRowData.alamat_kirim,
+      // Data lain
+      items: itemsWithIds, // Item baru untuk revisi ini
+      poPhotoBase64: data.poPhotoBase64 // Sertakan base64 jika dikirim dari frontend
+    }
+
+    console.log(`⏳ [Vercel] Calling generateAndUploadPO for PO ${poId} Rev ${newRev}...`)
+    // Panggil fungsi generateAndUploadPO yang baru
+    const uploadResult = await generateAndUploadPO(poDataForUpload, newRev)
+
+    // Update link di sheet
+    console.log(`🔄 [Vercel] Updating pdf_link for PO ${poId} Rev ${newRev}...`)
+    newRevisionRow.set(
+      'pdf_link',
+      uploadResult.success
+        ? uploadResult.link
+        : `ERROR: ${uploadResult.error || 'Unknown upload error'}`
+    )
+    await newRevisionRow.save()
+    console.log(`✅ [Vercel] pdf_link updated.`)
+
+    // Kirim respons sukses
+    return res.status(200).json({ success: true, revision_number: newRev })
+  } catch (err) {
+    // Tangani error
+    console.error('💥 [Vercel] ERROR in handleUpdatePO:', err.message, err.stack)
+    // Update link error jika baris revisi sudah dibuat
+    if (newRevisionRow && !newRevisionRow.get('pdf_link')?.startsWith('http')) {
+      try {
+        // @ts-ignore
+        newRevisionRow.set('pdf_link', `ERROR: ${err.message}`)
+        await newRevisionRow.save()
+      } catch (saveErr) {
+        // @ts-ignore
+        console.error('   -> Failed to save error link back to sheet:', saveErr.message)
+      }
+    }
+    // @ts-ignore
+    return res
+      .status(500)
+      .json({ success: false, error: 'Internal Server Error updating PO', details: err.message })
   }
-  const uploadResult = await generateAndUploadPO(poDataForJpeg, newRev)
-  newRevisionRow.set(
-    'pdf_link',
-    uploadResult.success ? uploadResult.link : `ERROR: ${uploadResult.error}`
-  )
-  await newRevisionRow.save()
-  return res.status(200).json({ success: true, revision_number: newRev })
 }
 
 // --- LOGIC FOR: deletePO ---
