@@ -9,7 +9,6 @@ import InputPOPage from './pages/InputPOPage'
 import PODetailPage from './pages/PODetailPage'
 import ProgressTrackingPage from './pages/ProgressTrackingPage'
 import DashboardPage from './pages/DashboardPage'
-import RevisionHistoryPage from './pages/RevisionHistoryPage'
 import UpdateProgressPage from './pages/UpdateProgressPage'
 import AnalysisPage from './pages/AnalysisPage'
 import Chatbot from './components/Chatbot'
@@ -96,7 +95,7 @@ function App() {
         const result = await apiService.deletePO(poId)
         if (result.success) {
           alert(`✅ PENGHAPUSAN BERHASIL\n\n${result.message}`)
-          
+
           // [PERBAIKAN] Panggil fetchPOs() cukup sekali
           await fetchPOs() // Muat ulang daftar PO
         } else {
@@ -124,12 +123,6 @@ function App() {
   const handleShowDetail = (po: POHeader) => {
     setSelectedPoId(po.id)
     setView('detail')
-  }
-
-  const handleShowHistory = () => {
-    if (selectedPoId) {
-      setView('history')
-    }
   }
 
   // [PERBAIKAN] Ini adalah versi yang benar untuk auto-refresh
@@ -239,21 +232,14 @@ function App() {
       case 'detail':
         return (
           <PODetailPage
-            po={currentPO}
-            onBackToList={handleBackToList}
-            onShowHistory={handleShowHistory}
+            po={currentPO} // Berikan objek POHeader utuh
+            onBackToList={handleBackToList} // Fungsi untuk kembali
+            // Pastikan tidak ada props lain seperti poId, poNumber, onBack, onShowHistory
           />
         )
       case 'tracking':
         return <ProgressTrackingPage onSelectPO={handleSelectPOForTracking} />
-      case 'history':
-        return (
-          <RevisionHistoryPage
-            poId={currentPO?.id || null}
-            poNumber={currentPO?.po_number || null}
-            onBack={() => setView('detail')}
-          />
-        )
+
       case 'updateProgress':
         return <UpdateProgressPage po={trackingPO} onBack={() => setView('tracking')} />
       case 'analysis':

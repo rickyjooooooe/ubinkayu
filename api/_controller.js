@@ -69,104 +69,167 @@ async function getItemsByRevision(poId, rev, doc) {
 
 // --- LOGIC FOR: listPOs ---
 export async function handleListPOs(req, res) {
-  const doc = await openDoc()
-  const poSheet = getSheet(doc, 'purchase_orders')
-  const itemSheet = getSheet(doc, 'purchase_order_items')
-  const progressSheet = getSheet(doc, 'progress_tracking')
-  const [poRows, itemRows, progressRows] = await Promise.all([
-    poSheet.getRows(),
-    itemSheet.getRows(),
-    progressSheet.getRows()
-  ])
-  const byId = new Map()
-  for (const r of poRows) {
-    const id = String(r.get('id')).trim()
-    const rev = toNum(r.get('revision_number'), -1)
-    const keep = byId.get(id)
-    if (!keep || rev > keep.rev) byId.set(id, { rev, row: r })
-  }
-  const latestPoRows = Array.from(byId.values()).map(({ row }) => row)
-  const progressByCompositeKey = progressRows.reduce((acc, row) => {
-    const poId = row.get('purchase_order_id'),
-      itemId = row.get('purchase_order_item_id'),
-      key = `${poId}-${itemId}`
-    if (!acc[key]) acc[key] = []
-    acc[key].push({ stage: row.get('stage'), created_at: row.get('created_at') })
-    return acc
-  }, {})
-  const itemsByPoId = itemRows.reduce((acc, item) => {
-    const poId = item.get('purchase_order_id')
-    if (!acc[poId]) acc[poId] = []
-    acc[poId].push(item.toObject())
-    return acc
-  }, {})
-  const latestItemRevisions = new Map()
-  itemRows.forEach((item) => {
-    const poId = item.get('purchase_order_id'),
-      rev = toNum(item.get('revision_number'), -1),
-      current = latestItemRevisions.get(poId)
-    if (!current || rev > current) latestItemRevisions.set(poId, rev)
-  })
-  const result = latestPoRows.map((po) => {
-    const poObject = po.toObject(),
-      poId = poObject.id,
-      latestRev = latestItemRevisions.get(poId) ?? -1
-    const poItems = (itemsByPoId[poId] || []).filter(
-      (item) => toNum(item.revision_number, -1) === latestRev
-    )
-    let poProgress = 0
-    if (poItems.length > 0) {
-      let totalPercentage = 0
-      poItems.forEach((item) => {
-        const itemId = item.id
-        const stages = PRODUCTION_STAGES
-        const compositeKey = `${poId}-${itemId}`
-        const itemProgressHistory = progressByCompositeKey[compositeKey] || []
-        let latestStageIndex = -1
-        if (itemProgressHistory.length > 0) {
-          const latestProgress = itemProgressHistory.sort(
-            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          )[0]
-          latestStageIndex = stages.indexOf(latestProgress.stage)
-        }
-        const itemPercentage =
-          latestStageIndex >= 0 ? ((latestStageIndex + 1) / stages.length) * 100 : 0
-        totalPercentage += itemPercentage
-      })
-      poProgress = totalPercentage / poItems.length
-    }
-    let finalStatus = poObject.status
-    let completed_at = null
+  // Log paling awal untuk menandakan fungsi dimulai
+  console.log('🏁 [Vercel] handleListPOs function started!')
 
-    if (finalStatus !== 'Cancelled') {
-      if (poProgress >= 100) {
-        finalStatus = 'Completed'
-        // --- TAMBAHKAN LOGIKA INI ---
-        // Cari tanggal update progress terakhir untuk PO ini
-        const allProgressForPO = progressRows
-          .filter((row) => row.get('purchase_order_id') === poId)
-          .map((row) => new Date(row.get('created_at')).getTime())
+  // Bungkus seluruh logika asli dalam try...catch
+  try {
+    const doc = await openDoc()
+    const poSheet = getSheet(doc, 'purchase_orders')
+    const itemSheet = getSheet(doc, 'purchase_order_items')
+    const progressSheet = getSheet(doc, 'progress_tracking')
 
-        if (allProgressForPO.length > 0) {
-          completed_at = new Date(Math.max(...allProgressForPO)).toISOString()
-        }
-        // --- AKHIR LOGIKA BARU ---
-      } else if (poProgress > 0) {
-        finalStatus = 'In Progress'
-      } else {
-        finalStatus = 'Open'
+    // Ambil data dari sheet
+    const [poRows, itemRows, progressRows] = await Promise.all([
+      poSheet.getRows(),
+      itemSheet.getRows(),
+      progressSheet.getRows()
+    ])
+
+    // --- Proses Data PO untuk mendapatkan revisi terbaru ---
+    const byId = new Map()
+    for (const r of poRows) {
+      const id = String(r.get('id')).trim()
+      const rev = toNum(r.get('revision_number'), -1)
+      // @ts-ignore - Abaikan potensi error TS jika 'rev' tidak ada di tipe 'keep'
+      const keep = byId.get(id)
+      if (!keep || rev > keep.rev) {
+        // Simpan baris GoogleSpreadsheetRow, bukan objek biasa
+        byId.set(id, { rev, row: r })
       }
     }
-    return {
-      ...poObject,
-      items: poItems,
-      progress: Math.round(poProgress),
-      status: finalStatus,
-      completed_at: completed_at,
-      pdf_link: po.get('pdf_link') || null
-    }
-  })
-  return res.status(200).json(result)
+    // Dapatkan array baris GoogleSpreadsheetRow revisi terbaru
+    const latestPoRows = Array.from(byId.values()).map(({ row }) => row)
+
+    // --- Siapkan data helper untuk progress dan item ---
+    const progressByCompositeKey = progressRows.reduce((acc, row) => {
+      const poId = row.get('purchase_order_id')
+      const itemId = row.get('purchase_order_item_id')
+      const key = `${poId}-${itemId}`
+      if (!acc[key]) acc[key] = []
+      acc[key].push({ stage: row.get('stage'), created_at: row.get('created_at') })
+      return acc
+    }, {})
+
+    // Ubah itemRows menjadi objek biasa untuk Map dan filter
+    const itemObjects = itemRows.map((item) => item.toObject())
+
+    const itemsByPoId = itemObjects.reduce((acc, item) => {
+      const poId = item.purchase_order_id // Akses properti objek
+      if (!acc[poId]) acc[poId] = []
+      acc[poId].push(item)
+      return acc
+    }, {})
+
+    const latestItemRevisions = new Map()
+    itemObjects.forEach((item) => {
+      // Gunakan itemObjects
+      const poId = item.purchase_order_id
+      const rev = toNum(item.revision_number, -1)
+      const current = latestItemRevisions.get(poId)
+      if (current === undefined || rev > current) {
+        // Periksa undefined
+        latestItemRevisions.set(poId, rev)
+      }
+    })
+
+    // --- Hitung hasil akhir ---
+    const result = latestPoRows.map((po) => {
+      // 'po' di sini adalah GoogleSpreadsheetRow
+      const poObject = po.toObject() // Konversi ke objek biasa SEKARANG
+      const poId = poObject.id
+      const latestRev = latestItemRevisions.get(poId) ?? -1
+
+      // Filter item dari itemsByPoId yang sudah berupa objek
+      const poItems = (itemsByPoId[poId] || []).filter(
+        (item) => toNum(item.revision_number, -1) === latestRev
+      )
+
+      // Hitung progress (logika sama seperti sebelumnya)
+      let poProgress = 0
+      if (poItems.length > 0) {
+        let totalPercentage = 0
+        poItems.forEach((item) => {
+          const itemId = item.id
+          const stages = PRODUCTION_STAGES // Pastikan ini terdefinisi/diimpor
+          const compositeKey = `${poId}-${itemId}`
+          const itemProgressHistory = progressByCompositeKey[compositeKey] || []
+          let latestStageIndex = -1
+          if (itemProgressHistory.length > 0) {
+            // Salin array sebelum sort
+            const latestProgress = [...itemProgressHistory].sort(
+              (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            )[0]
+            latestStageIndex = stages.indexOf(latestProgress.stage)
+          }
+          const itemPercentage =
+            latestStageIndex >= 0 ? ((latestStageIndex + 1) / stages.length) * 100 : 0
+          totalPercentage += itemPercentage
+        })
+        poProgress = totalPercentage / poItems.length
+      }
+
+      // Tentukan status final dan completed_at (logika sama seperti sebelumnya)
+      let finalStatus = poObject.status
+      let completed_at = null
+      if (finalStatus !== 'Cancelled') {
+        const roundedProgress = Math.round(poProgress) // Bulatkan sekali saja
+        if (roundedProgress >= 100) {
+          finalStatus = 'Completed'
+          const allProgressForPO = progressRows // Gunakan progressRows asli
+            .filter((row) => row.get('purchase_order_id') === poId)
+            .map((row) => {
+              try {
+                return new Date(row.get('created_at')).getTime()
+              } catch {
+                return 0
+              } // Handle invalid date strings
+            })
+            .filter((time) => time > 0) // Filter out invalid dates
+
+          if (allProgressForPO.length > 0) {
+            completed_at = new Date(Math.max(...allProgressForPO)).toISOString()
+          }
+        } else if (roundedProgress > 0) {
+          finalStatus = 'In Progress'
+        } else {
+          finalStatus = 'Open'
+        }
+      }
+
+      // Tambahkan field yang dibutuhkan frontend (konsisten dengan Electron)
+      const lastRevisedBy = poObject.revised_by || 'N/A'
+      const lastRevisedDate = poObject.created_at // Timestamp revisi terakhir
+
+      // Susun objek hasil
+      return {
+        ...poObject, // Sertakan semua data asli dari sheet
+        items: poItems, // Sertakan item yang sudah difilter
+        progress: Math.round(poProgress), // Progress yang dibulatkan
+        status: finalStatus,
+        completed_at: completed_at,
+        pdf_link: poObject.pdf_link || null, // Pastikan pdf_link diambil dari poObject
+        // Field tambahan untuk konsistensi
+        acc_marketing: poObject.acc_marketing || '',
+        alamat_kirim: poObject.alamat_kirim || '',
+        lastRevisedBy: lastRevisedBy,
+        lastRevisedDate: lastRevisedDate
+      }
+    }) // Akhir .map
+
+    // Kirim hasil JSON ke klien
+    return res.status(200).json(result)
+  } catch (err) {
+    // Blok catch untuk menangani error
+    console.error('💥 [Vercel] ERROR in handleListPOs:', err.message, err.stack) // Log error detail
+    // Kirim respons error ke klien
+    // @ts-ignore - Abaikan error TS jika 'message' tidak ada di tipe 'err'
+    return res.status(500).json({
+      success: false,
+      error: 'Internal Server Error processing listPOs',
+      details: err.message
+    })
+  }
 }
 
 // --- LOGIC FOR: saveNewPO ---
@@ -698,82 +761,229 @@ export async function handleGetAttentionData(req, res) {
 
 // --- LOGIC FOR: getProductSalesAnalysis ---
 export async function handleGetProductSalesAnalysis(req, res) {
-  const doc = await openDoc()
-  const [itemSheet, poSheet, productSheet] = await Promise.all([
-    getSheet(doc, 'purchase_order_items'),
-    getSheet(doc, 'purchase_orders'),
-    getSheet(doc, 'product_master')
-  ])
-  const [itemRows, poRows, productRows] = await Promise.all([
-    itemSheet.getRows(),
-    poSheet.getRows(),
-    productSheet.getRows()
-  ])
-  const poMap = poRows.reduce((map, r) => {
-    const poId = r.get('id'),
-      rev = toNum(r.get('revision_number'))
-    if (!map.has(poId) || rev > map.get(poId).revision_number) map.set(poId, r.toObject())
-    return map
-  }, new Map())
-  const salesData = {},
-    salesByDate = [],
-    woodTypeData = {},
-    customerData = {}
-  itemRows.forEach((item) => {
-    const po = poMap.get(item.get('purchase_order_id'))
-    if (!po) return
-    const productName = item.get('product_name'),
-      quantity = toNum(item.get('quantity'), 0),
-      woodType = item.get('wood_type'),
-      kubikasi = toNum(item.get('kubikasi'), 0)
-    salesData[productName] = salesData[productName] || { totalQuantity: 0, name: productName }
-    salesData[productName].totalQuantity += quantity
-    salesByDate.push({ date: new Date(po.created_at), name: productName, quantity })
-    if (woodType) woodTypeData[woodType] = (woodTypeData[woodType] || 0) + quantity
-    if (po.project_name)
-      customerData[po.project_name] = (customerData[po.project_name] || 0) + kubikasi
-  })
-  const topSellingProducts = Object.values(salesData)
-    .sort((a, b) => b.totalQuantity - a.totalQuantity)
-    .slice(0, 10)
-  const woodTypeDistribution = Object.entries(woodTypeData)
-    .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value)
-  const topCustomers = Object.entries(customerData)
-    .map(([name, totalKubikasi]) => ({ name, totalKubikasi }))
-    .sort((a, b) => b.totalKubikasi - a.totalKubikasi)
-    .slice(0, 5)
-  const today = new Date(),
-    thirtyDaysAgo = new Date(new Date().setDate(today.getDate() - 30)),
-    sixtyDaysAgo = new Date(new Date().setDate(today.getDate() - 60))
-  const salesLast30 = {},
-    salesPrev30 = {}
-  salesByDate.forEach((sale) => {
-    if (sale.date >= thirtyDaysAgo)
-      salesLast30[sale.name] = (salesLast30[sale.name] || 0) + sale.quantity
-    else if (sale.date >= sixtyDaysAgo)
-      salesPrev30[sale.name] = (salesPrev30[sale.name] || 0) + sale.quantity
-  })
-  const trendingProducts = Object.keys(salesLast30)
-    .map((name) => {
-      const last30 = salesLast30[name],
-        prev30 = salesPrev30[name] || 0
-      const change = prev30 === 0 && last30 > 0 ? 100 : ((last30 - prev30) / (prev30 || 1)) * 100
-      return { name, last30, prev30, change }
+  try {
+    // Tambahkan try-catch
+    const doc = await openDoc()
+    const [itemSheet, poSheet, productSheet] = await Promise.all([
+      getSheet(doc, 'purchase_order_items'),
+      getSheet(doc, 'purchase_orders'),
+      getSheet(doc, 'product_master')
+    ])
+    const [itemRowsRaw, poRowsRaw, productRowsRaw] = await Promise.all([
+      itemSheet.getRows(),
+      poSheet.getRows(),
+      productSheet.getRows()
+    ])
+
+    // Konversi ke Objek Biasa
+    const itemRows = itemRowsRaw.map((r) => r.toObject())
+    const poRows = poRowsRaw.map((r) => r.toObject())
+    const productRows = productRowsRaw.map((r) => r.toObject())
+
+    // Buat Map PO Revisi Terbaru (semua status kecuali Cancelled)
+    const latestPoMap = poRows.reduce((map, po) => {
+      const poId = po.id
+      const rev = toNum(po.revision_number)
+      // Kecualikan PO yang Cancelled
+      if (po.status !== 'Cancelled') {
+        // @ts-ignore
+        if (!map.has(poId) || rev > map.get(poId).revision_number) {
+          map.set(poId, po)
+        }
+      }
+      return map
+    }, new Map())
+
+    // --- Inisialisasi Struktur Data Baru ---
+    const salesByProduct = {} // { product_name: { totalQuantity: N, totalKubikasi: N } }
+    const salesByMarketing = {} // { marketing_name: { totalKubikasi: N, poCount: N } }
+    const monthlySalesByProduct = {} // { YYYY-MM: { product_name: quantity, ... } }
+    const monthlySalesByMarketing = {} // { YYYY-MM: { marketing_name: kubikasi, ... } }
+    const woodTypeDistribution = {} // { wood_type: quantity }
+    const customerByKubikasi = {} // { customer_name: kubikasi }
+    const salesByDateForTrend = [] // [{ date: Date, name: string, quantity: number }]
+    const soldProductNames = new Set() // Lacak produk terjual
+
+    // --- Proses Item ---
+    itemRows.forEach((item) => {
+      const po = latestPoMap.get(item.purchase_order_id)
+      // Pastikan item berasal dari PO revisi terbaru yang valid (tidak cancelled)
+      // @ts-ignore
+      if (!po || toNum(item.revision_number) !== po.revision_number) {
+        return
+      }
+
+      const productName = item.product_name
+      const quantity = toNum(item.quantity, 0)
+      const kubikasi = toNum(item.kubikasi, 0)
+      const woodType = item.wood_type
+      const marketingName = po.acc_marketing || 'N/A' // Ambil marketing dari header PO
+      const customerName = po.project_name
+      const yearMonth = getYearMonth(po.created_at) // Dapatkan YYYY-MM
+
+      if (!productName || quantity <= 0) return // Lewati jika tidak valid
+
+      soldProductNames.add(productName)
+
+      // 1. Agregasi Total per Produk
+      salesByProduct[productName] = salesByProduct[productName] || {
+        totalQuantity: 0,
+        totalKubikasi: 0,
+        name: productName
+      }
+      salesByProduct[productName].totalQuantity += quantity
+      salesByProduct[productName].totalKubikasi += kubikasi
+
+      // 2. Agregasi Total per Marketing (Kubikasi)
+      // Kita hitung per PO di luar loop item agar tidak double count
+      // salesByMarketing akan diisi setelah loop item
+
+      // 3. Agregasi Bulanan per Produk (Quantity)
+      if (yearMonth) {
+        monthlySalesByProduct[yearMonth] = monthlySalesByProduct[yearMonth] || {}
+        monthlySalesByProduct[yearMonth][productName] =
+          (monthlySalesByProduct[yearMonth][productName] || 0) + quantity
+      }
+
+      // 4. Agregasi Bulanan per Marketing (Kubikasi)
+      // Kita hitung per PO di luar loop item
+
+      // 5. Distribusi Kayu (Quantity)
+      if (woodType)
+        woodTypeDistribution[woodType] = (woodTypeDistribution[woodType] || 0) + quantity
+
+      // 6. Customer (Kubikasi)
+      // Kita hitung per PO di luar loop item
+
+      // 7. Data untuk Tren Produk
+      try {
+        salesByDateForTrend.push({ date: new Date(po.created_at), name: productName, quantity })
+      } catch {}
     })
-    .filter((p) => p.change > 20 && p.last30 > p.prev30)
-    .sort((a, b) => b.change - a.change)
-  const soldProductNames = new Set(Object.keys(salesData))
-  const neverSoldProducts = productRows
-    .map((r) => r.get('product_name'))
-    .filter((name) => !soldProductNames.has(name))
-  return res.status(200).json({
-    topSellingProducts,
-    woodTypeDistribution,
-    topCustomers,
-    trendingProducts,
-    slowMovingProducts: neverSoldProducts
-  })
+
+    // --- Proses Agregasi per PO (Marketing & Customer) ---
+    latestPoMap.forEach((po) => {
+      const marketingName = po.acc_marketing || 'N/A'
+      const customerName = po.project_name
+      const kubikasiTotalPO = toNum(po.kubikasi_total, 0)
+      const yearMonth = getYearMonth(po.created_at)
+
+      // Agregasi Total per Marketing
+      salesByMarketing[marketingName] = salesByMarketing[marketingName] || {
+        totalKubikasi: 0,
+        poCount: 0,
+        name: marketingName
+      }
+      salesByMarketing[marketingName].totalKubikasi += kubikasiTotalPO
+      salesByMarketing[marketingName].poCount += 1
+
+      // Agregasi Bulanan per Marketing
+      if (yearMonth) {
+        monthlySalesByMarketing[yearMonth] = monthlySalesByMarketing[yearMonth] || {}
+        monthlySalesByMarketing[yearMonth][marketingName] =
+          (monthlySalesByMarketing[yearMonth][marketingName] || 0) + kubikasiTotalPO
+      }
+
+      // Agregasi Customer
+      if (customerName)
+        customerByKubikasi[customerName] = (customerByKubikasi[customerName] || 0) + kubikasiTotalPO
+    })
+
+    // --- Finalisasi Hasil ---
+    const topSellingProducts = Object.values(salesByProduct)
+      .sort((a, b) => b.totalQuantity - a.totalQuantity) // Urutkan berdasarkan Quantity
+      .slice(0, 10)
+
+    const salesByMarketingSorted = Object.values(salesByMarketing).sort(
+      (a, b) => b.totalKubikasi - a.totalKubikasi
+    ) // Urutkan berdasarkan Kubikasi
+
+    const woodTypeDistributionSorted = Object.entries(woodTypeDistribution)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+
+    const topCustomers = Object.entries(customerByKubikasi)
+      .map(([name, totalKubikasi]) => ({ name, totalKubikasi }))
+      .sort((a, b) => b.totalKubikasi - a.totalKubikasi)
+      .slice(0, 10) // Ambil Top 10
+
+    // Format data bulanan untuk Recharts
+    const monthlyProductChartData = Object.entries(monthlySalesByProduct)
+      .map(([month, products]) => ({ month, ...products }))
+      .sort((a, b) => a.month.localeCompare(b.month)) // Urutkan berdasarkan bulan
+
+    const monthlyMarketingChartData = Object.entries(monthlySalesByMarketing)
+      .map(([month, marketers]) => ({ month, ...marketers }))
+      .sort((a, b) => a.month.localeCompare(b.month)) // Urutkan berdasarkan bulan
+
+    // Kalkulasi Tren (sama seperti sebelumnya, tapi dari semua PO)
+    const todayTrend = new Date(),
+      thirtyDaysAgo = new Date(new Date().setDate(todayTrend.getDate() - 30)),
+      sixtyDaysAgo = new Date(new Date().setDate(todayTrend.getDate() - 60))
+    const salesLast30 = {},
+      salesPrev30 = {}
+    salesByDateForTrend.forEach((sale) => {
+      if (sale.date >= thirtyDaysAgo)
+        salesLast30[sale.name] = (salesLast30[sale.name] || 0) + sale.quantity
+      else if (sale.date >= sixtyDaysAgo)
+        salesPrev30[sale.name] = (salesPrev30[sale.name] || 0) + sale.quantity
+    })
+    const trendingProducts = Object.keys(salesLast30)
+      .map((name) => {
+        /* ... logika kalkulasi change sama ... */
+        const last30 = salesLast30[name],
+          prev30 = salesPrev30[name] || 0
+        const change = prev30 === 0 && last30 > 0 ? 100 : ((last30 - prev30) / (prev30 || 1)) * 100
+        return { name, last30, prev30, change }
+      })
+      .filter((p) => p.change > 10 && p.last30 > (prev30 || 0)) // Sedikit longgarkan filter
+      .sort((a, b) => b.change - a.change)
+
+    // Produk Kurang Laris (sama seperti sebelumnya)
+    const allMasterProductNames = productRows.map((p) => p.product_name).filter(Boolean)
+    const slowMovingProducts = allMasterProductNames.filter((name) => !soldProductNames.has(name))
+
+    // Susun hasil akhir
+    const analysisResult = {
+      topSellingProducts, // Top 10 Produk (Qty)
+      salesByMarketing: salesByMarketingSorted, // Performa Marketing (Kubikasi)
+      monthlyProductChartData, // Data Chart Produk Bulanan (Qty)
+      monthlyMarketingChartData, // Data Chart Marketing Bulanan (Kubikasi)
+      woodTypeDistribution: woodTypeDistributionSorted, // Distribusi Kayu (Qty)
+      topCustomers, // Top 10 Customer (Kubikasi)
+      trendingProducts, // Produk Tren Naik (Qty)
+      slowMovingProducts // Produk Belum Terjual
+    }
+
+    // --- Return untuk Electron / Vercel ---
+    if (typeof res !== 'undefined') {
+      // Cek jika ini Vercel
+      return res.status(200).json(analysisResult)
+    } else {
+      // Jika ini Electron
+      return analysisResult
+    }
+  } catch (err) {
+    console.error('❌ Gagal melakukan analisis penjualan produk:', err.message)
+    // Return struktur kosong agar frontend tidak error
+    const emptyResult = {
+      topSellingProducts: [],
+      salesByMarketing: [],
+      monthlyProductChartData: [],
+      monthlyMarketingChartData: [],
+      woodTypeDistribution: [],
+      topCustomers: [],
+      trendingProducts: [],
+      slowMovingProducts: []
+    }
+    if (typeof res !== 'undefined') {
+      // Vercel
+      return res.status(500).json(emptyResult) // Kirim error 500
+    } else {
+      // Electron
+      return emptyResult // Kembalikan objek kosong
+    }
+  }
 }
 
 // --- LOGIC FOR: getSalesItemData ---

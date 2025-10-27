@@ -2,6 +2,7 @@
 
 import { GoogleSpreadsheet } from 'google-spreadsheet'
 import { JWT } from 'google-auth-library'
+import { Buffer } from 'buffer'
 import { google } from 'googleapis'
 import stream from 'stream'
 import { promisify } from 'util'
@@ -37,22 +38,54 @@ export const DEFAULT_STAGE_DURATIONS = {
   'Siap Kirim': 0
 }
 
-// Fungsi untuk otentikasi
+// file: api/_helpers.js
 export function getAuth() {
-  // 1. Decode dulu dari Base64 untuk mendapatkan kembali string asli dengan \n
-  const decodedKey = Buffer.from(process.env.GOOGLE_PRIVATE_KEY, 'base64').toString('utf8')
+  console.log('🏁 [Vercel Auth] getAuth function started.') // Log 1: Fungsi dimulai
 
-  // 2. Baru ganti \n dengan karakter baris baru asli
-  const formattedKey = decodedKey.replace(/\\n/g, '\n')
+  const rawKey = process.env.GOOGLE_PRIVATE_KEY || ''
+  const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
 
-  return new JWT({
-    email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    key: formattedKey, // <-- Gunakan kunci yang sudah diformat
-    scopes: [
-      'https://www.googleapis.com/auth/spreadsheets',
-      'https://www.googleapis.com/auth/drive'
-    ]
-  })
+  if (!rawKey || !email) {
+    console.error('❌ [Vercel Auth] FAIL: Missing env vars.')
+    throw new Error('Server configuration error: Missing credentials.')
+  }
+  console.log('✅ [Vercel Auth] Env vars retrieved for:', email) // Log 2: Env vars ada
+
+  let formattedKey = ''
+  try {
+    console.log('⏳ [Vercel Auth] Attempting Base64 decode...') // Log 3: Sebelum decode
+    const decodedKey = Buffer.from(rawKey, 'base64').toString('utf8')
+    console.log('✅ [Vercel Auth] Base64 decoded.') // Log 4: Setelah decode
+    console.log('⏳ [Vercel Auth] Attempting newline replace...') // Log 5: Sebelum replace
+    formattedKey = decodedKey.replace(/\\n/g, '\n')
+    console.log('✅ [Vercel Auth] Newlines replaced.') // Log 6: Setelah replace
+
+    if (formattedKey.length < 100 || !formattedKey.includes('-----BEGIN PRIVATE KEY-----')) {
+      console.error('❌ [Vercel Auth] FAIL: Formatted key seems invalid.')
+      throw new Error('Server configuration error: Invalid private key format.')
+    }
+    console.log('🔑 [Vercel Auth] Key formatted successfully.') // Log 7: Format OK
+  } catch (e) {
+    console.error('❌ [Vercel Auth] FAIL: Error during key processing:', e.message) // Log 8: Error saat proses key
+    throw new Error('Server configuration error: Key processing failed.')
+  }
+
+  try {
+    console.log('⏳ [Vercel Auth] Creating JWT instance...') // Log 9: Sebelum JWT
+    const jwtInstance = new JWT({
+      email: email,
+      key: formattedKey,
+      scopes: [
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive'
+      ]
+    })
+    console.log('✅ [Vercel Auth] JWT instance created successfully.') // Log 10: JWT OK
+    return jwtInstance
+  } catch (jwtError) {
+    console.error('❌ [Vercel Auth] FAIL: Error creating JWT instance:', jwtError.message) // Log 11: Error JWT
+    throw new Error('Server configuration error: JWT creation failed.')
+  }
 }
 
 // Fungsi untuk membuka dokumen spreadsheet

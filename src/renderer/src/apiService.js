@@ -9,7 +9,9 @@
 
 // PENTING: Ganti dengan URL Vercel Anda setelah deploy berhasil.
 // Untuk development lokal, biarkan kosong.
-const API_BASE_URL = window.api ? '' : ''
+const API_BASE_URL = window.api
+  ? 'https://ubinkayu-erp1.vercel.app'
+  : 'https://ubinkayu-erp1.vercel.app'
 
 /**
  * Helper untuk menangani panggilan fetch API secara konsisten.
@@ -210,17 +212,37 @@ export function updateStageDeadline(data) {
 }
 
 export async function ollamaChat(prompt) {
-  if (window.api) {
-    return window.api.ollamaChat(prompt) // Panggil Electron
-  }
+  // --- PERUBAHAN DI SINI ---
+  // Hapus pengecekan 'if (window.api)' HANYA untuk fungsi ini
+  // if (window.api) {
+  //   console.log('%cELECTRON MODE: Calling Ollama via IPC', 'color: cyan; font-weight: bold;');
+  //   return window.api.ollamaChat(prompt); // JANGAN PANGGIL IPC LAGI
+  // }
 
-  // --- UBAH BAGIAN INI ---
-  // Panggil Vercel (Opsi 1 atau 2)
-  const result = await fetchAPI(createApiEndpoint('ollamaChat'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt })
-  })
-  return result.response // Kembalikan teks jawaban
+  // SELALU PANGGIL VERCEL API untuk chat
+  console.log(
+    '%cAPI SERVICE: Calling Vercel API for Chat (Gemini)',
+    'color: gold; font-weight: bold;'
+  )
+  try {
+    const result = await fetchAPI(createApiEndpoint('ollamaChat'), {
+      // Panggil endpoint Vercel
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
+    })
+    // Vercel mengembalikan objek { response: "..." }, ambil teksnya
+    if (result && typeof result.response === 'string') {
+      return result.response
+    } else {
+      // Handle jika format respons Vercel tidak sesuai
+      console.error('Respons tak terduga dari Vercel API:', result)
+      return 'Maaf, terjadi kesalahan saat menerima respons dari server AI.'
+    }
+  } catch (error) {
+    console.error('Error calling Vercel chat API:', error)
+    // @ts-ignore
+    return `Maaf, gagal menghubungi server AI: ${error.message}`
+  }
   // --- AKHIR PERUBAHAN ---
 }

@@ -76,7 +76,7 @@ const POTable: React.FC<POTableProps> = ({
             <th>Sample</th>    {/* New Column */}
             <th>Marketing</th> {/* New Column */}
             <th>Location</th>  {/* New Column */}
-           
+
             <th>Prioritas</th>
             <th>Status</th>
             <th>Progress</th>
@@ -115,10 +115,12 @@ const POTable: React.FC<POTableProps> = ({
               {/* New Columns */}
               <td className="product-list-cell">{renderItemList(po.items, 'finishing')}</td>
               <td className="product-list-cell">{renderItemList(po.items, 'sample')}</td>
-              <td className="product-list-cell">{renderItemList(po.items, 'marketing')}</td>
+              <td>
+                {po.acc_marketing || '-'} {/* <-- Tampilkan langsung dari po.acc_marketing */}
+              </td>
               <td className="product-list-cell">{renderItemList(po.items, 'location')}</td>
               {/* End of New Columns */}
-              
+
               <td>
                 <span className={`status-badge ${(po.priority || 'Normal').toLowerCase()}`}>
                   {po.priority || 'Normal'}

@@ -80,7 +80,8 @@ export interface PORevision {
   created_at: string
   pdf_link?: string | null
   acc_marketing?: string
-  revised_by?: string; // <-- TAMBAHKAN BARIS INI
+  revised_by?: string;
+  alamat_kirim?: string; // <-- Add this line
 }
 
 export interface ProductMaster {
