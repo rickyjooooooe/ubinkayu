@@ -2039,80 +2039,91 @@ ATURAN KETAT:
         break
       }
       case 'getPOsByDateRange': {
-        const { startDate, endDate } = aiDecision.param; // Ambil dari 'param' jika ada
+        const { startDate, endDate } = aiDecision.param // Ambil dari 'param' jika ada
 
         // 1. Validasi Input Tanggal dari AI
         // Pastikan startDate dan endDate ada dan formatnya YYYY-MM-DD
-        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/
         if (!startDate || !endDate || !dateRegex.test(startDate) || !dateRegex.test(endDate)) {
-          console.warn(`[Vercel AI Tool] Invalid date range received from AI: ${startDate} - ${endDate}`);
-          responseText = "Maaf, saya tidak bisa memproses rentang tanggal yang diminta (format tidak valid).";
-          break; // Keluar dari case
+          console.warn(
+            `[Vercel AI Tool] Invalid date range received from AI: ${startDate} - ${endDate}`
+          )
+          responseText =
+            'Maaf, saya tidak bisa memproses rentang tanggal yang diminta (format tidak valid).'
+          break // Keluar dari case
         }
 
         // 2. Konversi Tanggal ke Timestamp (Awal & Akhir Hari)
-        let startTimestamp: number, endTimestamp: number;
+        let startTimestamp, endTimestamp
         try {
           // Set startDate ke awal hari (00:00:00)
-          const start = new Date(startDate);
-          start.setHours(0, 0, 0, 0);
-          startTimestamp = start.getTime();
+          const start = new Date(startDate)
+          start.setHours(0, 0, 0, 0)
+          startTimestamp = start.getTime()
 
           // Set endDate ke akhir hari (23:59:59.999)
-          const end = new Date(endDate);
-          end.setHours(23, 59, 59, 999);
-          endTimestamp = end.getTime();
+          const end = new Date(endDate)
+          end.setHours(23, 59, 59, 999)
+          endTimestamp = end.getTime()
 
           // Cek jika hasil konversi valid
           if (isNaN(startTimestamp) || isNaN(endTimestamp)) {
-            throw new Error('Invalid date conversion result');
+            throw new Error('Invalid date conversion result')
           }
-          console.log(` -> Date Range Parsed: ${start.toISOString()} to ${end.toISOString()}`);
+          console.log(` -> Date Range Parsed: ${start.toISOString()} to ${end.toISOString()}`)
         } catch (e) {
-          console.error(`[Vercel AI Tool] Error parsing date range ${startDate}-${endDate}:`, e);
-          responseText = 'Maaf, terjadi kesalahan saat memproses rentang tanggal.';
-          break; // Keluar jika tanggal tidak valid
+          console.error(`[Vercel AI Tool] Error parsing date range ${startDate}-${endDate}:`, e)
+          responseText = 'Maaf, terjadi kesalahan saat memproses rentang tanggal.'
+          break // Keluar jika tanggal tidak valid
         }
 
         // 3. Filter PO berdasarkan Tanggal Pembuatan (`created_at`)
         const foundPOs = allPOs.filter((po) => {
           try {
-            const poDate = new Date(po.created_at).getTime();
+            const poDate = new Date(po.created_at).getTime()
             // Cek jika tanggal PO valid dan berada dalam rentang timestamp
-            return !isNaN(poDate) && poDate >= startTimestamp && poDate <= endTimestamp;
+            return !isNaN(poDate) && poDate >= startTimestamp && poDate <= endTimestamp
           } catch (e) {
             // Abaikan PO jika tanggal created_at tidak valid
-            console.warn(` -> Skipping PO ${po.po_number} due to invalid created_at: ${po.created_at}`);
-            return false;
+            console.warn(
+              ` -> Skipping PO ${po.po_number} due to invalid created_at: ${po.created_at}`
+            )
+            return false
           }
-        });
-        console.log(` -> Found ${foundPOs.length} POs within the date range.`);
+        })
+        console.log(` -> Found ${foundPOs.length} POs within the date range.`)
 
         // 4. Format String Rentang Tanggal untuk Respons
-        const dateRangeStr = startDate === endDate
+        const dateRangeStr =
+          startDate === endDate
             ? `tanggal ${formatDate(startDate)}` // Gunakan helper formatDate
-            : `rentang ${formatDate(startDate)} s/d ${formatDate(endDate)}`;
+            : `rentang ${formatDate(startDate)} s/d ${formatDate(endDate)}`
 
         // 5. Buat Respons Teks
         if (foundPOs.length > 0) {
           // Urutkan berdasarkan tanggal (opsional, terbaru dulu)
-          foundPOs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          foundPOs.sort(
+            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          )
           // Format daftar PO (maksimal 10)
           const poDetails = foundPOs
             .slice(0, 10) // Batasi tampilan
-            .map((po) => `- ${po.po_number || 'N/A'} (${po.project_name || 'N/A'}), Tgl Masuk: ${formatDate(po.created_at)}`)
-            .join('\n');
+            .map(
+              (po) =>
+                `- ${po.po_number || 'N/A'} (${po.project_name || 'N/A'}), Tgl Masuk: ${formatDate(po.created_at)}`
+            )
+            .join('\n')
           // Buat teks respons
-          responseText = `Saya menemukan ${foundPOs.length} PO untuk ${dateRangeStr}:\n${poDetails}`;
+          responseText = `Saya menemukan ${foundPOs.length} PO untuk ${dateRangeStr}:\n${poDetails}`
           // Tambahkan pesan jika ada lebih dari 10
           if (foundPOs.length > 10) {
-            responseText += `\n...dan ${foundPOs.length - 10} lainnya.`;
+            responseText += `\n...dan ${foundPOs.length - 10} lainnya.`
           }
         } else {
           // Respons jika tidak ada PO yang ditemukan
-          responseText = `Tidak ada PO yang ditemukan untuk ${dateRangeStr}.`;
+          responseText = `Tidak ada PO yang ditemukan untuk ${dateRangeStr}.`
         }
-        break; // Akhir case 'getPOsByDateRange'
+        break // Akhir case 'getPOsByDateRange'
       }
       case 'getPOByStatusCount': {
         const reqStatus = aiDecision.param?.toLowerCase()
