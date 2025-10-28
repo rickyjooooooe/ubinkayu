@@ -1687,6 +1687,14 @@ ATURAN KETAT:
   // 3. Panggil Hugging Face API
   let aiDecisionJsonString = '' // Variabel untuk menyimpan respons mentah (untuk debug jika gagal parse)
   let aiDecision = { tool: 'unknown' } // Default jika AI gagal
+
+  const hfToken = process.env.HUGGING_FACE_API_TOKEN
+  const modelId = process.env.HF_MODEL_ID || 'mistralai/Mistral-7B-Instruct-v0.1'
+
+  console.log(`[Vercel AI - HF DEBUG] Using Model ID: ${modelId}`)
+  console.log(
+    `[Vercel AI - HF DEBUG] Using Token (first 5): ${hfToken ? hfToken.substring(0, 5) + '...' : 'TOKEN IS MISSING'}`
+  )
   try {
     console.log('⏳ [Vercel AI - HF] Calling Hugging Face Inference API...')
     const hfToken = process.env.HUGGING_FACE_API_TOKEN
