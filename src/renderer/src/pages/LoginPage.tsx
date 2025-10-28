@@ -7,19 +7,42 @@ import * as apiService from '../apiService'
 // --- [BARU] Definisikan Ikon SVG sebagai konstanta ---
 // Kita letakkan di luar komponen agar tidak dibuat ulang setiap render
 const EyeIcon = (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" style={{ width: '20px', height: '20px' }}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 10.224 7.68 6 12 6s8.577 4.224 9.964 5.683c.25.312.25.827 0 1.139-1.387 1.459-5.54 5.683-9.964 5.683S3.423 13.781 2.036 12.322Z" />
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    fill="none"
+    viewBox="0 0 24 24"
+    strokeWidth="1.5"
+    stroke="currentColor"
+    style={{ width: '20px', height: '20px' }}
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 10.224 7.68 6 12 6s8.577 4.224 9.964 5.683c.25.312.25.827 0 1.139-1.387 1.459-5.54 5.683-9.964 5.683S3.423 13.781 2.036 12.322Z"
+    />
     <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
   </svg>
-);
+)
 
 const EyeSlashIcon = (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" style={{ width: '20px', height: '20px' }}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 14.334 7.21 18 12 18c.996 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.79 0 8.774 3.666 10.066 6.027a1.531 1.531 0 0 1 0 1.446A10.451 10.451 0 0 1 17.772 17.772M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.243 4.243L15 12m-3-3L6.228 6.228" />
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    fill="none"
+    viewBox="0 0 24 24"
+    strokeWidth="1.5"
+    stroke="currentColor"
+    style={{ width: '20px', height: '20px' }}
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 14.334 7.21 18 12 18c.996 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.79 0 8.774 3.666 10.066 6.027a1.531 1.531 0 0 1 0 1.446A10.451 10.451 0 0 1 17.772 17.772M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.243 4.243L15 12m-3-3L6.228 6.228"
+    />
   </svg>
-);
+)
 // --- Akhir Ikon SVG ---
 
+const SESSION_DURATION_MS = 8 * 60 * 60 * 1000
 
 // Tipe data sukses
 interface LoginSuccessResponse {
@@ -36,7 +59,10 @@ interface LoginErrorResponse {
 type LoginResponse = LoginSuccessResponse | LoginErrorResponse
 
 interface LoginPageProps {
-  onLoginSuccess: (userData: { name: string; role?: string }) => void // Callback ke App.tsx
+  onLoginSuccess: (sessionData: {
+    user: { name: string; role?: string }
+    expiry: number // expiry akan berupa angka (timestamp)
+  }) => void
 }
 
 const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
@@ -68,11 +94,32 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     // --- Pengecekan Akun Dummy ---
     if (username === DUMMY_USERNAME && password === DUMMY_PASSWORD) {
       console.log('Dummy user login successful!')
-      onLoginSuccess(DUMMY_USER_DATA)
+
+      // [UBAH DI SINI]
+      const now = new Date().getTime() // Waktu sekarang
+      const expiry = now + SESSION_DURATION_MS // Waktu kedaluwarsa
+
+      // Kirim object sesi lengkap ke App.tsx
+      onLoginSuccess({ user: DUMMY_USER_DATA, expiry: expiry })
+
       setIsLoading(false)
       return
     }
     // --- Akhir Pengecekan Dummy ---
+
+    if (username === DUMMY_USERNAME && password === DUMMY_PASSWORD) {
+      console.log('Dummy user login successful!')
+
+      // [UBAH DI SINI]
+      const now = new Date().getTime() // Waktu sekarang
+      const expiry = now + SESSION_DURATION_MS // Waktu kedaluwarsa
+
+      // Kirim object sesi lengkap ke App.tsx
+      onLoginSuccess({ user: DUMMY_USER_DATA, expiry: expiry })
+
+      setIsLoading(false)
+      return
+    }
 
     // --- Logika Login via API (Jika bukan dummy) ---
     try {
@@ -80,7 +127,14 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       const result: LoginResponse = await apiService.loginUser(username, password)
 
       if (result && result.success === true) {
-        onLoginSuccess({ name: result.name, role: result.role })
+        // [UBAH DI SINI JUGA]
+        const now = new Date().getTime() // Waktu sekarang
+        const expiry = now + SESSION_DURATION_MS // Waktu kedaluwarsa
+
+        const userData = { name: result.name, role: result.role }
+
+        // Kirim object sesi lengkap ke App.tsx
+        onLoginSuccess({ user: userData, expiry: expiry })
       } else if (result && result.success === false) {
         setError(result.error || 'Username atau password salah.')
       } else {
@@ -170,7 +224,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             </div>
           </div>
           {/* --- Akhir Modifikasi --- */}
-
 
           {error && (
             <p style={{ color: 'red', marginTop: '1rem', textAlign: 'center', fontSize: '0.9em' }}>
