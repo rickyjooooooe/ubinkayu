@@ -216,16 +216,28 @@ function App() {
     // Fetch PO akan otomatis terpanggil oleh useEffect [currentUser]
   }
 
-  const handleLogout = (message?: string) => {
+  const handleLogout = (message?: any) => {
+    // --- Ini adalah logika logout Anda ---
     console.log('Logging out...')
     setCurrentUser(null)
     sessionStorage.removeItem('erpUser')
     setAllPOs([])
     setIsLoading(false) // Set loading selesai
     setView('dashboard') // Arahkan ke dashboard (yang akan menampilkan login)
-    if (message) {
-      alert(message) // Tampilkan pesan jika ada (misal dari error fetch)
+    // --- Akhir logika logout ---
+
+    // --- Logika Alert yang Diperbarui ---
+
+    // 1. Jika 'message' adalah sebuah string, tampilkan.
+    if (message && typeof message === 'string') {
+      alert(message)
     }
+    // 2. Jika 'message' adalah sebuah object Error (memiliki properti .message)
+    else if (message && typeof message === 'object' && message.message) {
+      alert(message.message)
+    }
+    // 3. Jika 'message' adalah hal lain (seperti MouseEvent),
+    //    kita abaikan dan tidak menampilkan alert apa pun.
   }
 
   // --- Handler AI Chat ---

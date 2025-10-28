@@ -2,6 +2,7 @@
 
 import {
   openDoc,
+  openUserDoc,
   getSheet,
   toNum,
   getNextIdFromSheet,
@@ -49,58 +50,96 @@ const getYearMonth = (dateString) => {
 
 export async function handleLoginUser(req, res) {
   console.log('🏁 [Vercel] handleLoginUser started!')
-  // Hanya izinkan metode POST
-  if (req.method !== 'POST') {
-    return res.status(405).json({ success: false, error: 'Method Not Allowed' })
-  }
-
+  // Ambil username dan password dari body request
   const { username, password } = req.body
 
+  // Validasi input dasar
   if (!username || !password) {
-    console.warn('⚠️ [Vercel Login] Username or password missing in request body')
+    console.warn('⚠️ [Vercel Login] Missing username or password in request body.')
+    // Jangan kirim detail error spesifik ke frontend demi keamanan
     return res.status(400).json({ success: false, error: 'Username dan password harus diisi.' })
   }
 
   try {
-    const doc = await openDoc() // Otentikasi dengan Service Account
-    const userSheet = getSheet(doc, 'users') // Ganti 'users' jika nama sheet Anda berbeda
-    console.log(`👀 [Vercel Login] Reading users sheet for username: ${username}`)
-    const rows = await userSheet.getRows()
+    const doc = await openUserDoc()
+    // Gunakan alias 'users' atau nama sheet 'users_credentials' langsung
+    // Sesuaikan 'users' jika Anda tidak menggunakan alias
+    const userSheet = await getSheet(doc, 'users')
+    console.log(`✅ [Vercel Login] Accessed sheet: ${userSheet.title}`)
 
-    // Cari user berdasarkan username (case-insensitive)
+    // Muat header untuk memastikan nama kolom benar
+    await userSheet.loadHeaderRow()
+    const headers = userSheet.headerValues
+    console.log('✅ [Vercel Login] Sheet headers:', headers)
+
+    // --- SESUAIKAN NAMA KOLOM DI SINI ---
+    const usernameHeader = 'login_username' // Nama kolom username di sheet Anda
+    const passwordHeader = 'login_pwd' // Nama kolom password di sheet Anda
+    const nameHeader = 'name' // Nama kolom untuk nama lengkap (OPSIONAL)
+    const roleHeader = 'role' // Nama kolom untuk peran (OPSIONAL)
+    // --- AKHIR PENYESUAIAN NAMA KOLOM ---
+
+    if (!headers.includes(usernameHeader) || !headers.includes(passwordHeader)) {
+      console.error(
+        `❌ [Vercel Login] Missing required columns (${usernameHeader} or ${passwordHeader}) in sheet "${userSheet.title}"`
+      )
+      // Jangan kirim detail error internal ke frontend
+      return res.status(500).json({ success: false, error: 'Kesalahan konfigurasi server.' })
+    }
+
+    // Ambil semua baris data user
+    const rows = await userSheet.getRows()
+    console.log(`ℹ️ [Vercel Login] Found ${rows.length} user rows.`)
+
+    // Cari user berdasarkan username (case-insensitive trim)
+    const trimmedUsernameLower = username.trim().toLowerCase()
     const userRow = rows.find(
-      (row) => row.get('username')?.toLowerCase() === username.toLowerCase()
+      (row) => row.get(usernameHeader)?.trim().toLowerCase() === trimmedUsernameLower
     )
 
-    if (!userRow) {
-      console.log(`❌ [Vercel Login] User not found: ${username}`)
-      return res.status(401).json({ success: false, error: 'Username atau password salah.' })
-    }
+    if (userRow) {
+      const foundUsername = userRow.get(usernameHeader) // Dapatkan username asli dari sheet
+      console.log(`👤 [Vercel Login] User found: ${foundUsername}`)
 
-    const storedPassword = userRow.get('password') // Ambil password dari sheet
+      // --- PERINGATAN KEAMANAN ---
+      // Perbandingan password plain text sangat tidak aman untuk produksi!
+      // Seharusnya password di-hash saat disimpan dan dibandingkan hash-nya saat login.
+      // --- AKHIR PERINGATAN ---
+      const storedPassword = userRow.get(passwordHeader)
 
-    // --- PERBANDINGAN PASSWORD (PLAIN TEXT - TIDAK AMAN!) ---
-    // Di produksi, Anda HARUS menggunakan hashing (misal: bcrypt.compare)
-    if (password === storedPassword) {
-      // Login Berhasil
-      const userData = {
-        name: userRow.get('name') || username, // Ambil nama, fallback ke username
-        role: userRow.get('role') || 'user' // Ambil role, fallback ke 'user'
+      if (storedPassword === password) {
+        console.log(`✅ [Vercel Login] Password match for user: ${foundUsername}`)
+        // Login berhasil
+        // Ambil nama dari kolom 'name', fallback ke username jika tidak ada kolom 'name' atau kosong
+        const userName =
+          headers.includes(nameHeader) && userRow.get(nameHeader)
+            ? userRow.get(nameHeader)
+            : foundUsername
+        const userRole = headers.includes(roleHeader) ? userRow.get(roleHeader) : undefined // Ambil role jika ada
+
+        // Kirim respons sukses ke frontend
+        return res.status(200).json({ success: true, name: userName, role: userRole })
+      } else {
+        console.warn(`🔑 [Vercel Login] Password mismatch for user: ${foundUsername}`)
+        // Jangan beri tahu penyerang apakah username atau password yang salah
+        return res.status(401).json({ success: false, error: 'Username atau password salah.' })
       }
-      console.log(`✅ [Vercel Login] Login successful for: ${username}, Name: ${userData.name}`)
-      return res.status(200).json({ success: true, ...userData })
     } else {
-      // Password Salah
-      console.log(`❌ [Vercel Login] Incorrect password for: ${username}`)
+      console.warn(`❓ [Vercel Login] User not found: ${username}`)
+      // Jangan beri tahu penyerang apakah username atau password yang salah
       return res.status(401).json({ success: false, error: 'Username atau password salah.' })
     }
-    // --- AKHIR PERBANDINGAN PASSWORD ---
   } catch (err) {
-    console.error('💥 [Vercel Login] ERROR in handleLoginUser:', err.message, err.stack)
+    console.error('💥 [Vercel Login] ERROR:', err.message, err.stack)
+    // Jangan kirim detail error internal ke frontend
     // @ts-ignore
     return res
       .status(500)
-      .json({ success: false, error: 'Internal Server Error during login', details: err.message })
+      .json({
+        success: false,
+        error: 'Terjadi kesalahan pada server saat login.',
+        details: err.message
+      })
   }
 }
 

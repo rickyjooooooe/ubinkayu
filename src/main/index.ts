@@ -6,6 +6,7 @@ import fs from 'fs'
 
 import {
   testSheetConnection,
+  handleLoginUser,
   saveNewPO,
   listPOs,
   deletePO,
@@ -62,7 +63,10 @@ app.whenReady().then(() => {
     const data = await listPOs();
     // Lakukan pembersihan objek di sini sebelum dikirim balik:
     return JSON.parse(JSON.stringify(data));
-});
+  });
+  ipcMain.handle('login-user', async (event, loginData) => {
+    return await handleLoginUser(loginData)
+  })
   ipcMain.handle('po:save', async (_event, data) => saveNewPO(data))
   ipcMain.handle('po:delete', async (_event, poId) => deletePO(poId))
   ipcMain.handle('po:update', async (_event, data) => updatePO(data))

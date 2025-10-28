@@ -15,6 +15,7 @@ const pipeline = promisify(stream.pipeline)
 // =================================================================
 
 const SPREADSHEET_ID = '1Bp5rETvaAe9nT4DrNpm-WsQqQlPNaau4gIzw1nA5Khk'
+const USER_SPREADSHEET_ID = '1nNk-49aah-dWuEoVwMiU40BXek3slHyvzIgIXOAgE6Q'
 export const PO_ARCHIVE_FOLDER_ID = '1-1Gw1ay4iQoFNFe2KcKDgCwOIi353QEC'
 export const PROGRESS_PHOTOS_FOLDER_ID = '1UfUQoqNBSsth9KzGRUmjenwegmsA6hbK'
 
@@ -96,11 +97,19 @@ export async function openDoc() {
   return doc
 }
 
+export async function openUserDoc() {
+  const auth = getAuth() // Memakai getAuth Vercel
+  const doc = new GoogleSpreadsheet(USER_SPREADSHEET_ID, auth) // Pakai ID User
+  await doc.loadInfo()
+  return doc
+}
+
 const ALIASES = {
   purchase_orders: ['purchase_orders', 'purchase_order'],
   purchase_order_items: ['purchase_order_items', 'po_items'],
   product_master: ['product_master', 'products'],
-  progress_tracking: ['purchase_order_items_progress', 'progress']
+  progress_tracking: ['purchase_order_items_progress', 'progress'],
+  users: ['users_credentials', 'users']
 }
 
 // Fungsi untuk mendapatkan sheet berdasarkan alias

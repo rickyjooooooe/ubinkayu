@@ -10,6 +10,8 @@ const api = {
   getProducts: () => ipcRenderer.invoke('product:get'),
   addNewProduct: (data) => ipcRenderer.invoke('product:add', data),
 
+  loginUser: (loginData) => ipcRenderer.invoke('login-user', loginData),
+
   // --- Fungsi CRUD untuk Purchase Order (PO) ---
   saveNewPO: (data) => ipcRenderer.invoke('po:save', data),
   listPOs: () => ipcRenderer.invoke('po:list'),

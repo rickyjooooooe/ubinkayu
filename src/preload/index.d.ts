@@ -2,6 +2,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 interface ICustomAPI {
+  // --- [BARU] Fungsi Login & Autentikasi ---
+  loginUser: (data: any) => Promise<{
+    success: boolean;
+    name?: string;
+    role?: string;
+    error?: string;
+    details?: string;
+  }>;
+
   // Fungsi PO & Produk
   getProducts: () => Promise<any[]>;
   saveNewPO: (data: any) => Promise<{ success: boolean; poId?: string; error?: string }>;

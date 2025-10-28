@@ -45,20 +45,35 @@ function createApiEndpoint(action, params = {}) {
 }
 
 export async function loginUser(username, password) {
-  // Login SELALU melalui Vercel API, tidak perlu cek window.api
-  console.log(
-    `%cAPI SERVICE: Attempting login for ${username} via Vercel`,
-    'color: blue; font-weight: bold;'
-  )
-  // Gunakan fetchAPI. Endpointnya tidak perlu '?action=loginUser' jika kita tentukan path spesifik
-  // Tapi kita tetap pakai action agar konsisten dengan router
-  return fetchAPI(createApiEndpoint('loginUser'), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ username, password })
-  })
+  const loginData = { username, password }
+
+  // 1. Cek apakah kita sedang berjalan di Electron
+  if (window.api && window.api.loginUser) {
+    console.log('Using Electron login path (window.api)')
+    // Memanggil fungsi login dari sheet.js (via main.js & preload.js)
+    return await window.api.loginUser(loginData)
+  }
+
+  // 2. Jika tidak, kita asumsikan sedang di Web (Vercel)
+  // Gunakan fetch untuk memanggil Vercel API
+  try {
+    console.log('Using Web/Vercel API login path (fetch)')
+
+    // GANTI '/api/login' jika URL Vercel Anda berbeda
+    const response = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(loginData)
+    })
+
+    // Kembalikan JSON dari Vercel (baik sukses maupun error)
+    // LoginPage.tsx akan menangani logikanya
+    return await response.json()
+  } catch (networkError) {
+    // Ini untuk error jaringan (misal Vercel down atau tidak ada internet)
+    console.error('Network error during Vercel login:', networkError)
+    return { success: false, error: 'Koneksi ke server login gagal.' }
+  }
 }
 
 // --- Fungsi CRUD untuk Purchase Order (PO) ---

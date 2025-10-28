@@ -183,3 +183,139 @@
     cursor: not-allowed;
   }
 }
+
+/* Tambahkan atau modifikasi style ini di file CSS Anda */
+
+.navbar-actions {
+  display: flex;         /* 1. Jadikan container ini flexbox */
+  align-items: center;    /* 2. Sejajarkan item secara vertikal di tengah */
+  gap: 1rem;            /* 3. Beri jarak 1rem antar item (sapaan, tombol refresh, tombol logout) */
+  margin-left: 1.5rem;   /* Jarak dari .navbar-links (sudah ada) */
+}
+
+/* Opsional: Style tambahan untuk sapaan agar lebih rapi */
+.user-greeting {
+  font-size: 0.9em;
+  color: var(--text-secondary); /* Warna abu-abu */
+  white-space: nowrap; /* Mencegah nama terpotong */
+}
+
+/* Opsional: Pastikan teks di dalam tombol tidak turun baris */
+.refresh-btn-text,
+.logout-btn-text {
+  margin-left: 0.4rem; /* Jarak antara ikon dan teks */
+}
+
+/* Pastikan tombol tidak terlalu besar jika perlu */
+.navbar-actions .btn {
+   padding: 0.4rem 0.9rem; /* Sesuaikan padding tombol jika perlu */
+   font-size: 0.85rem;
+}
+
+/* Kontainer pop-up */
+.more-menu-popup {
+  position: fixed; /* Tetap di layar saat scroll */
+  bottom: 0;      /* Mulai dari bawah */
+  left: 0;
+  width: 100%;
+  height: 100%;   /* Ambil seluruh layar untuk overlay */
+  z-index: 1010;  /* Di atas navbar bawah (z-index 1000) */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end; /* Dorong konten menu ke bawah */
+  pointer-events: none; /* Awalnya tidak bisa diklik */
+}
+
+/* Overlay gelap di belakang menu */
+.more-menu-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.4); /* Warna overlay */
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: auto; /* Overlay bisa diklik */
+  z-index: 1; /* Di bawah konten menu */
+}
+.more-menu-popup .more-menu-overlay {
+   opacity: 1; /* Tampilkan overlay saat menu aktif */
+}
+
+
+/* Konten menu yang sebenarnya */
+.more-menu-content {
+  background-color: white;
+  padding: 1rem;
+  border-top-left-radius: 12px; /* Sudut melengkung */
+  border-top-right-radius: 12px;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(100%); /* Mulai dari luar layar */
+  transition: transform 0.3s ease-out;
+  pointer-events: auto; /* Konten bisa diklik */
+  z-index: 2; /* Di atas overlay */
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem; /* Jarak antar item menu */
+}
+.more-menu-popup .more-menu-content {
+   transform: translateY(0); /* Munculkan menu */
+}
+
+
+/* Styling item/tombol di dalam menu */
+.more-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem; /* Jarak ikon dan teks */
+  padding: 0.8rem 1rem;
+  border: none;
+  background: none;
+  text-align: left;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  border-radius: 8px;
+  cursor: pointer;
+  width: 100%;
+  transition: background-color 0.2s ease;
+}
+
+.more-menu-item svg {
+  font-size: 1.3rem;
+  color: var(--text-secondary);
+}
+
+.more-menu-item:hover,
+.more-menu-item.active { /* Style saat hover atau aktif */
+  background-color: var(--secondary-color);
+  color: var(--primary-color);
+}
+.more-menu-item.active svg {
+    color: var(--primary-color);
+}
+
+
+/* Styling khusus tombol logout */
+.logout-item {
+  margin-top: 0.5rem; /* Beri jarak sedikit di atas logout */
+  border-top: 1px solid var(--border-color); /* Garis pemisah */
+  padding-top: 1rem;
+  color: #E53E3E; /* Warna merah untuk logout */
+}
+.logout-item svg {
+  color: #E53E3E;
+}
+.logout-item:hover {
+  background-color: #FFF5F5; /* Latar merah muda saat hover */
+}
+
+/* Sedikit style untuk tab "Lainnya" saat menu terbuka */
+.nav-link.more-open {
+  background-color: #f0f8ff; /* Warna latar aktif (sama seperti tab lain) */
+  color: #007bff;
+}
+.nav-link.more-open .nav-icon {
+   color: #007bff; /* Pastikan ikon juga berwarna */
+}

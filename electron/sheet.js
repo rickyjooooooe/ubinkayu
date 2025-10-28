@@ -10,6 +10,7 @@ import stream from 'node:stream'
 const SPREADSHEET_ID = '1Bp5rETvaAe9nT4DrNpm-WsQqQlPNaau4gIzw1nA5Khk'
 const PO_ARCHIVE_FOLDER_ID = '1-1Gw1ay4iQoFNFe2KcKDgCwOIi353QEC'
 const PROGRESS_PHOTOS_FOLDER_ID = '1UfUQoqNBSsth9KzGRUmjenwegmsA6hbK'
+const USER_SPREADSHEET_ID = '1nNk-49aah-dWuEoVwMiU40BXek3slHyvzIgIXOAgE6Q'
 
 const PRODUCTION_STAGES = [
   'Cari Bahan Baku',
@@ -80,6 +81,13 @@ async function openDoc() {
   return doc
 }
 
+async function openUserDoc() {
+  const auth = getAuth()
+  const doc = new GoogleSpreadsheet(USER_SPREADSHEET_ID, auth) // <- Ini pakai ID user
+  await doc.loadInfo()
+  return doc
+}
+
 function ensureDirSync(dirPath) {
   if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true })
 }
@@ -88,7 +96,8 @@ const ALIASES = {
   purchase_orders: ['purchase_orders', 'purchase_order'],
   purchase_order_items: ['purchase_order_items', 'po_items'],
   product_master: ['product_master', 'products'],
-  progress_tracking: ['purchase_order_items_progress', 'progress']
+  progress_tracking: ['purchase_order_items_progress', 'progress'],
+  users: ['users_credentials', 'users']
 }
 
 async function getSheet(doc, key) {
@@ -160,6 +169,90 @@ async function getLivePOItems(poId, doc) {
   const latest = await latestRevisionNumberForPO(poId, doc)
   if (latest < 0) return []
   return getItemsByRevision(poId, latest, doc)
+}
+
+export async function handleLoginUser(loginData) {
+  console.log('🏁 [Electron] handleLoginUser started!')
+  const { username, password } = loginData
+
+  // Validasi input dasar
+  if (!username || !password) {
+    console.warn('⚠️ [Electron Login] Missing username or password.')
+    // Ganti res.json -> return object
+    return { success: false, error: 'Username dan password harus diisi.' }
+  }
+
+  try {
+    const doc = await openUserDoc() // Ini akan memanggil openDoc() milik Electron
+    const userSheet = await getSheet(doc, 'users') // Ini memanggil alias 'users' yang baru
+    console.log(`✅ [Electron Login] Accessed sheet: ${userSheet.title}`)
+
+    // Muat header
+    await userSheet.loadHeaderRow()
+    const headers = userSheet.headerValues
+    console.log('✅ [Electron Login] Sheet headers:', headers)
+
+    // --- SESUAIKAN NAMA KOLOM DI SINI (sudah sama) ---
+    const usernameHeader = 'login_username'
+    const passwordHeader = 'login_pwd'
+    const nameHeader = 'name'
+    const roleHeader = 'role'
+    // --- AKHIR PENYESUAIAN NAMA KOLOM ---
+
+    if (!headers.includes(usernameHeader) || !headers.includes(passwordHeader)) {
+      console.error(
+        `❌ [Electron Login] Missing required columns (${usernameHeader} or ${passwordHeader}) in sheet "${userSheet.title}"`
+      )
+      // Ganti res.json -> return object
+      return { success: false, error: 'Kesalahan konfigurasi sheet.' }
+    }
+
+    // Ambil semua baris data user
+    const rows = await userSheet.getRows()
+    console.log(`ℹ️ [Electron Login] Found ${rows.length} user rows.`)
+
+    // Cari user
+    const trimmedUsernameLower = username.trim().toLowerCase()
+    const userRow = rows.find(
+      (row) => row.get(usernameHeader)?.trim().toLowerCase() === trimmedUsernameLower
+    )
+
+    if (userRow) {
+      const foundUsername = userRow.get(usernameHeader)
+      console.log(`👤 [Electron Login] User found: ${foundUsername}`)
+
+      const storedPassword = userRow.get(passwordHeader)
+
+      if (storedPassword === password) {
+        console.log(`✅ [Electron Login] Password match for user: ${foundUsername}`)
+        // Login berhasil
+        const userName =
+          headers.includes(nameHeader) && userRow.get(nameHeader)
+            ? userRow.get(nameHeader)
+            : foundUsername
+        const userRole = headers.includes(roleHeader) ? userRow.get(roleHeader) : undefined
+
+        // Ganti res.json -> return object
+        return { success: true, name: userName, role: userRole }
+      } else {
+        console.warn(`🔑 [Electron Login] Password mismatch for user: ${foundUsername}`)
+        // Ganti res.json -> return object
+        return { success: false, error: 'Username atau password salah.' }
+      }
+    } else {
+      console.warn(`❓ [Electron Login] User not found: ${username}`)
+      // Ganti res.json -> return object
+      return { success: false, error: 'Username atau password salah.' }
+    }
+  } catch (err) {
+    console.error('💥 [Electron Login] ERROR:', err.message, err.stack)
+    // Ganti res.json -> return object
+    return {
+      success: false,
+      error: 'Terjadi kesalahan pada server saat login.',
+      details: err.message
+    }
+  }
 }
 
 async function generateAndUploadPO(poData, revisionNumber) {
