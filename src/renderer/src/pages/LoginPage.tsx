@@ -6,11 +6,19 @@ import * as apiService from '../apiService' // Asumsi path apiService benar
 
 // Tipe data yang diharapkan saat login sukses
 interface LoginSuccessResponse {
-  success: boolean
+  success: true // <-- Jadi true
   name: string
-  x
   role?: string // Opsional
 }
+
+// Tipe data yang diharapkan saat login gagal
+interface LoginErrorResponse {
+  success: false // <-- Jadi false
+  error: string
+}
+
+// Tipe gabungan untuk hasil dari API
+type LoginResponse = LoginSuccessResponse | LoginErrorResponse
 
 interface LoginPageProps {
   onLoginSuccess: (userData: { name: string; role?: string }) => void // Callback ke App.tsx
@@ -23,7 +31,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [isLoading, setIsLoading] = useState(false)
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault() // Mencegah reload halaman
+    e.preventDefault()
     setError(null)
     setIsLoading(true)
 
@@ -34,15 +42,23 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     }
 
     try {
-      // Panggil API backend Vercel (buat fungsi loginUser di apiService)
-      const result: LoginSuccessResponse = await apiService.loginUser(username, password)
+      // Panggil API backend Vercel
+      // Beri tipe gabungan pada hasil
+      const result: LoginResponse = await apiService.loginUser(username, password)
 
-      if (result && result.success) {
-        // Panggil callback untuk memberitahu App.tsx bahwa login berhasil
+      // Periksa 'success' untuk menentukan tipe hasil
+      if (result && result.success === true) {
+        // Cek spesifik true
+        // Login berhasil, panggil callback
         onLoginSuccess({ name: result.name, role: result.role })
-      } else {
-        // Asumsi backend mengembalikan error jika gagal
+      } else if (result && result.success === false) {
+        // Cek spesifik false
+        // Login gagal, gunakan pesan error dari backend
         setError(result.error || 'Username atau password salah.')
+      } else {
+        // Respons tidak terduga
+        console.error('Unexpected login response structure:', result)
+        setError('Respons login tidak valid dari server.')
       }
     } catch (err) {
       console.error('Login error:', err)
@@ -57,6 +73,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       <Card>
         <h1 style={{ textAlign: 'center', marginBottom: '1.5rem' }}>Login ERP Ubinkayu</h1>
         <form onSubmit={handleLogin}>
+          {/* ... Input username dan password (tidak berubah) ... */}
           <Input
             label="Username"
             type="text"
@@ -94,6 +111,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           </Button>
         </form>
       </Card>
+      {/* ... Peringatan (tidak berubah) ... */}
       <p style={{ marginTop: '1rem', textAlign: 'center', fontSize: '0.8em', color: '#888' }}>
         Hanya login, tidak ada registrasi. Hubungi admin untuk akses.
       </p>
