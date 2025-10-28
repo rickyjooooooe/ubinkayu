@@ -5,12 +5,12 @@ import * as Controller from './_controller.js'
 
 export default async function handler(req, res) {
   // --- TAMBAHKAN LOG INI ---
-  console.log(`🚀 [Vercel Index] Request received for URL: ${req.url}`);
+  console.log(`🚀 [Vercel Index] Request received for URL: ${req.url}`)
   // --- AKHIR TAMBAHAN ---
 
-  const { action } = req.query;
+  const { action } = req.query
   // --- TAMBAHKAN LOG INI ---
-  console.log(`⚡️ [Vercel Index] Action extracted: ${action}`);
+  console.log(`⚡️ [Vercel Index] Action extracted: ${action}`)
 
   try {
     switch (action) {
@@ -68,8 +68,9 @@ export default async function handler(req, res) {
 
       case 'addNewProduct':
         return await Controller.handleAddNewProduct(req, res)
-      case 'ollamaChat':
-        return await Controller.handleOllamaChat(req, res)
+      case 'ollamaChat': // Nama action tetap sama (sesuai apiService.js)
+        console.log('🚦 [Vercel Index] Routing to handleAiChat (Hugging Face)...')
+        return await Controller.handleAiChat(req, res)
 
       default:
         return res.status(404).json({ error: 'Action not found' })

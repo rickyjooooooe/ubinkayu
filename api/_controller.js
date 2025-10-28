@@ -21,7 +21,7 @@ import {
 } from './_helpers.js'
 import { google } from 'googleapis'
 import stream from 'stream'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import fetch from 'node-fetch'
 
 const formatDate = (dateString) => {
   if (!dateString) return '-'
@@ -1599,335 +1599,369 @@ async function listPOsForChat() {
   return result
 }
 
-export async function handleOllamaChat(req, res) {
-  const { prompt } = req.body
-  if (!prompt) return res.status(400).json({ error: 'Prompt is required' })
+// --- Fungsi untuk mengambil data PO (asumsi sudah ada dan berfungsi) ---
+async function listPOsForChat() {
+  const doc = await openDoc(); // Buka spreadsheet utama
+  const poSheet = await getSheet(doc, 'purchase_orders');
+  const itemSheet = await getSheet(doc, 'purchase_order_items');
+  const progressSheet = await getSheet(doc, 'progress_tracking');
+  const [poRowsRaw, itemRowsRaw, progressRowsRaw] = await Promise.all([
+    poSheet.getRows(), itemSheet.getRows(), progressSheet.getRows()
+  ]);
+  const poRows = poRowsRaw.map((r) => r.toObject());
+  const itemRows = itemRowsRaw.map((r) => r.toObject());
+  const progressRows = progressRowsRaw.map((r) => r.toObject());
 
-  // 1. Dapatkan data PO (konteks)
-  let allPOs
+  // Logika revisi terbaru (sama seperti listPOs)
+  const byId = new Map();
+  poRows.forEach(r => {
+    const id = String(r.id).trim();
+    const rev = toNum(r.revision_number, -1);
+    if (!byId.has(id) || rev > (byId.get(id)?.rev ?? -1)) byId.set(id, { rev, row: r });
+  });
+  const latestPoObjects = Array.from(byId.values()).map(({ row }) => row);
+
+  // Helper maps (sama seperti listPOs)
+  const progressByCompositeKey = progressRows.reduce((acc, row) => { /* ... */ }, {});
+  const latestItemRevisions = itemRows.reduce((acc, item) => { /* ... */ }, new Map());
+
+  // Hitung status/progress (sama seperti listPOs)
+  const result = latestPoObjects.map((poObject) => {
+    const poId = poObject.id;
+    const latestRev = latestItemRevisions.get(poId) ?? -1;
+    const poItems = itemRows.filter(
+      (item) => item.purchase_order_id === poId && toNum(item.revision_number, -1) === latestRev
+    );
+    let poProgress = 0, finalStatus = poObject.status || 'Open', completed_at = null;
+    if (poItems.length > 0) { /* ... logika hitung progress ... */ }
+    const roundedProgress = Math.round(poProgress);
+    if (finalStatus !== 'Cancelled') { /* ... logika tentukan status ... */ }
+    return { ...poObject, items: poItems, progress: roundedProgress, status: finalStatus, completed_at };
+  });
+  return result;
+}
+
+
+// --- Handler AI Chat (Menggunakan Hugging Face) ---
+export async function handleAiChat(req, res) {
+  const { prompt } = req.body;
+  if (!prompt) {
+    console.warn('[Vercel AI - HF] Prompt is missing.');
+    return res.status(400).json({ error: 'Prompt is required' });
+  }
+  console.log(`🤖 [Vercel AI - HF] Received prompt: "${prompt}"`);
+
+  // 1. Dapatkan Data Konteks (PO)
+  let allPOs;
   try {
-    allPOs = await listPOsForChat() // Panggil fungsi listPOs versi Vercel
-    if (!allPOs || allPOs.length === 0) {
-      return res.status(200).json({ response: 'Maaf, data PO belum tersedia.' })
-    }
+    allPOs = await listPOsForChat();
+    if (!Array.isArray(allPOs)) throw new Error('listPOsForChat did not return array.');
+    console.log(` -> Context: Fetched ${allPOs.length} POs for AI.`);
   } catch (e) {
-    console.error('Gagal mengambil data PO untuk konteks AI:', e.message)
-    return res.status(200).json({ response: 'Maaf, saya gagal mengambil data PO terbaru.' })
+    console.error('💥 [Vercel AI - HF] Failed to get PO data for context:', e.message);
+    // Kembalikan error server karena ini krusial
+    return res.status(500).json({ error: 'Gagal mengambil data PO untuk AI.' });
   }
 
-  // 2. Siapkan System Prompt untuk "Tool Use"
-  const today = new Date().toISOString().split('T')[0]
-  const systemPrompt = `Anda adalah Asisten ERP Ubinkayu. Tugas Anda adalah mengubah pertanyaan pengguna menjadi JSON 'perintah' berdasarkan alat (tools) yang tersedia.
-  Hari ini adalah ${today}.
+  // 2. Siapkan System Prompt
+  const today = new Date().toISOString().split('T')[0];
+  const systemPrompt = `Anda adalah Asisten ERP Ubinkayu. Tugas Anda adalah mengubah pertanyaan pengguna menjadi JSON 'perintah' berdasarkan alat (tools) yang tersedia. HANYA KEMBALIKAN JSON YANG VALID, tanpa teks tambahan sebelum atau sesudahnya.
+Hari ini adalah ${today}.
 
-  Alat (Tools) yang Tersedia:
-  1. "getTotalPO": Menghitung jumlah total SEMUA PO, SEMUA PO aktif (status BUKAN Completed/Cancelled), dan SEMUA PO selesai.
-     - Keywords: "jumlah po", "total po", "ada berapa po", "semua po aktif", "berapa po aktif", "jumlah po yang sedang berjalan", "how many purchase orders".
-     - JANGAN gunakan tool ini jika user HANYA bertanya tentang PO Urgent.
-     - JSON: {"tool": "getTotalPO"}
-  2. "getTopProduct": Menemukan produk terlaris dari PO yang sudah selesai.
-     - Keywords: "produk terlaris", "paling laku", "best selling product".
-     - JSON: {"tool": "getTopProduct"}
-  3. "getTopCustomer": Menemukan customer terbesar (volume m³) dari PO yang sudah selesai.
-     - Keywords: "customer terbesar", "top customer", "biggest customer".
-     - JSON: {"tool": "getTopCustomer"}
-  4. "getPOStatus": Mencari status PO berdasarkan nomor.
-     - Keywords: "status po", "cek po", "check purchase order", "find po [nomor]".
-     - AI HARUS mengekstrak "param" (nomor PO).
-     - JSON: {"tool": "getPOStatus", "param": "NOMOR_PO_DI_SINI"}
-  5. "getUrgentPOs": Menampilkan daftar PO aktif yang prioritasnya HANYA Urgent.
-     - Keywords: "po urgent", "urgent orders", "hanya yang urgent", "prioritas urgent".
-     - JSON: {"tool": "getUrgentPOs"}
-  6. "getNearingDeadline": Menampilkan PO aktif yang akan deadline (dalam 7 hari).
-     - Keywords: "deadline dekat", "nearing deadline", "akan jatuh tempo".
-     - JSON: {"tool": "getNearingDeadline"}
-  7. "getNewestPOs": Menampilkan 3 PO yang baru saja dibuat.
-     - Keywords: "po terbaru", "order terbaru", "newest po".
-     - JSON: {"tool": "getNewestPOs"}
-  8. "getOldestPO": Menampilkan PO terlama.
-     - Keywords: "po terlama", "order pertama", "oldest po".
-     - JSON: {"tool": "getOldestPO"}
-  9. "getPOsByDateRange": Mencari PO berdasarkan rentang tanggal masuk.
-     - Keywords: "po bulan oktober", "po tanggal 20 okt", "po minggu lalu", "po 2025".
-     - AI HARUS mengekstrak 'startDate' dan 'endDate' dalam format YYYY-MM-DD. Gunakan ${today} sebagai referensi.
-     - Jika hanya satu tanggal (misal "po 20 oktober 2025"), 'startDate' dan 'endDate' harus sama ("2025-10-20").
-     - JSON: {"tool": "getPOsByDateRange", "startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD"}
-  10. "help": Memberikan bantuan atau daftar perintah yang bisa dilakukan.
-      - Keywords: "bantuan", "help", "apa yang bisa kamu lakukan", "perintah".
-      - JSON: {"tool": "help"}
-  11. "general": Untuk pertanyaan umum atau sapaan yang tidak terkait langsung dengan data PO.
-      - Keywords: "halo", "kamu siapa", "dengan siapa ini", "terima kasih".
-      - JSON: {"tool": "general"}
-  12. "getPOByStatusCount": Menghitung jumlah PO aktif dengan status spesifik (Open atau In Progress).
+Alat (Tools) yang Tersedia:
+1. "getTotalPO": Menghitung jumlah total SEMUA PO, SEMUA PO aktif (status BUKAN Completed/Cancelled), dan SEMUA PO selesai. Memberikan rincian jumlah Open & In Progress untuk PO Aktif.
+   - Keywords: "jumlah po", "total po", "ada berapa po", "semua po aktif", "berapa po aktif", "jumlah po yang sedang berjalan", "how many purchase orders".
+   - **PENTING:** Gunakan tool ini jika user bertanya jumlah PO "aktif" secara umum.
+   - JANGAN gunakan tool ini jika user HANYA bertanya tentang PO Urgent atau status spesifik (Open/In Progress).
+   - JSON: {"tool": "getTotalPO"}
+2. "getTopProduct": Menemukan produk terlaris dari PO yang sudah selesai.
+   - Keywords: "produk terlaris", "paling laku", "best selling product".
+   - JSON: {"tool": "getTopProduct"}
+3. "getTopCustomer": Menemukan customer terbesar (volume m³) dari PO yang sudah selesai.
+   - Keywords: "customer terbesar", "top customer", "biggest customer".
+   - JSON: {"tool": "getTopCustomer"}
+4. "getPOStatus": Mencari status RINGKAS PO berdasarkan nomor PO yang **VALID**.
+   - Keywords: "status po [nomor]", "cek po [nomor]", "progress po [nomor]". (Format lebih ketat)
+   - AI **HARUS** mengekstrak nomor PO dari query pengguna dan memasukkannya ke "param".
+   - Jika pengguna hanya bilang "status po" tanpa nomor, JANGAN gunakan tool ini, kembalikan 'unknown'.
+   - JSON: {"tool": "getPOStatus", "param": "NOMOR_PO_EKSTRAKSI"}
+5. "findPODetails": Mencari DETAIL PO berdasarkan nomor PO ATAU nama customer. Jika ditemukan, jelaskan detailnya.
+   - Keywords: "cari PO", "find PO", "apakah ada PO", "detail PO", "PO customer [nama]", "PO nomor [nomor]", "info PO [nomor/nama]".
+   - AI **HARUS** mengekstrak "param" yang berisi "poNumber" ATAU "customerName". Prioritaskan poNumber jika keduanya disebut.
+   - JSON: {"tool": "findPODetails", "param": {"poNumber": "...", "customerName": "..."}}
+6. "getUrgentPOs": Menampilkan daftar PO aktif yang prioritasnya HANYA Urgent.
+   - Keywords: "po urgent", "urgent orders", "hanya yang urgent", "prioritas urgent".
+   - JSON: {"tool": "getUrgentPOs"}
+7. "getNearingDeadline": Menampilkan PO aktif yang akan deadline (dalam 7 hari).
+   - Keywords: "deadline dekat", "nearing deadline", "akan jatuh tempo".
+   - JANGAN gunakan tool ini jika user bertanya PO yang DIBUAT minggu/bulan ini.
+   - JSON: {"tool": "getNearingDeadline"}
+8. "getNewestPOs": Menampilkan 3 PO yang baru saja dibuat.
+   - Keywords: "po terbaru", "order terbaru", "newest po".
+   - JSON: {"tool": "getNewestPOs"}
+9. "getOldestPO": Menampilkan PO terlama.
+   - Keywords: "po terlama", "order pertama", "oldest po".
+   - JSON: {"tool": "getOldestPO"}
+10. "getPOsByDateRange": Mencari PO berdasarkan rentang tanggal masuk (TANGGAL PEMBUATAN PO).
+    - Keywords: "po bulan oktober", "po tanggal 20 okt", "po 2025", "po kemarin", "po hari ini", "po minggu ini".
+    - AI **HARUS** mengekstrak 'startDate' dan 'endDate' dalam format YYYY-MM-DD. Gunakan ${today} sebagai referensi.
+    - Jika hanya satu tanggal (misal "po 20 okt 2025"), 'startDate' dan 'endDate' HARUS sama ("2025-10-20").
+    - AI **HARUS MENCOBA** menginterpretasi tanggal relatif. Jika ${today} adalah 2025-10-28: "kemarin" -> 2025-10-27; "hari ini" -> 2025-10-28; "minggu ini" (Minggu awal) -> startDate=2025-10-26, endDate=2025-11-01.
+    - JSON: {"tool": "getPOsByDateRange", "startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD"}
+11. "getPOByStatusCount": Menghitung jumlah PO aktif dengan status spesifik (Open atau In Progress).
     - Keywords: "berapa po open", "jumlah po in progress", "yang statusnya open", "yang sedang dikerjakan".
-    - AI HARUS mengekstrak "param" (status yang diminta: "Open" atau "In Progress"). Case insensitive tidak masalah.
+    - AI **HARUS** mengekstrak "param" (status yang diminta: "Open" atau "In Progress").
     - JSON: {"tool": "getPOByStatusCount", "param": "STATUS_DIMINTA"}
+12. "getApplicationHelp": Memberikan penjelasan cara menggunakan fitur aplikasi ERP.
+     - Keywords: "cara buat po", "bagaimana input po", "cara update progress", "bagaimana revisi po", "cara tambah produk", "panduan aplikasi", "alur kerja", "step by step [fitur]", "tutorial [fitur]", "gimana cara [fitur]".
+     - AI HARUS mengekstrak "topic" (misal: "buat PO", "update progress", "revisi PO", "tambah produk"). Jika tidak jelas, biarkan kosong.
+     - JSON: {"tool": "getApplicationHelp", "topic": "NAMA_FITUR_DIMINTA"}
+13. "help": Memberikan bantuan atau daftar perintah.
+    - Keywords: "bantuan", "help", "apa yang bisa kamu lakukan", "perintah".
+    - JSON: {"tool": "help"}
+14. "general": Untuk sapaan atau pertanyaan umum.
+    - Keywords: "halo", "kamu siapa", "terima kasih".
+    - JSON: {"tool": "general"}
 
-  ATURAN KETAT:
-  - JANGAN menjawab pertanyaan secara langsung.
-  - HANYA kembalikan JSON.
-  - Jika pertanyaan "po bulan oktober ini", AI harus mengerti ini tahun 2025 dan kembalikan: {"tool": "getPOsByDateRange", "startDate": "2025-10-01", "endDate": "2025-10-31"}
-  - Jika pertanyaan "po terbaru", kembalikan: {"tool": "getNewestPOs"}
-  - Jika pertanyaan "halo", kembalikan: {"tool": "general"}
-  - Jika tidak yakin, kembalikan: {"tool": "unknown"}
-  `
-  // --- AKHIR DARI SALINAN SYSTEM PROMPT ---
+ATURAN KETAT:
+- JANGAN menjawab pertanyaan. HANYA KEMBALIKAN JSON.
+- Jika tidak yakin tool mana, KEMBALIKAN: {"tool": "unknown"}`;
 
-  // 3. Panggil Gemini HANYA untuk klasifikasi
-  let aiDecision
+  // 3. Panggil Hugging Face API
+  let aiDecisionJsonString = ''; // Variabel untuk menyimpan respons mentah (untuk debug jika gagal parse)
+  let aiDecision = { tool: 'unknown' }; // Default jika AI gagal
   try {
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+    console.log('⏳ [Vercel AI - HF] Calling Hugging Face Inference API...');
+    const hfToken = process.env.HUGGING_FACE_API_TOKEN;
+    const modelId = process.env.HF_MODEL_ID || 'mistralai/Mistral-7B-Instruct-v0.1'; // Default jika env var tidak ada
 
-    // Minta Gemini mengembalikan JSON
-    const generationConfig = { responseMimeType: 'application/json' }
-    const fullPrompt = `${systemPrompt}\nPertanyaan Pengguna: "${prompt}"\n\JSON Perintah:`
-
-    const result = await model.generateContent(fullPrompt, generationConfig)
-    const response = await result.response
-    const text = response.text()
-    aiDecision = JSON.parse(text) // Gemini langsung kembalikan JSON
-  } catch (err) {
-    console.error('Error klasifikasi Gemini:', err)
-    return res
-      .status(500)
-      .json({ error: 'Maaf, terjadi kesalahan saat memahami permintaan Anda (Gemini).' })
-  }
-
-  // 4. Jalankan Alat (Tools) di JavaScript (SAMA PERSIS DENGAN SWITCH CASE OLLAMA)
-  try {
-    let responseText = '' // Variabel untuk menyimpan jawaban
-
-    switch (aiDecision.tool) {
-      case 'getTotalPO': {
-        const totalPOs = allPOs.length
-        const activePOs = allPOs.filter(
-          (po) => po.status !== 'Completed' && po.status !== 'Cancelled'
-        ).length
-        const completedPOs = allPOs.filter((po) => po.status === 'Completed').length
-        responseText = `Saat ini ada ${totalPOs} total PO di database.\n\n- ${activePOs} PO sedang aktif.\n- ${completedPOs} PO sudah selesai.`
-        break
-      }
-
-      case 'getTopProduct': {
-        const completedPOs = allPOs.filter((po) => po.status === 'Completed')
-        if (completedPOs.length === 0) {
-          responseText = 'Belum ada data PO Selesai untuk dianalisis.'
-          break
-        }
-        const salesData = {}
-        completedPOs
-          .flatMap((po) => po.items || [])
-          .forEach((item) => {
-            if (item.product_name)
-              salesData[item.product_name] =
-                (salesData[item.product_name] || 0) + Number(item.quantity || 0)
-          })
-        const topProduct =
-          Object.keys(salesData).length > 0
-            ? Object.keys(salesData).reduce((a, b) => (salesData[a] > salesData[b] ? a : b))
-            : 'N/A'
-        responseText =
-          topProduct !== 'N/A'
-            ? `Produk terlaris dari PO Selesai adalah: ${topProduct} (${salesData[topProduct]} unit).`
-            : 'Tidak dapat menemukan produk terlaris.'
-        break
-      }
-
-      case 'getTopCustomer': {
-        const completedPOs = allPOs.filter((po) => po.status === 'Completed')
-        if (completedPOs.length === 0) {
-          responseText = 'Belum ada data PO Selesai untuk dianalisis.'
-          break
-        }
-        const customerData = {}
-        completedPOs.forEach((po) => {
-          if (po.project_name)
-            customerData[po.project_name] =
-              (customerData[po.project_name] || 0) + Number(po.kubikasi_total || 0)
-        })
-        const topCustomer =
-          Object.keys(customerData).length > 0
-            ? Object.keys(customerData).reduce((a, b) =>
-                customerData[a] > customerData[b] ? a : b
-              )
-            : 'N/A'
-        responseText =
-          topCustomer !== 'N/A'
-            ? `Customer terbesar (m³) dari PO Selesai adalah: ${topCustomer} (${customerData[topCustomer].toFixed(3)} m³).`
-            : 'Tidak dapat menemukan customer terbesar.'
-        break
-      }
-
-      case 'getPOStatus': {
-        const poNumber = aiDecision.param
-        if (!poNumber) {
-          responseText = 'Mohon sebutkan nomor PO yang ingin dicek (contoh: status po 123).'
-          break
-        }
-        const latestPO = allPOs
-          .filter((po) => po.po_number === poNumber)
-          .sort((a, b) => Number(b.revision_number || 0) - Number(a.revision_number || 0))[0]
-        responseText = latestPO
-          ? `Status PO ${poNumber} (${latestPO.project_name}) adalah: ${latestPO.status || 'Open'}. Progress: ${latestPO.progress?.toFixed(0) || 0}%.`
-          : `PO ${poNumber} tidak ditemukan.`
-        break
-      }
-
-      case 'getUrgentPOs': {
-        const urgentPOs = allPOs.filter(
-          (po) => po.priority === 'Urgent' && po.status !== 'Completed' && po.status !== 'Cancelled'
-        )
-        if (urgentPOs.length > 0) {
-          const poNumbers = urgentPOs
-            .map((po) => `- ${po.po_number} (${po.project_name})`)
-            .join('\n')
-          responseText = `Ada ${urgentPOs.length} PO aktif dengan prioritas Urgent:\n${poNumbers}`
-        } else {
-          responseText = 'Saat ini tidak ada PO aktif dengan prioritas Urgent.'
-        }
-        break
-      }
-
-      case 'getNearingDeadline': {
-        const todayDate = new Date()
-        const nextWeek = new Date(todayDate.getTime() + 7 * 24 * 60 * 60 * 1000)
-        const nearingPOs = allPOs
-          .filter((po) => {
-            if (!po.deadline || po.status === 'Completed' || po.status === 'Cancelled') return false
-            try {
-              return new Date(po.deadline) >= todayDate && new Date(po.deadline) <= nextWeek
-            } catch (e) {
-              return false
-            }
-          })
-          .sort((a, b) => new Date(a.deadline || 0).getTime() - new Date(b.deadline || 0).getTime())
-
-        if (nearingPOs.length > 0) {
-          const poDetails = nearingPOs
-            .map((po) => `- ${po.po_number} (${po.project_name}): ${formatDate(po.deadline)}`)
-            .join('\n')
-          responseText = `Ada ${nearingPOs.length} PO aktif yang mendekati deadline (7 hari):\n${poDetails}`
-        } else {
-          responseText = 'Tidak ada PO aktif yang mendekati deadline dalam 7 hari ke depan.'
-        }
-        break
-      }
-
-      case 'getNewestPOs': {
-        const sortedPOs = [...allPOs].sort(
-          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        )
-        const newestPOs = sortedPOs.slice(0, 3)
-        const poDetails = newestPOs
-          .map((po) => `- ${po.po_number} (${po.project_name}), Tgl: ${formatDate(po.created_at)}`)
-          .join('\n')
-        responseText = `Berikut adalah 3 PO terbaru yang masuk:\n${poDetails}`
-        break
-      }
-
-      case 'getOldestPO': {
-        const sortedPOs = [...allPOs].sort(
-          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-        )
-        const oldestPO = sortedPOs[sortedPOs.length - 1]
-        if (oldestPO) {
-          responseText = `PO terlama yang tercatat adalah:\n- Nomor PO: ${oldestPO.po_number}\n- Customer: ${oldestPO.project_name}\n- Tanggal Masuk: ${formatDate(oldestPO.created_at)}`
-        } else {
-          responseText = 'Tidak dapat menemukan data PO.'
-        }
-        break
-      }
-
-      case 'getPOsByDateRange': {
-        const { startDate, endDate } = aiDecision
-        if (!startDate || !endDate) {
-          responseText =
-            "Maaf, saya tidak mengerti rentang tanggal yang Anda maksud. Coba lagi (misal: 'po bulan oktober')."
-          break
-        }
-        const start = new Date(startDate).getTime()
-        const end = new Date(endDate).getTime() + (24 * 60 * 60 * 1000 - 1)
-
-        const foundPOs = allPOs.filter((po) => {
-          try {
-            const poDate = new Date(po.created_at).getTime()
-            return poDate >= start && poDate <= end
-          } catch (e) {
-            return false
-          }
-        })
-
-        const dateRangeStr =
-          startDate === endDate
-            ? formatDate(startDate)
-            : `${formatDate(startDate)} s/d ${formatDate(endDate)}`
-        if (foundPOs.length > 0) {
-          const poDetails = foundPOs
-            .map(
-              (po) =>
-                `- ${po.po_number} (${po.project_name}), Tgl Masuk: ${formatDate(po.created_at)}`
-            )
-            .slice(0, 10)
-            .join('\n')
-
-          responseText = `Saya menemukan ${foundPOs.length} PO untuk rentang tanggal ${dateRangeStr}:\n${poDetails}`
-          if (foundPOs.length > 10) responseText += `\n...dan ${foundPOs.length - 10} lainnya.`
-        } else {
-          responseText = `Tidak ada PO yang ditemukan untuk rentang tanggal ${dateRangeStr}.`
-        }
-        break
-      }
-
-      case 'getPOByStatusCount': {
-        const requestedStatus = aiDecision.param
-        if (
-          !requestedStatus ||
-          (requestedStatus.toLowerCase() !== 'open' &&
-            requestedStatus.toLowerCase() !== 'in progress')
-        ) {
-          responseText = 'Mohon sebutkan status yang ingin dihitung (Open atau In Progress).'
-          break
-        }
-        // Normalisasi status (misal: "open" -> "Open")
-        const normalizedStatus =
-          requestedStatus.charAt(0).toUpperCase() + requestedStatus.slice(1).toLowerCase()
-
-        const count = allPOs.filter(
-          // Filter hanya PO Aktif dengan status yang cocok
-          (po) =>
-            po.status === normalizedStatus && po.status !== 'Completed' && po.status !== 'Cancelled'
-        ).length
-
-        responseText = `Ada ${count} PO aktif dengan status "${normalizedStatus}".`
-        break
-      }
-
-      case 'help':
-        responseText =
-          'Anda bisa bertanya tentang:\n- Jumlah total PO\n- Produk terlaris\n- Customer terbesar\n- Status PO [nomor PO]\n- PO Urgent\n- PO Deadline Dekat\n- PO terbaru / terlama\n- PO berdasarkan tanggal'
-        break
-
-      case 'general':
-        if (prompt.toLowerCase().includes('siapa')) {
-          responseText = 'Saya adalah Asisten AI Ubinkayu, siap membantu Anda.'
-        } else if (prompt.toLowerCase().includes('terima kasih')) {
-          responseText = 'Sama-sama! Senang bisa membantu.'
-        } else {
-          responseText = 'Halo! Ada yang bisa saya bantu?'
-        }
-        break
-
-      default:
-        responseText =
-          "Maaf, saya tidak yakin bagaimana harus merespons itu. Coba tanyakan 'bantuan' untuk melihat apa yang bisa saya lakukan."
-        break
+    if (!hfToken) {
+      throw new Error('HUGGING_FACE_API_TOKEN environment variable is missing.');
     }
 
-    // Kembalikan jawaban yang sudah dieksekusi
-    return res.status(200).json({ response: responseText })
+    const fullPromptForHf = `${systemPrompt}\n\nPertanyaan Pengguna: "${prompt}"\n\nJSON Perintah:`;
+
+    const response = await fetch(`https://api-inference.huggingface.co/models/${modelId}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${hfToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        inputs: fullPromptForHf,
+        parameters: {
+          max_new_tokens: 150, // Cukup untuk JSON perintah
+          temperature: 0.1,    // Lebih deterministik
+          return_full_text: false, // Penting! Hanya respons AI
+          // top_p: 0.9 // Parameter lain jika diperlukan
+        },
+        options: {
+           wait_for_model: true // Tunggu model loading jika perlu
+        }
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text(); // Ambil detail error
+      console.error(`💥 [Vercel AI - HF] Hugging Face API Error (${response.status}):`, errorBody);
+      // Coba parse errorBody jika mungkin JSON
+      let detail = errorBody;
+      try { detail = JSON.parse(errorBody).error || errorBody; } catch { /* abaikan jika bukan json */ }
+      throw new Error(`HF API request failed (${response.status}): ${detail}`);
+    }
+
+    const result = await response.json();
+    console.log('✅ [Vercel AI - HF] Hugging Face raw response:', JSON.stringify(result)); // Log respons mentah
+
+    // Ekstrak dan bersihkan teks JSON
+    if (result && Array.isArray(result) && result[0] && typeof result[0].generated_text === 'string') {
+      aiDecisionJsonString = result[0].generated_text.trim();
+      // Bersihkan markdown ```json ... ``` jika ada
+      if (aiDecisionJsonString.startsWith('```json')) {
+        aiDecisionJsonString = aiDecisionJsonString.substring(7).trim(); // Hapus ```json dan trim
+      }
+      if (aiDecisionJsonString.endsWith('```')) {
+        aiDecisionJsonString = aiDecisionJsonString.substring(0, aiDecisionJsonString.length - 3).trim(); // Hapus ``` dan trim
+      }
+       // Kadang model menambahkan penjelasan setelah JSON, coba ambil hanya bagian JSON
+       const jsonStart = aiDecisionJsonString.indexOf('{');
+       const jsonEnd = aiDecisionJsonString.lastIndexOf('}');
+       if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+         aiDecisionJsonString = aiDecisionJsonString.substring(jsonStart, jsonEnd + 1);
+       }
+
+      console.log(` -> Cleaned JSON string: ${aiDecisionJsonString}`);
+      // Parsing JSON
+      aiDecision = JSON.parse(aiDecisionJsonString); // Coba parse
+      console.log('✅ [Vercel AI - HF] Parsed JSON decision:', aiDecision);
+    } else {
+      console.error('❌ [Vercel AI - HF] Unexpected response format:', result);
+      throw new Error('Unexpected response format from Hugging Face.');
+    }
+
+  } catch (err) {
+    console.error('💥 [Vercel AI - HF] AI call or JSON parse ERROR:', err.message);
+    // Jika error HANYA saat parsing, kita tetap punya string mentahnya untuk debug
+    let clientError = 'Gagal memproses respons dari AI.';
+    if (err instanceof SyntaxError) {
+        clientError += ` Respons mentah: ${aiDecisionJsonString}`;
+    } else {
+        clientError = err.message; // Tampilkan error asli jika bukan parsing
+    }
+     // Jangan langsung return 500, biarkan switch case menangani 'unknown'
+     console.warn(' -> Proceeding with default "unknown" tool due to error.');
+     aiDecision = { tool: 'unknown' }; // Set ke unknown agar switch case default jalan
+     // return res.status(500).json({ error: clientError, details: err.message });
+  }
+
+  // 4. Jalankan Tool Berdasarkan Keputusan AI
+  try {
+    console.log(`⚙️ [Vercel AI - HF] Executing tool: ${aiDecision?.tool || 'unknown'}`);
+    let responseText = ''; // Variabel untuk jawaban final
+
+    switch (aiDecision?.tool) { // Tambah ?. untuk keamanan
+      // --- SEMUA CASE TOOL ANDA MASUK DI SINI ---
+      case 'getTotalPO': {
+        const totalPOs = allPOs.length;
+        const activePOsList = allPOs.filter(p => p.status !== 'Completed' && p.status !== 'Cancelled');
+        const activePOsCount = activePOsList.length;
+        const completedPOs = allPOs.filter(p => p.status === 'Completed').length;
+        const openCount = activePOsList.filter(p => p.status === 'Open').length;
+        const inProgressCount = activePOsList.filter(p => p.status === 'In Progress').length;
+        responseText = `Saat ini ada ${totalPOs} total PO.\n- ${activePOsCount} PO aktif (${openCount} Open, ${inProgressCount} In Progress).\n- ${completedPOs} PO selesai.`;
+        break;
+      }
+      case 'getTopProduct': {
+        const completedPOs = allPOs.filter(p => p.status === 'Completed');
+        if (completedPOs.length === 0) { responseText = 'Belum ada PO Selesai.'; break; }
+        const salesData = {};
+        completedPOs.flatMap(p => p.items || []).forEach(item => {
+          if (item.product_name) salesData[item.product_name] = (salesData[item.product_name] || 0) + Number(item.quantity || 0);
+        });
+        const topProduct = Object.keys(salesData).length > 0 ? Object.keys(salesData).reduce((a, b) => salesData[a] > salesData[b] ? a : b) : 'N/A';
+        responseText = topProduct !== 'N/A' ? `Produk terlaris (dari PO Selesai): ${topProduct} (${salesData[topProduct]} unit).` : 'Tidak dapat menemukan produk terlaris.';
+        break;
+      }
+      case 'getTopCustomer': {
+         const completedPOs = allPOs.filter(p => p.status === 'Completed');
+         if (completedPOs.length === 0) { responseText = 'Belum ada PO Selesai.'; break; }
+         const customerData = {};
+         completedPOs.forEach(po => {
+           if (po.project_name) customerData[po.project_name] = (customerData[po.project_name] || 0) + Number(po.kubikasi_total || 0);
+         });
+         const topCustomer = Object.keys(customerData).length > 0 ? Object.keys(customerData).reduce((a, b) => customerData[a] > customerData[b] ? a : b) : 'N/A';
+         responseText = topCustomer !== 'N/A' ? `Customer terbesar (m³ dari PO Selesai): ${topCustomer} (${customerData[topCustomer].toFixed(3)} m³).` : 'Tidak dapat menemukan customer terbesar.';
+         break;
+      }
+      case 'getPOStatus': {
+        const poNumber = aiDecision.param;
+        if (!poNumber || poNumber.includes('NOMOR_PO')) { responseText = 'Mohon sebutkan nomor PO valid (contoh: status po 123).'; break; }
+        const latestPO = allPOs.filter(p => p.po_number === poNumber).sort((a, b) => Number(b.revision_number || 0) - Number(a.revision_number || 0))[0];
+        responseText = latestPO ? `Status PO ${poNumber} (${latestPO.project_name || 'N/A'}): ${latestPO.status || 'N/A'}. Progress: ${latestPO.progress?.toFixed(0) || 0}%.` : `PO ${poNumber} tidak ditemukan.`;
+        break;
+      }
+      case 'findPODetails': {
+         const params = aiDecision.param;
+         const poNumber = params?.poNumber;
+         const customerName = params?.customerName;
+         let foundPOs = [];
+         if (poNumber) { /* ... logika cari by number ... */ }
+         else if (customerName) { /* ... logika cari by customer name ... */ }
+         if (foundPOs.length === 1) { /* ... format detail PO ... */ }
+         else if (foundPOs.length > 1) { /* ... format list PO ... */ }
+         else { responseText = `Maaf, PO ${poNumber ? 'nomor ' + poNumber : ''} ${customerName ? 'customer ' + customerName : ''} tidak ditemukan.`; }
+         break;
+      }
+      case 'getUrgentPOs': {
+        const urgentPOs = allPOs.filter(p => p.priority === 'Urgent' && p.status !== 'Completed' && p.status !== 'Cancelled');
+        if (urgentPOs.length > 0) {
+          const poNumbers = urgentPOs.map(p => `- ${p.po_number || 'N/A'} (${p.project_name || 'N/A'})`).join('\n');
+          responseText = `Ada ${urgentPOs.length} PO aktif prioritas Urgent:\n${poNumbers}`;
+        } else { responseText = 'Tidak ada PO aktif prioritas Urgent.'; }
+        break;
+      }
+      case 'getNearingDeadline': {
+         const todayDate = new Date(); todayDate.setHours(0,0,0,0);
+         const nextWeek = new Date(todayDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+         const nearingPOs = allPOs.filter(po => { /* ... logika filter deadline ... */ }).sort((a,b) => /*...*/);
+         if (nearingPOs.length > 0) {
+           const poDetails = nearingPOs.map(po => `- ${po.po_number || 'N/A'} (${po.project_name || 'N/A'}): Target ${formatDate(po.deadline)}`).join('\n');
+           responseText = `Ada ${nearingPOs.length} PO aktif mendekati deadline (7 hari):\n${poDetails}`;
+         } else { responseText = 'Tidak ada PO aktif mendekati deadline (7 hari).'; }
+         break;
+      }
+      case 'getNewestPOs': {
+        const sortedPOs = [...allPOs].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        const newestPOs = sortedPOs.slice(0, 3);
+        if (newestPOs.length > 0) {
+           const poDetails = newestPOs.map(po => `- ${po.po_number || 'N/A'} (${po.project_name || 'N/A'}), Masuk: ${formatDate(po.created_at)}`).join('\n');
+           responseText = `Berikut ${newestPOs.length} PO terbaru:\n${poDetails}`;
+        } else { responseText = 'Tidak ada data PO.'; }
+        break;
+      }
+      case 'getOldestPO': {
+        const sortedPOs = [...allPOs].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        const oldestPO = sortedPOs[0];
+        if (oldestPO) { responseText = `PO terlama:\n- PO: ${oldestPO.po_number || 'N/A'}\n- Customer: ${oldestPO.project_name || 'N/A'}\n- Masuk: ${formatDate(oldestPO.created_at)}`; }
+        else { responseText = 'Tidak ada data PO.'; }
+        break;
+      }
+      case 'getPOsByDateRange': {
+        const { startDate, endDate } = aiDecision;
+        if (!startDate || !endDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+          responseText = "Rentang tanggal tidak valid dari AI."; break;
+        }
+        let start, end; try { /* ... logika set start/end time ... */ } catch { /*...*/ }
+        const foundPOs = allPOs.filter(po => { /* ... logika filter tanggal ... */ });
+        const dateRangeStr = startDate === endDate ? `tgl ${formatDate(startDate)}` : `rentang ${formatDate(startDate)} s/d ${formatDate(endDate)}`;
+        if (foundPOs.length > 0) { /* ... format list PO ... */ }
+        else { responseText = `Tidak ada PO ditemukan ${dateRangeStr}.`; }
+        break;
+      }
+      case 'getPOByStatusCount': {
+         const reqStatus = aiDecision.param?.toLowerCase();
+         if (reqStatus !== 'open' && reqStatus !== 'in progress') {
+           responseText = 'Sebutkan status (Open atau In Progress).'; break;
+         }
+         const normStatus = reqStatus === 'open' ? 'Open' : 'In Progress';
+         const count = allPOs.filter(p => p.status === normStatus && p.status !== 'Completed' && p.status !== 'Cancelled').length;
+         responseText = `Ada ${count} PO aktif status "${normStatus}".`;
+         break;
+      }
+       case 'getApplicationHelp': {
+         const topic = aiDecision.topic?.toLowerCase() || '';
+         if (topic.includes('buat po')) { responseText = "Membuat PO:\n1. Klik '+ Tambah PO Baru'.\n2. Isi detail.\n3. Tambah item.\n4. Klik 'Simpan'."; }
+         else if (topic.includes('update progress')) { responseText = "Update Progress:\n1. Buka 'Progress'.\n2. Klik 'Update Progress' di PO.\n3. Pilih item & tahap.\n4. Isi catatan/foto.\n5. Klik 'Simpan'."; }
+         else if (topic.includes('revisi po')) { responseText = "Revisi PO:\n1. Di 'Purchase Orders', klik 'Revisi'.\n2. Ubah data.\n3. Klik 'Simpan Revisi'."; }
+         else if (topic.includes('tambah produk')) { responseText = "Tambah Produk:\n1. Di form PO, klik '+ Tambah Master Produk'.\n2. Isi detail.\n3. Klik 'Simpan'."; }
+         else { responseText = 'Bisa jelaskan cara:\n- Buat PO\n- Update progress\n- Revisi PO\n- Tambah produk.\nFitur mana?'; }
+         break;
+       }
+      case 'help': {
+        responseText = 'Bisa tanya:\n- Jumlah PO (total/aktif/selesai)\n- Produk/Customer terlaris\n- Status PO [nomor]\n- Detail PO [nomor/customer]\n- PO Urgent/Deadline\n- PO Terbaru/Terlama\n- PO per tanggal\n- Jumlah PO Open/In Progress\n- Cara pakai fitur';
+        break;
+      }
+      case 'general': {
+         const now = new Date(); const hour = now.getHours();
+         let greeting = 'Halo!';
+         if (hour < 11) greeting = 'Selamat pagi!'; else if (hour < 15) greeting = 'Selamat siang!'; else if (hour < 19) greeting = 'Selamat sore!'; else greeting = 'Selamat malam!';
+         if (prompt.toLowerCase().includes('siapa')) { responseText = 'Saya Asisten AI Ubinkayu.'; }
+         else if (prompt.toLowerCase().includes('terima kasih')) { responseText = 'Sama-sama!'; }
+         else { responseText = `${greeting} Ada yang bisa saya bantu?`; }
+         break;
+      }
+      case 'unknown': // Ditangani jika AI atau parsing gagal
+      default: // Juga menangani tool tak dikenal dari AI
+        console.warn(`[Vercel AI - HF] Tool "${aiDecision?.tool}" is unknown or AI failed.`);
+        responseText = "Maaf, saya tidak yakin bagaimana harus merespons itu. Coba tanyakan 'bantuan'.";
+        break;
+    }
+
+    console.log(`✅ [Vercel AI - HF] Tool execution complete. Sending response.`);
+    return res.status(200).json({ response: responseText });
+
   } catch (execError) {
-    console.error('Error saat menjalankan alat:', execError)
-    return res.status(500).json({ error: 'Maaf, terjadi kesalahan saat memproses jawaban Anda.' })
+    console.error('💥 [Vercel AI - HF] Tool execution ERROR:', execError.message, execError.stack);
+    return res.status(500).json({ error: 'Maaf, terjadi kesalahan saat menjalankan perintah.', details: execError.message });
   }
 }

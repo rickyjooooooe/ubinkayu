@@ -41,6 +41,9 @@ interface ICustomAPI {
   openExternalLink: (url: string) => Promise<{ success: boolean; error?: string }>;
   openFileDialog: () => Promise<string | null>;
   readFileAsBase64: (filePath: string) => Promise<string | null>;
+
+  // --- [TAMBAHKAN INI] Fungsi AI Chat ---
+  ollamaChat: (prompt: string) => Promise<string>;
 }
 
 declare global {

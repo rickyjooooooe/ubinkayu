@@ -250,12 +250,12 @@ export function updateStageDeadline(data) {
 }
 
 export async function ollamaChat(prompt) {
-  // --- PERUBAHAN DI SINI ---
-  // Hapus pengecekan 'if (window.api)' HANYA untuk fungsi ini
-  // if (window.api) {
-  //   console.log('%cELECTRON MODE: Calling Ollama via IPC', 'color: cyan; font-weight: bold;');
-  //   return window.api.ollamaChat(prompt); // JANGAN PANGGIL IPC LAGI
-  // }
+  if (window.api && window.api.ollamaChat) {
+    // Tambahkan cek window.api.ollamaChat
+    console.log('%cELECTRON MODE: Calling Ollama via IPC', 'color: cyan; font-weight: bold;')
+    // Panggil fungsi IPC yang ada di preload.js -> main.js -> sheet.js
+    return window.api.ollamaChat(prompt)
+  }
 
   // SELALU PANGGIL VERCEL API untuk chat
   console.log(
