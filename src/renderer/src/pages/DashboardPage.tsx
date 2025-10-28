@@ -17,25 +17,27 @@ import {
   Cell,
   LineChart,
   Line,
-  CartesianGrid
+  CartesianGrid,
 } from 'recharts'
+
+import { LuPackage, LuHourglass, LuCheck, LuHardDrive } from 'react-icons/lu'
 
 import { useWindowWidth } from '../hooks/useWindowWidth'
 // [DIHAPUS] Tidak perlu apiService untuk GDrive lagi
-// import * as apiService from '../apiService' 
+// import * as apiService from '../apiService'
 
 interface DashboardPageProps {
   poList: POHeader[]
   isLoading: boolean
 }
 
-const StatCard = ({ title, value, icon, color }) => (
-  <Card className="stat-card" style={{ borderTop: `4px solid ${color}` }}>
-    <div className="stat-card-icon">{icon}</div>
-    <div className="stat-card-info">
-      <span className="stat-card-title">{title}</span>
-      <span className="stat-card-value">{value}</span>
+const StatCard = ({ title, value, icon: IconComponent, cardClassName }) => (
+  <Card className={`summary-card ${cardClassName || ''}`}>
+    <div className="card-content">
+      <span className="summary-value">{value ?? '-'}</span> {/* Handle null/undefined */}
+      <p className="summary-label">{title}</p>
     </div>
+    {IconComponent && <IconComponent className="summary-icon" />}
   </Card>
 )
 
@@ -52,7 +54,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
         totalPOs: 0,
         activePOs: 0,
         completedPOs: 0,
-        dailyPOData: [], 
+        dailyPOData: [],
         statusPOData: [],
         nearingDeadlinePOs: [],
         totalDriveUsageMB: 0 // [BARU]
@@ -60,11 +62,11 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
     }
 
     // [PERBAIKAN] Logika kalkulasi GDrive diletakkan di sini
-    let totalDriveUsageBytes = 0; 
-    poList.forEach(po => {
+    let totalDriveUsageBytes = 0
+    poList.forEach((po) => {
       // @ts-ignore
-      totalDriveUsageBytes += Number(po.file_size_bytes || 0);
-    });
+      totalDriveUsageBytes += Number(po.file_size_bytes || 0)
+    })
 
     const totalPOs = poList.length
     const activePOs = poList.filter(
@@ -93,23 +95,22 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
       return acc
     }, {})
 
-    const allDaysSet = new Set([...Object.keys(dailyCounts), ...Object.keys(completedCounts)]);
+    const allDaysSet = new Set([...Object.keys(dailyCounts), ...Object.keys(completedCounts)])
     const allDaysSorted = Array.from(allDaysSet).sort((a, b) => {
-        // [PERBAIKAN] Logika parsing tanggal yang lebih aman
-        const [dayA, monthA] = a.split(' ');
-        const [dayB, monthB] = b.split(' ');
-        const dateA = new Date(`${dayA} ${monthA} ${new Date().getFullYear()}`);
-        const dateB = new Date(`${dayB} ${monthB} ${new Date().getFullYear()}`);
-        if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0; // Fallback
-        return dateA.getTime() - dateB.getTime();
-    });
+      // [PERBAIKAN] Logika parsing tanggal yang lebih aman
+      const [dayA, monthA] = a.split(' ')
+      const [dayB, monthB] = b.split(' ')
+      const dateA = new Date(`${dayA} ${monthA} ${new Date().getFullYear()}`)
+      const dateB = new Date(`${dayB} ${monthB} ${new Date().getFullYear()}`)
+      if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0 // Fallback
+      return dateA.getTime() - dateB.getTime()
+    })
 
-
-    const dailyPOData = allDaysSorted.map(day => ({
+    const dailyPOData = allDaysSorted.map((day) => ({
       name: day,
-      "PO Baru": dailyCounts[day] || 0,
-      "PO Selesai": completedCounts[day] || 0,
-    }));
+      'PO Baru': dailyCounts[day] || 0,
+      'PO Selesai': completedCounts[day] || 0
+    }))
 
     const statusCounts = poList.reduce((acc, po) => {
       const status = po.status || 'Open'
@@ -132,12 +133,12 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
       .sort((a, b) => new Date(a.deadline || 0).getTime() - new Date(b.deadline || 0).getTime())
 
     // [PERBAIKAN] Pastikan semua nilai dikembalikan dari useMemo
-    return { 
-      totalPOs, 
-      activePOs, 
-      completedPOs, 
-      dailyPOData, 
-      statusPOData, 
+    return {
+      totalPOs,
+      activePOs,
+      completedPOs,
+      dailyPOData,
+      statusPOData,
       nearingDeadlinePOs,
       totalDriveUsageMB: totalDriveUsageBytes / (1024 * 1024) // Konversi ke MB
     }
@@ -157,6 +158,30 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
     Cancelled: '#E53E3E'
   }
 
+  const summaryStats = useMemo(() => {
+    if (!Array.isArray(poList)) {
+      return { totalPOs: 0, activePOs: 0, completedPOs: 0, gdriveUsageMB: 0 };
+    }
+    const totalPOs = poList.length;
+    const activePOs = poList.filter(p => p.status !== 'Completed' && p.status !== 'Cancelled').length;
+    const completedPOs = poList.filter(p => p.status === 'Completed').length;
+    // Calculate GDrive usage (sum file_size_bytes and convert to MB)
+    const totalBytes = poList.reduce((sum, po) => sum + Number(po.file_size_bytes || 0), 0);
+    const gdriveUsageMB = totalBytes / (1024 * 1024); // Convert bytes to MB
+
+    return {
+      totalPOs,
+      activePOs,
+      completedPOs,
+      gdriveUsageMB: gdriveUsageMB.toFixed(2) // Format to 2 decimal places
+    };
+  }, [poList])
+
+  if (isLoading) {
+    // You might want a better loading indicator
+    return <div className="page-container" style={{ textAlign: 'center', paddingTop: '5rem' }}>Loading Dashboard Data...</div>;
+  }
+
   return (
     <div className="page-container">
       <div className="page-header">
@@ -165,7 +190,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
           <p>Ringkasan aktivitas produksi PT Ubinkayu — {todayFormatted}</p>
         </div>
       </div>
-      
+
       {!isLoading && dashboardData.nearingDeadlinePOs.length > 0 && (
         <Card className="attention-card">
           <h4>Perhatian!</h4>
@@ -202,36 +227,30 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
       )}
 
       {/* [DIUBAH] Pastikan Anda memiliki CSS untuk 4 kolom */}
-      <div className="dashboard-grid-4-cols"> {/* Ganti class ini jika perlu */}
+      <div className="dashboard-summary-grid">
         <StatCard
           title="Total Purchase Order"
-          value={isLoading ? '...' : dashboardData.totalPOs}
-          icon="📦"
-          color="#3182CE"
+          value={summaryStats.totalPOs}
+          icon={LuPackage}
+          cardClassName="total-po-card" // Class for specific styling
         />
         <StatCard
           title="PO Aktif (Produksi)"
-          value={isLoading ? '...' : dashboardData.activePOs}
-          icon="⏳"
-          color="#D69E2E"
+          value={summaryStats.activePOs}
+          icon={LuHourglass}
+          cardClassName="active-po-card"
         />
         <StatCard
           title="PO Selesai"
-          value={isLoading ? '...' : dashboardData.completedPOs}
-          icon="✅"
-          color="#38A169"
+          value={summaryStats.completedPOs}
+          icon={LuCheck}
+          cardClassName="completed-po-card"
         />
-        
-        {/* --- [KARTU DRIVE DIPERBARUI] --- */}
         <StatCard
           title="Penggunaan GDrive"
-          icon="💾"
-          color="#805AD5" // Warna baru
-          value={
-            isLoading
-              ? '...' 
-              : `${dashboardData.totalDriveUsageMB.toFixed(2)} MB` // Ambil dari useMemo
-          }
+          value={`${summaryStats.gdriveUsageMB} MB`} // Add MB unit
+          icon={LuHardDrive}
+          cardClassName="gdrive-card"
         />
       </div>
 
@@ -264,7 +283,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
             </ResponsiveContainer>
           )}
         </Card>
-        
+
         {/* Grafik PieChart (Tidak Berubah) */}
         <Card>
           <h4>Komposisi Status PO</h4>

@@ -21,18 +21,22 @@ const formatTimeAgo = (dateString: string | undefined | null): string => {
   }
 }
 
-// Komponen untuk menampilkan satu PO aktif di daftar kiri
+// Komponen untuk menampilkan satu PO (aktif atau selesai)
 const POTrackingItem = ({
   po,
-  onUpdateClick
+  onUpdateClick // Nama prop tetap sama
 }: {
   po: POHeader
   onUpdateClick: (po: POHeader) => void
 }) => {
   const getPriorityBadgeClass = (priority?: string) =>
     `status-badge priority-${(priority || 'normal').toLowerCase()}` // Tambahkan prefix 'priority-'
+
+  // Tambah class untuk PO Selesai (opsional, untuk styling)
+  const cardClassName = `po-tracking-item-card ${po.progress && po.progress >= 100 ? 'completed' : ''}`
+
   return (
-    <Card className="po-tracking-item-card">
+    <Card className={cardClassName}>
       <div className="po-tracking-header">
         <div>
           <span className="po-tracking-number">{po.po_number || 'N/A'}</span>
@@ -42,7 +46,11 @@ const POTrackingItem = ({
       </div>
       <div className="po-tracking-progress">
         <span>Progress</span>
-        <span>{po.progress?.toFixed(0) || 0}%</span>
+        {/* Tambah ikon centang jika selesai */}
+        <span>
+          {po.progress && po.progress >= 100 ? '✅ ' : ''}
+          {po.progress?.toFixed(0) || 0}%
+        </span>
       </div>
       <ProgressBar value={po.progress || 0} />
       <div className="po-tracking-footer">
@@ -58,7 +66,10 @@ const POTrackingItem = ({
               : '-'}
           </span>
         </div>
-        <Button onClick={() => onUpdateClick(po)}>Update Progress</Button>
+        {/* Tombol tetap ada, ganti teks jika sudah selesai */}
+        <Button onClick={() => onUpdateClick(po)}>
+          {po.progress && po.progress >= 100 ? 'Lihat Progress' : 'Update Progress'}
+        </Button>
       </div>
     </Card>
   )
@@ -116,10 +127,7 @@ const ProgressTrackingPage: React.FC<ProgressTrackingPageProps> = ({
   poList, // Gunakan prop ini
   isLoadingPOs // Gunakan prop ini
 }) => {
-  // Hapus state internal: const [poList, setPoList] = useState<POHeader[]>([])
-  // Hapus state internal: const [isLoading, setIsLoading] = useState(true)
-
-  // State HANYA untuk data panel kanan (Perhatian & Update Terbaru)
+  // State HANYA untuk data panel kanan (Perhatian & Update Terbaru) dan search
   const [attentionData, setAttentionData] = useState({
     nearingDeadline: [],
     stuckItems: [],
@@ -144,7 +152,7 @@ const ProgressTrackingPage: React.FC<ProgressTrackingPageProps> = ({
         setRecentUpdates(updates || []) // Default jika null
       } catch (err) {
         console.error('Gagal memuat data panel kanan (attention/updates):', err)
-        // Set state error jika perlu
+        // Set state error jika perlu (misalnya dengan state baru `sidePanelError`)
       } finally {
         setIsSidePanelLoading(false) // Selesai loading panel kanan
       }
@@ -152,19 +160,32 @@ const ProgressTrackingPage: React.FC<ProgressTrackingPageProps> = ({
     fetchSidePanelData()
   }, []) // Hanya berjalan sekali saat komponen mount
 
-  // Filter PO berdasarkan searchTerm, menggunakan prop 'poList'
-  const filteredPOs = useMemo(() => {
-    // Pastikan poList adalah array sebelum filter
-    if (!Array.isArray(poList)) return []
-    if (!searchTerm) return poList
+  // useMemo untuk memisahkan dan memfilter PO Aktif dan Selesai
+  const { activePOs, completedPOs } = useMemo(() => {
+    if (!Array.isArray(poList)) return { activePOs: [], completedPOs: [] } // Pengaman jika poList bukan array
+
+    // Pisahkan dulu berdasarkan progress
+    const allActive = poList.filter((po) => (po.progress || 0) < 100 && po.status !== 'Cancelled')
+    const allCompleted = poList.filter(
+      (po) => (po.progress || 0) >= 100 && po.status !== 'Cancelled'
+    )
+
+    // Terapkan filter pencarian ke kedua grup jika ada searchTerm
+    if (!searchTerm) {
+      return { activePOs: allActive, completedPOs: allCompleted }
+    }
 
     const lowerSearchTerm = searchTerm.toLowerCase()
-    return poList.filter(
-      (po) =>
-        po.po_number?.toLowerCase().includes(lowerSearchTerm) || // Tambah Cek nullish
-        po.project_name?.toLowerCase().includes(lowerSearchTerm) // Tambah Cek nullish
-    )
-  }, [poList, searchTerm]) // Bergantung pada prop 'poList'
+    // Fungsi filter umum
+    const filterFn = (po: POHeader) =>
+      po.po_number?.toLowerCase().includes(lowerSearchTerm) ||
+      po.project_name?.toLowerCase().includes(lowerSearchTerm)
+
+    return {
+      activePOs: allActive.filter(filterFn),
+      completedPOs: allCompleted.filter(filterFn)
+    }
+  }, [poList, searchTerm]) // Bergantung pada prop poList dan state searchTerm
 
   return (
     <div className="page-container tracking-page-padding">
@@ -177,6 +198,7 @@ const ProgressTrackingPage: React.FC<ProgressTrackingPageProps> = ({
         </div>
         {/* Opsional: Tombol refresh jika diperlukan */}
       </div>
+      {/* Input Pencarian */}
       <Card className="filter-panel-simple">
         <input
           type="text"
@@ -186,20 +208,25 @@ const ProgressTrackingPage: React.FC<ProgressTrackingPageProps> = ({
           className="search-input-full"
         />
       </Card>
+      {/* Layout Utama (Grid 2 Kolom) */}
       <div className="tracking-layout">
-        {/* --- Kolom Kiri: Daftar PO Aktif --- */}
-        <div className="active-po-list">
+        {/* --- Kolom Kiri: Daftar PO --- */}
+        <div className="po-list-column">
+          {' '}
+          {/* Ganti nama class agar lebih deskriptif */}
+          {/* Bagian PO Aktif */}
           <Card>
-            <h3>PO Aktif ({isLoadingPOs ? '...' : filteredPOs.length})</h3>
-            {/* Gunakan isLoadingPOs dari props */}
+            <h3>PO Aktif ({isLoadingPOs ? '...' : activePOs.length})</h3>
             {isLoadingPOs ? (
               <p style={{ textAlign: 'center', padding: '2rem' }}>Memuat daftar PO...</p>
-            ) : filteredPOs.length > 0 ? (
+            ) : activePOs.length > 0 ? (
               <div className="po-tracking-list-wrapper">
-                {' '}
-                {/* Wrapper untuk styling */}
-                {filteredPOs.map((po) => (
-                  <POTrackingItem key={po.id || po.po_number} po={po} onUpdateClick={onSelectPO} />
+                {activePOs.map((po) => (
+                  <POTrackingItem
+                    key={`active-${po.id || po.po_number}`}
+                    po={po}
+                    onUpdateClick={onSelectPO}
+                  />
                 ))}
               </div>
             ) : searchTerm ? (
@@ -210,12 +237,47 @@ const ProgressTrackingPage: React.FC<ProgressTrackingPageProps> = ({
               <p style={{ textAlign: 'center', padding: '2rem' }}>Tidak ada PO aktif saat ini.</p>
             )}
           </Card>
-        </div>
-
+          {/* Bagian PO Selesai */}
+          {/* Tampilkan jika tidak loading DAN (ada PO selesai ATAU sedang mencari) */}
+          {!isLoadingPOs && (completedPOs.length > 0 || searchTerm) && (
+            <Card style={{ marginTop: '1.5rem' }}>
+              {' '}
+              {/* Beri jarak atas */}
+              <h3>PO Selesai ({completedPOs.length})</h3>
+              {completedPOs.length > 0 ? (
+                <div className="po-tracking-list-wrapper completed-list">
+                  {' '}
+                  {/* Class berbeda? */}
+                  {completedPOs.map((po) => (
+                    // Gunakan komponen yang sama, event handler tetap onSelectPO
+                    <POTrackingItem
+                      key={`completed-${po.id || po.po_number}`}
+                      po={po}
+                      onUpdateClick={onSelectPO}
+                    />
+                  ))}
+                </div>
+              ) : (
+                // Tampil hanya jika ada searchTerm tapi tidak ada hasil
+                searchTerm && (
+                  <p style={{ textAlign: 'center', padding: '2rem' }}>
+                    Tidak ada PO selesai yang cocok dengan "{searchTerm}".
+                  </p>
+                )
+                // Jika tidak ada search term dan tidak ada PO selesai, bagian ini tidak tampil (atau tampilkan pesan default jika mau)
+              )}
+            </Card>
+          )}
+        </div>{' '}
+        {/* Akhir .po-list-column */}
         {/* --- Kolom Kanan: Perhatian & Update Terbaru --- */}
-        <div className="recent-updates">
+        <div className="side-panel-column">
+          {' '}
+          {/* Ganti nama class */}
           {/* Kartu Perhatian */}
-          <Card className="recent-updates-card attention-combined-card">
+          <Card className="side-panel-card attention-combined-card">
+            {' '}
+            {/* Ganti nama class */}
             <h4>🚨 Perlu Perhatian</h4>
             {isSidePanelLoading ? (
               <p style={{ textAlign: 'center', padding: '1rem' }}>Memuat data perhatian...</p>
@@ -232,22 +294,23 @@ const ProgressTrackingPage: React.FC<ProgressTrackingPageProps> = ({
                   title="Mendekati Deadline"
                   items={attentionData.nearingDeadline}
                   icon="📅"
-                  reasonKey="deadline" // Akan diformat oleh AttentionCard helper nanti
+                  reasonKey="deadline"
                   reasonPrefix="Target"
                 />
                 <AttentionCard
                   title="Item Macet (> 5 Hari)"
                   items={attentionData.stuckItems}
                   icon="⏳"
-                  reasonKey="last_update" // Akan diformat
+                  reasonKey="last_update"
                   reasonPrefix="Update"
                 />
               </div>
             )}
           </Card>
-
           {/* Kartu Update Terbaru */}
-          <Card className="recent-updates-card" style={{ marginTop: '1.5rem' }}>
+          <Card className="side-panel-card" style={{ marginTop: '1.5rem' }}>
+            {' '}
+            {/* Ganti nama class */}
             <h4>Update Terbaru</h4>
             {isSidePanelLoading ? (
               <p style={{ textAlign: 'center', padding: '1rem' }}>Memuat aktivitas terbaru...</p>
@@ -261,8 +324,10 @@ const ProgressTrackingPage: React.FC<ProgressTrackingPageProps> = ({
               <p className="no-updates-text">Belum ada update progress terbaru.</p>
             )}
           </Card>
-        </div>
-      </div>
+        </div>{' '}
+        {/* Akhir .side-panel-column */}
+      </div>{' '}
+      {/* Akhir .tracking-layout */}
     </div>
   )
 }

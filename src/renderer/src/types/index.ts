@@ -66,6 +66,7 @@ export interface POHeader {
   completed_at?: string | null
   lastRevisedBy?: string
   lastRevisedDate?: string
+  file_size_bytes?: number | null
 }
 
 export interface PORevision {

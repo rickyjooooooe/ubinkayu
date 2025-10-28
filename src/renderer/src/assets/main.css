@@ -2916,3 +2916,95 @@ body {
 .recommendation-content strong {
     color: #2C5282; /* Warna teks tebal (biru lebih tua) */
 }
+
+/* Container Grid */
+.dashboard-summary-grid {
+  display: grid;
+  /* Buat 4 kolom sama lebar di layar besar */
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem; /* Jarak antar kartu */
+  margin-bottom: 2rem; /* Jarak bawah dari elemen berikutnya */
+}
+
+/* Styling Dasar Kartu Summary */
+.summary-card {
+  padding: 1.5rem; /* Ruang di dalam kartu */
+  border-radius: 8px; /* Sudut sedikit melengkung */
+  background-color: #ffffff; /* Latar belakang putih (atau warna lain) */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); /* Shadow halus */
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out; /* Animasi hover */
+  position: relative; /* Untuk positioning ikon absolut (jika dipakai) */
+  overflow: hidden; /* Mencegah ikon keluar kartu (jika pakai ikon absolut) */
+  border-left: 5px solid transparent; /* Placeholder untuk border warna */
+}
+
+/* Efek Hover */
+.summary-card:hover {
+  transform: translateY(-3px); /* Sedikit naik */
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.12); /* Shadow lebih jelas */
+}
+
+/* Konten di dalam kartu */
+.summary-card .card-content {
+  text-align: center; /* Pusatkan teks */
+}
+
+/* Styling Angka Utama */
+.summary-value {
+  display: block; /* Agar menempati baris sendiri */
+  font-size: 2.5rem; /* Ukuran SANGAT BESAR */
+  font-weight: 600; /* Agak tebal */
+  color: #333; /* Warna gelap */
+  margin-bottom: 0.5rem; /* Jarak bawah ke label */
+  line-height: 1.2;
+}
+
+/* Styling Label */
+.summary-label {
+  font-size: 0.9rem; /* Ukuran lebih kecil */
+  color: #666; /* Warna abu-abu */
+  margin: 0; /* Hapus margin default paragraf */
+}
+
+/* Styling Warna Spesifik (Opsional - Contoh) */
+.total-po-card {
+  border-left-color: #4A90E2; /* Biru */
+}
+.active-po-card {
+  border-left-color: #F5A623; /* Oranye */
+}
+.completed-po-card {
+  border-left-color: #7ED321; /* Hijau */
+}
+.gdrive-card {
+  border-left-color: #9B9B9B; /* Abu-abu */
+}
+
+/* Styling Ikon (Opsional - Contoh jika Anda menambahkan ikon) */
+.summary-icon {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  font-size: 1.8rem; /* Ukuran ikon */
+  color: rgba(0, 0, 0, 0.1); /* Warna sangat pudar */
+  z-index: 0;
+}
+
+
+/* --- Media Query untuk Layar Lebih Kecil (Mobile) --- */
+@media (max-width: 992px) { /* Misalnya di bawah 992px */
+  .dashboard-summary-grid {
+    /* Ubah jadi 2 kolom */
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 576px) { /* Misalnya di bawah 576px */
+  .dashboard-summary-grid {
+    /* Ubah jadi 1 kolom (tumpuk vertikal) */
+    grid-template-columns: 1fr;
+  }
+  .summary-value {
+     font-size: 2rem; /* Kecilkan sedikit angkanya di mobile */
+  }
+}
