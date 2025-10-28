@@ -1599,49 +1599,6 @@ async function listPOsForChat() {
   return result
 }
 
-// --- Fungsi untuk mengambil data PO (asumsi sudah ada dan berfungsi) ---
-async function listPOsForChat() {
-  const doc = await openDoc(); // Buka spreadsheet utama
-  const poSheet = await getSheet(doc, 'purchase_orders');
-  const itemSheet = await getSheet(doc, 'purchase_order_items');
-  const progressSheet = await getSheet(doc, 'progress_tracking');
-  const [poRowsRaw, itemRowsRaw, progressRowsRaw] = await Promise.all([
-    poSheet.getRows(), itemSheet.getRows(), progressSheet.getRows()
-  ]);
-  const poRows = poRowsRaw.map((r) => r.toObject());
-  const itemRows = itemRowsRaw.map((r) => r.toObject());
-  const progressRows = progressRowsRaw.map((r) => r.toObject());
-
-  // Logika revisi terbaru (sama seperti listPOs)
-  const byId = new Map();
-  poRows.forEach(r => {
-    const id = String(r.id).trim();
-    const rev = toNum(r.revision_number, -1);
-    if (!byId.has(id) || rev > (byId.get(id)?.rev ?? -1)) byId.set(id, { rev, row: r });
-  });
-  const latestPoObjects = Array.from(byId.values()).map(({ row }) => row);
-
-  // Helper maps (sama seperti listPOs)
-  const progressByCompositeKey = progressRows.reduce((acc, row) => { /* ... */ }, {});
-  const latestItemRevisions = itemRows.reduce((acc, item) => { /* ... */ }, new Map());
-
-  // Hitung status/progress (sama seperti listPOs)
-  const result = latestPoObjects.map((poObject) => {
-    const poId = poObject.id;
-    const latestRev = latestItemRevisions.get(poId) ?? -1;
-    const poItems = itemRows.filter(
-      (item) => item.purchase_order_id === poId && toNum(item.revision_number, -1) === latestRev
-    );
-    let poProgress = 0, finalStatus = poObject.status || 'Open', completed_at = null;
-    if (poItems.length > 0) { /* ... logika hitung progress ... */ }
-    const roundedProgress = Math.round(poProgress);
-    if (finalStatus !== 'Cancelled') { /* ... logika tentukan status ... */ }
-    return { ...poObject, items: poItems, progress: roundedProgress, status: finalStatus, completed_at };
-  });
-  return result;
-}
-
-
 // --- Handler AI Chat (Menggunakan Hugging Face) ---
 export async function handleAiChat(req, res) {
   const { prompt } = req.body;
