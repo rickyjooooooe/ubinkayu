@@ -49,9 +49,13 @@ const getYearMonth = (dateString) => {
 }
 
 export async function handleLoginUser(req, res) {
+  console.log('✅ [Vercel Controller] Entered handleLoginUser function.')
   console.log('🏁 [Vercel] handleLoginUser started!')
   // Ambil username dan password dari body request
   const { username, password } = req.body
+  console.log(
+    `  -> Received username: ${username ? '***' : 'MISSING'}, password: ${password ? '***' : 'MISSING'}`
+  )
 
   // Validasi input dasar
   if (!username || !password) {
@@ -61,9 +65,13 @@ export async function handleLoginUser(req, res) {
   }
 
   try {
+    // --- TAMBAHKAN LOG INI ---
+    console.log('  -> Attempting to call openUserDoc()...')
+    // --- AKHIR TAMBAHAN ---
     const doc = await openUserDoc()
-    // Gunakan alias 'users' atau nama sheet 'users_credentials' langsung
-    // Sesuaikan 'users' jika Anda tidak menggunakan alias
+    // --- TAMBAHKAN LOG INI ---
+    console.log('  -> openUserDoc() successful. Attempting getSheet("users")...')
+    // --- AKHIR TAMBAHAN ---
     const userSheet = await getSheet(doc, 'users')
     console.log(`✅ [Vercel Login] Accessed sheet: ${userSheet.title}`)
 
@@ -130,16 +138,14 @@ export async function handleLoginUser(req, res) {
       return res.status(401).json({ success: false, error: 'Username atau password salah.' })
     }
   } catch (err) {
-    console.error('💥 [Vercel Login] ERROR:', err.message, err.stack)
+    console.error('💥 [Vercel Login] CRITICAL ERROR in try block:', err.message, err.stack)
     // Jangan kirim detail error internal ke frontend
     // @ts-ignore
-    return res
-      .status(500)
-      .json({
-        success: false,
-        error: 'Terjadi kesalahan pada server saat login.',
-        details: err.message
-      })
+    return res.status(500).json({
+      success: false,
+      error: 'Terjadi kesalahan pada server saat login.',
+      details: err.message
+    })
   }
 }
 

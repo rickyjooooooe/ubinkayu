@@ -4,14 +4,20 @@
 import * as Controller from './_controller.js'
 
 export default async function handler(req, res) {
-  // Ambil 'action' dari query URL untuk menentukan fungsi mana yang harus dijalankan
-  const { action } = req.query
+  // --- TAMBAHKAN LOG INI ---
+  console.log(`🚀 [Vercel Index] Request received for URL: ${req.url}`);
+  // --- AKHIR TAMBAHAN ---
+
+  const { action } = req.query;
+  // --- TAMBAHKAN LOG INI ---
+  console.log(`⚡️ [Vercel Index] Action extracted: ${action}`);
 
   try {
     switch (action) {
       // Rute untuk PO
       case 'loginUser':
         console.log('🚦 [Vercel API Router] Routing to handleLoginUser...')
+        console.log('  -> Calling Controller.handleLoginUser now...')
         return Controller.handleLoginUser(req, res)
       case 'listPOs':
         return await Controller.handleListPOs(req, res)
