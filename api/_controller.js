@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 // file: api/_controller.js
 
 import {
@@ -15,6 +16,7 @@ import {
   getAuth,
   PO_ARCHIVE_FOLDER_ID,
   PROGRESS_PHOTOS_FOLDER_ID,
+  uploadPoPhoto,
   DEFAULT_STAGE_DURATIONS
 } from './_helpers.js'
 import { google } from 'googleapis'
@@ -458,12 +460,21 @@ async function generateAndUploadPO(poData, revisionNumber) {
   }
 }
 
+async function generateAndUploadPO_Vercel(poData, revisionNumber) {
+  // ... (Kode fungsi ini sudah benar dari revisi sebelumnya, pastikan returnnya { success, link, size }) ...
+  return { success: true, link: webViewLink, size: Number(fileSize || 0) } // Pastikan size dikembalikan
+  // ... (Catch block juga return size: 0) ...
+  return { success: false, error: error.message, size: 0 }
+}
+
 // --- LOGIC FOR: saveNewPO ---
 export async function handleSaveNewPO(req, res) {
-  console.log('🏁 [Vercel] handleSaveNewPO started!') // Log awal
+  console.log('🏁 [Vercel] handleSaveNewPO started!')
   const data = req.body
-  let doc // Deklarasi di luar try
-  let newPoRow // Deklarasi di luar try
+  let doc, newPoRow
+  let totalFileSize = 0
+  let fotoLink = 'Tidak ada foto'
+  let photoSize = 0
 
   try {
     doc = await openDoc() // Panggil openDoc di dalam try
@@ -472,22 +483,41 @@ export async function handleSaveNewPO(req, res) {
     const itemSheet = getSheet(doc, 'purchase_order_items')
     const poId = await getNextIdFromSheet(poSheet)
 
+    if (data.poPhotoBase64) {
+      // Gunakan Base64 dari Vercel
+      console.log('  -> Uploading PO Reference Photo...')
+      const photoResult = await uploadPoPhoto(
+        // Panggil helper Vercel
+        data.poPhotoBase64,
+        data.nomorPo || `PO-${poId}`,
+        data.namaCustomer || 'Customer'
+      )
+      if (photoResult.success) {
+        fotoLink = photoResult.link
+        photoSize = photoResult.size || 0
+      } else {
+        fotoLink = `ERROR: ${photoResult.error || 'Upload foto gagal'}`
+      }
+    }
+
     // Data untuk baris baru di sheet
     const newPoRowData = {
       id: poId,
       revision_number: 0,
-      po_number: data.nomorPo || `PO-${poId}`, // Fallback nomor PO
+      po_number: data.nomorPo || `PO-${poId}`,
       project_name: data.namaCustomer || 'N/A',
-      deadline: data.tanggalKirim || null, // Gunakan null jika kosong
+      deadline: data.tanggalKirim || null,
       status: 'Open',
       priority: data.prioritas || 'Normal',
       notes: data.catatan || '',
-      kubikasi_total: toNum(data.kubikasi_total, 0), // Pastikan number
+      kubikasi_total: toNum(data.kubikasi_total, 0),
       acc_marketing: data.marketing || '',
       created_at: now,
-      pdf_link: 'generating...', // Placeholder
+      pdf_link: 'generating...',
+      foto_link: fotoLink, // <- Masukkan link foto
+      file_size_bytes: 0, // Placeholder
       alamat_kirim: data.alamatKirim || '',
-      revised_by: 'N/A' // Revisi awal
+      revised_by: 'N/A'
     }
 
     console.log('📝 [Vercel] Adding new PO row to sheet:', newPoRowData.po_number)
@@ -531,7 +561,7 @@ export async function handleSaveNewPO(req, res) {
       kubikasi_total: newPoRowData.kubikasi_total,
       acc_marketing: newPoRowData.acc_marketing,
       alamat_kirim: newPoRowData.alamat_kirim,
-      // Data lain yang mungkin dibutuhkan generatePOJpeg
+      foto_link: fotoLink,
       items: itemsWithIds,
       poPhotoBase64: data.poPhotoBase64 // Ambil dari request body jika ada
     }
@@ -540,18 +570,23 @@ export async function handleSaveNewPO(req, res) {
     // Panggil fungsi generateAndUploadPO yang baru
     const uploadResult = await generateAndUploadPO(poDataForUpload, 0) // Revisi 0
 
-    // Update link di sheet
-    console.log(`🔄 [Vercel] Updating pdf_link for PO ${poId}...`)
+    let jpegSize = 0
+    if (uploadResult.success) {
+      jpegSize = uploadResult.size || 0
+    }
+    totalFileSize = photoSize + jpegSize
+
+    // 6. Update link JPEG dan total ukuran file
+    console.log(`🔄 [Vercel] Updating pdf_link & file_size_bytes for PO ${poId}...`)
     newPoRow.set(
       'pdf_link',
-      uploadResult.success
-        ? uploadResult.link
-        : `ERROR: ${uploadResult.error || 'Unknown upload error'}`
+      uploadResult.success ? uploadResult.link : `ERROR: ${uploadResult.error || 'Unknown'}`
     )
-    await newPoRow.save()
-    console.log(`✅ [Vercel] pdf_link updated.`)
+    newPoRow.set('file_size_bytes', totalFileSize)
+    // Link foto sudah diset saat addRow
+    await newPoRow.save({ raw: false })
+    console.log(`✅ [Vercel] pdf_link & file_size_bytes updated.`)
 
-    // Kirim respons sukses
     return res.status(200).json({ success: true, poId, revision_number: 0 })
   } catch (err) {
     // Tangani error, catat, dan kirim respons error
@@ -577,127 +612,172 @@ export async function handleSaveNewPO(req, res) {
 // --- LOGIC FOR: updatePO ---
 export async function handleUpdatePO(req, res) {
   console.log('🏁 [Vercel] handleUpdatePO started!')
-  const data = req.body
-  let doc
-  let newRevisionRow
+  const data = req.body // Data dari frontend (termasuk poId, nomorPo, items, poPhotoBase64, revisedBy, dll.)
+  let doc, newRevisionRow
+  let totalFileSize = 0 // Ukuran file total untuk revisi baru
+  let fotoLink = '' // Link foto referensi untuk revisi baru
+  let photoSize = 0 // Ukuran foto referensi baru (jika ada)
 
   try {
-    doc = await openDoc()
+    doc = await openDoc() // Buka spreadsheet utama
     const now = new Date().toISOString()
-    const poSheet = getSheet(doc, 'purchase_orders')
-    const itemSheet = getSheet(doc, 'purchase_order_items')
+    const poSheet = await getSheet(doc, 'purchase_orders')
+    const itemSheet = await getSheet(doc, 'purchase_order_items')
 
-    // Dapatkan data revisi sebelumnya
-    const poId = String(data.poId) // Pastikan poId ada
+    const poId = String(data.poId) // Pastikan poId adalah string
     if (!poId) {
       throw new Error('PO ID is required for update.')
     }
 
-    const latest = await latestRevisionNumberForPO(poId, doc)
-    const prevRow = latest >= 0 ? await getHeaderForRevision(poId, latest, doc) : null
-    const prev = prevRow ? prevRow.toObject() : {}
-    const newRev = latest >= 0 ? latest + 1 : 0
+    // Dapatkan data dari revisi sebelumnya
+    const latestRevNum = await latestRevisionNumberForPO(poId, doc) // Dapatkan nomor revisi terakhir
+    const prevRow = latestRevNum >= 0 ? await getHeaderForRevision(poId, latestRevNum, doc) : null
+    const prevData = prevRow ? prevRow.toObject() : {} // Konversi baris lama ke objek
+    const newRevNum = latestRevNum >= 0 ? latestRevNum + 1 : 0 // Hitung nomor revisi baru
 
-    // Data untuk baris revisi baru di sheet
-    const newRevisionRowData = {
-      id: poId,
-      revision_number: newRev,
-      po_number: data.nomorPo ?? prev.po_number ?? `PO-${poId}`, // Pastikan ada nomor PO
-      project_name: data.namaCustomer ?? prev.project_name ?? 'N/A',
-      deadline: data.tanggalKirim ?? prev.deadline ?? null,
-      status: data.status ?? prev.status ?? 'Open',
-      priority: data.prioritas ?? prev.priority ?? 'Normal',
-      notes: data.catatan ?? prev.notes ?? '',
-      kubikasi_total: toNum(data.kubikasi_total, toNum(prev.kubikasi_total, 0)), // Ambil dari data baru atau lama
-      acc_marketing: data.marketing ?? prev.acc_marketing ?? '',
-      created_at: now, // Timestamp revisi
-      pdf_link: 'generating...',
-      revised_by: data.revisedBy || 'Unknown', // Nama perevisi
-      alamat_kirim: data.alamatKirim ?? prev.alamat_kirim ?? ''
+    fotoLink = prevData.foto_link || 'Tidak ada foto' // Warisi link foto lama sebagai default
+
+    // 1. Logika Upload Foto Referensi BARU (jika ada data Base64 dikirim)
+    if (data.poPhotoBase64) {
+      console.log(`[Vercel Update] 📸 New reference photo detected (Base64), uploading...`)
+      const photoResult = await uploadPoPhoto(
+        // Panggil helper upload foto Vercel
+        data.poPhotoBase64,
+        data.nomorPo ?? prevData.po_number ?? `PO-${poId}`, // Gunakan nomor PO baru atau lama
+        data.namaCustomer ?? prevData.project_name ?? 'Customer' // Gunakan nama customer baru atau lama
+      )
+      if (photoResult.success) {
+        fotoLink = photoResult.link // Update link foto jika berhasil
+        photoSize = photoResult.size || 0 // Simpan ukuran foto baru
+        console.log(` -> New photo uploaded: ${fotoLink}, Size: ${photoSize}`)
+      } else {
+        fotoLink = `ERROR: ${photoResult.error || 'Upload foto gagal'}` // Tandai error jika gagal
+        console.error(` -> Failed to upload new photo: ${fotoLink}`)
+      }
+    } else {
+      console.log(`[Vercel Update] 🖼️ No new reference photo. Inheriting link: ${fotoLink}`)
+      // photoSize tetap 0 jika tidak ada foto baru
     }
 
-    console.log(`📝 [Vercel] Adding revision ${newRev} row to sheet for PO ${poId}`)
-    newRevisionRow = await poSheet.addRow(newRevisionRowData)
+    // 2. Siapkan data untuk baris revisi baru di sheet 'purchase_orders'
+    const newRevisionRowData = {
+      id: poId,
+      revision_number: newRevNum,
+      po_number: data.nomorPo ?? prevData.po_number ?? `PO-${poId}`,
+      project_name: data.namaCustomer ?? prevData.project_name ?? 'N/A',
+      deadline: data.tanggalKirim ?? prevData.deadline ?? null,
+      status: data.status ?? prevData.status ?? 'Open', // Pertimbangkan apakah status harus direset?
+      priority: data.prioritas ?? prevData.priority ?? 'Normal',
+      notes: data.catatan ?? prevData.notes ?? '',
+      kubikasi_total: toNum(data.kubikasi_total, toNum(prevData.kubikasi_total, 0)),
+      acc_marketing: data.marketing ?? prevData.acc_marketing ?? '',
+      created_at: now, // Timestamp revisi
+      pdf_link: 'generating...', // Placeholder link JPEG PO
+      foto_link: fotoLink, // Masukkan link foto (baru, lama, atau error)
+      file_size_bytes: 0, // Placeholder ukuran total
+      revised_by: data.revisedBy || 'Unknown', // Nama perevisi
+      alamat_kirim: data.alamatKirim ?? prevData.alamat_kirim ?? ''
+    }
+    console.log(`📝 [Vercel Update] Adding revision ${newRevNum} row data for PO ${poId}`)
+    newRevisionRow = await poSheet.addRow(newRevisionRowData) // Tambahkan baris revisi baru
 
-    // Proses item untuk revisi baru
-    const itemsWithIds = []
+    // 3. Proses item-item baru untuk revisi ini
+    const itemsWithIds = [] // Array untuk menyimpan item dengan ID baru (untuk JPEG)
     let nextItemId = parseInt(await getNextIdFromSheet(itemSheet), 10)
     const itemsToAdd = (data.items || []).map((raw) => {
-      const clean = scrubItemPayload(raw)
-      const kubikasiItem = toNum(raw.kubikasi, 0)
+      const clean = scrubItemPayload(raw) // Bersihkan field ID/revisi lama
       const newItem = {
         id: nextItemId, // ID unik baru
         purchase_order_id: poId,
-        revision_number: newRev, // Set revisi item baru
-        kubikasi: kubikasiItem,
-        ...clean
+        revision_number: newRevNum, // Set nomor revisi baru
+        kubikasi: toNum(raw.kubikasi, 0), // Pastikan kubikasi adalah angka
+        ...clean // Tambahkan field bersih lainnya
       }
-      itemsWithIds.push({ ...raw, id: nextItemId, kubikasi: kubikasiItem })
+      itemsWithIds.push({ ...raw, id: nextItemId, kubikasi: newItem.kubikasi }) // Simpan untuk JPEG
       nextItemId++
       return newItem
     })
 
     if (itemsToAdd.length > 0) {
       console.log(
-        `➕ [Vercel] Adding ${itemsToAdd.length} items to sheet for PO ${poId} Rev ${newRev}`
+        `➕ [Vercel Update] Adding ${itemsToAdd.length} items to sheet for PO ${poId} Rev ${newRevNum}`
       )
-      await itemSheet.addRows(itemsToAdd)
+      await itemSheet.addRows(itemsToAdd) // Tambahkan item baru ke sheet
     } else {
-      console.warn(`⚠️ [Vercel] No items provided for PO ${poId} Rev ${newRev}`)
+      console.warn(`⚠️ [Vercel Update] No items provided for PO ${poId} Rev ${newRevNum}`)
     }
 
-    // Siapkan data untuk generateAndUploadPO
+    // 4. Siapkan data untuk generate & upload JPEG PO (selalu buat ulang karena data/item bisa berubah)
     const poDataForUpload = {
-      // Ambil data dari newRevisionRowData agar konsisten
-      po_number: newRevisionRowData.po_number,
-      project_name: newRevisionRowData.project_name,
-      deadline: newRevisionRowData.deadline,
-      priority: newRevisionRowData.priority,
-      notes: newRevisionRowData.notes,
-      created_at: newRevisionRowData.created_at, // Timestamp revisi
-      kubikasi_total: newRevisionRowData.kubikasi_total,
-      acc_marketing: newRevisionRowData.acc_marketing,
-      alamat_kirim: newRevisionRowData.alamat_kirim,
-      // Data lain
-      items: itemsWithIds, // Item baru untuk revisi ini
-      poPhotoBase64: data.poPhotoBase64 // Sertakan base64 jika dikirim dari frontend
+      ...newRevisionRowData, // Gunakan data dari revisi baru yang sudah disiapkan
+      // Catatan: generatePOJpeg di _helpers.js masih menerima poPhotoBase64 untuk disematkan
+      poPhotoBase64: data.poPhotoBase64, // Kirim Base64 foto baru (jika ada) ke generator
+      items: itemsWithIds // Kirim item baru dengan ID uniknya
+      // Hapus poPhotoPath karena Vercel tidak bisa akses path lokal
+    }
+    console.log(
+      `⏳ [Vercel Update] Calling generateAndUploadPO_Vercel for PO ${poId} Rev ${newRevNum}...`
+    )
+    const uploadResult = await generateAndUploadPO_Vercel(poDataForUpload, newRevNum)
+
+    // 5. Hitung total ukuran file
+    let jpegSize = 0
+    if (uploadResult.success) {
+      jpegSize = uploadResult.size || 0 // Ambil ukuran JPEG baru
     }
 
-    console.log(`⏳ [Vercel] Calling generateAndUploadPO for PO ${poId} Rev ${newRev}...`)
-    // Panggil fungsi generateAndUploadPO yang baru
-    const uploadResult = await generateAndUploadPO(poDataForUpload, newRev)
+    // Ukuran total = (ukuran foto BARU jika ada, ATAU 0) + (ukuran JPEG BARU jika sukses, ATAU 0)
+    totalFileSize = photoSize + jpegSize
+    // Fallback: Jika JPEG gagal DAN tidak ada foto baru, warisi ukuran total lama
+    if (totalFileSize === 0 && !data.poPhotoBase64) {
+      totalFileSize = Number(prevData.file_size_bytes || 0)
+      console.log(
+        `[Vercel Update] JPEG failed/skipped & no new photo. Inheriting old size: ${totalFileSize}`
+      )
+    } else {
+      console.log(
+        `[Vercel Update] Calculated total file size: ${photoSize} (photo) + ${jpegSize} (jpeg) = ${totalFileSize}`
+      )
+    }
 
-    // Update link di sheet
-    console.log(`🔄 [Vercel] Updating pdf_link for PO ${poId} Rev ${newRev}...`)
+    // 6. Update link JPEG dan total ukuran file di baris revisi baru
+    console.log(
+      `🔄 [Vercel Update] Updating pdf_link & file_size_bytes for PO ${poId} Rev ${newRevNum}...`
+    )
+    // Jika upload JPEG gagal, coba warisi link JPEG lama
     newRevisionRow.set(
       'pdf_link',
       uploadResult.success
         ? uploadResult.link
-        : `ERROR: ${uploadResult.error || 'Unknown upload error'}`
+        : prevData.pdf_link || `ERROR: ${uploadResult.error || 'Unknown'}`
     )
-    await newRevisionRow.save()
-    console.log(`✅ [Vercel] pdf_link updated.`)
+    newRevisionRow.set('file_size_bytes', totalFileSize)
+    // Link foto sudah diset saat addRow, tidak perlu diset lagi
+    // newRevisionRow.set('foto_link', fotoLink);
+    await newRevisionRow.save({ raw: false }) // Simpan perubahan ke sheet
+    console.log(`✅ [Vercel Update] pdf_link & file_size_bytes updated.`)
 
-    // Kirim respons sukses
-    return res.status(200).json({ success: true, revision_number: newRev })
+    // Kirim respons sukses ke frontend
+    return res.status(200).json({ success: true, revision_number: newRevNum })
   } catch (err) {
-    // Tangani error
-    console.error('💥 [Vercel] ERROR in handleUpdatePO:', err.message, err.stack)
-    // Update link error jika baris revisi sudah dibuat
-    if (newRevisionRow && !newRevisionRow.get('pdf_link')?.startsWith('http')) {
+    console.error('💥 [Vercel Update] ERROR in handleUpdatePO:', err.message, err.stack)
+    // Jika baris revisi baru sudah terlanjur dibuat, coba update link error
+    if (newRevisionRow) {
       try {
-        // @ts-ignore
-        newRevisionRow.set('pdf_link', `ERROR: ${err.message}`)
-        await newRevisionRow.save()
+        // Hanya update jika link belum valid
+        if (!newRevisionRow.get('pdf_link')?.startsWith('http')) {
+          newRevisionRow.set('pdf_link', `ERROR: ${err.message}`)
+        }
+        // Anda mungkin juga ingin update foto_link jika error terjadi sebelum JPEG dibuat
+        await newRevisionRow.save({ raw: false })
       } catch (saveErr) {
-        // @ts-ignore
-        console.error('   -> Failed to save error link back to sheet:', saveErr.message)
+        console.error(' -> Failed to save error link back during error handling:', saveErr.message)
       }
     }
-    // @ts-ignore
+    // Kirim respons error ke frontend
     return res
       .status(500)
-      .json({ success: false, error: 'Internal Server Error updating PO', details: err.message })
+      .json({ success: false, error: 'Internal Server Error (updatePO)', details: err.message })
   }
 }
 

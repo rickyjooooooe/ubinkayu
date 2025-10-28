@@ -187,7 +187,7 @@ const Navbar: React.FC<NavbarProps> = ({
             <button
               className={`more-menu-item ${currentView === aiAssistLink.id ? 'active' : ''}`}
               onClick={() => {
-                onNavigate(aiAssistLink.id)
+                onNavigate(aiAssistLink.id as AppView)
                 setIsMoreMenuOpen(false)
               }}
             >

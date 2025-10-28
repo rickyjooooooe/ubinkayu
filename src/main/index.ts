@@ -64,7 +64,7 @@ app.whenReady().then(() => {
     // Lakukan pembersihan objek di sini sebelum dikirim balik:
     return JSON.parse(JSON.stringify(data));
   });
-  ipcMain.handle('login-user', async (event, loginData) => {
+  ipcMain.handle('login-user', async (_event, loginData) => {
     return await handleLoginUser(loginData)
   })
   ipcMain.handle('po:save', async (_event, data) => saveNewPO(data))

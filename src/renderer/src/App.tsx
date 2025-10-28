@@ -368,15 +368,16 @@ function App() {
         return <AnalysisPage />
       case 'aiChat':
         return (
-          <AiChatPage // Ganti nama komponen jika berbeda
-            onMinimize={handleMinimizeChat}
+          <Chatbot
+            mode="page" // <-- Set mode ke page
+            onMinimize={handleMinimizeChat} // <-- Prop untuk kembali
             messages={chatMessages}
             inputText={chatInputText}
             isProcessing={isChatProcessing}
             onSendMessage={handleChatSendMessage}
             onInputChange={handleChatInputChange}
             onKeyDown={handleChatKeyDown}
-            onChatReset={handleChatReset}
+            onChatReset={handleChatReset} // <-- Prop untuk reset
           />
         )
       default:

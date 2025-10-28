@@ -105,8 +105,8 @@ async function getSheet(doc, key) {
   for (const t of titles) {
     if (doc.sheetsByTitle[t]) return doc.sheetsByTitle[t]
   }
-  throw new Error(n
-    `Sheet "${titles[0]}" tidak ditemukan. Pastikan nama sheet di Google Sheets sudah benar.`
+  throw new Error(
+    n`Sheet "${titles[0]}" tidak ditemukan. Pastikan nama sheet di Google Sheets sudah benar.`
   )
 }
 
@@ -622,7 +622,7 @@ export async function saveNewPO(data) {
     const itemSheet = await getSheet(doc, 'purchase_order_items')
 
     const poId = await getNextIdFromSheet(poSheet)
-    let totalFileSize = 0; // Variabel untuk menjumlahkan ukuran file
+    let totalFileSize = 0 // Variabel untuk menjumlahkan ukuran file
 
     const newPoRow = await poSheet.addRow({
       id: poId,
@@ -665,15 +665,15 @@ export async function saveNewPO(data) {
     // 1. Upload Foto Referensi (jika ada)
     if (data.poPhotoPath) {
       console.log('Mengunggah foto referensi PO...')
-      const photoResult = await uploadPoPhoto(data.poPhotoPath, data.nomorPo, data.namaCustomer);
+      const photoResult = await uploadPoPhoto(data.poPhotoPath, data.nomorPo, data.namaCustomer)
       if (photoResult.success) {
-        newPoRow.set('foto_link', photoResult.link);
-        totalFileSize += Number(photoResult.size || 0); // Tambah ukuran foto
+        newPoRow.set('foto_link', photoResult.link)
+        totalFileSize += Number(photoResult.size || 0) // Tambah ukuran foto
       } else {
-        newPoRow.set('foto_link', `ERROR: ${photoResult.error}`);
+        newPoRow.set('foto_link', `ERROR: ${photoResult.error}`)
       }
     } else {
-       newPoRow.set('foto_link', 'Tidak ada foto');
+      newPoRow.set('foto_link', 'Tidak ada foto')
     }
 
     // 2. Siapkan data dan buat JPEG
@@ -689,19 +689,19 @@ export async function saveNewPO(data) {
       poPhotoPath: data.poPhotoPath,
       marketing: data.marketing || 'Unknown' // [PERBAIKAN] Gunakan data.marketing
     }
-    
+
     const uploadResult = await generateAndUploadPO(poDataForJpeg, 0)
 
     if (uploadResult.success) {
       newPoRow.set('pdf_link', uploadResult.link)
-      totalFileSize += Number(uploadResult.size || 0); // Tambah ukuran JPEG
+      totalFileSize += Number(uploadResult.size || 0) // Tambah ukuran JPEG
     } else {
       newPoRow.set('pdf_link', `ERROR: ${uploadResult.error}`)
     }
 
     // 3. Simpan total ukuran file dan simpan baris
-    newPoRow.set('file_size_bytes', totalFileSize);
-    await newPoRow.save(); 
+    newPoRow.set('file_size_bytes', totalFileSize)
+    await newPoRow.save()
     return { success: true, poId, revision_number: 0 }
   } catch (err) {
     console.error('❌ saveNewPO error:', err.message)
@@ -722,10 +722,10 @@ export async function updatePO(data) {
     const prevRow = latest >= 0 ? await getHeaderForRevision(String(data.poId), latest, doc) : null
     const prev = prevRow ? prevRow.toObject() : {}
     const newRev = latest >= 0 ? latest + 1 : 0
-    
-    let totalFileSize = 0; // Variabel untuk menjumlahkan ukuran file
-    let fotoLink = prev.foto_link || 'Tidak ada foto'; // Warisi link foto lama
-    let fotoSize = 0;
+
+    let totalFileSize = 0 // Variabel untuk menjumlahkan ukuran file
+    let fotoLink = prev.foto_link || 'Tidak ada foto' // Warisi link foto lama
+    let fotoSize = 0
 
     // 1. Buat baris revisi baru di sheet
     const newRevisionRow = await poSheet.addRow({
@@ -771,21 +771,21 @@ export async function updatePO(data) {
     // 3. Logika Upload Foto Referensi (jika ada foto baru)
     if (data.poPhotoPath) {
       console.log(`[updatePO] 📸 Terdeteksi foto referensi baru, mengunggah...`)
-      const photoResult = await uploadPoPhoto(data.poPhotoPath, data.nomorPo, data.namaCustomer);
+      const photoResult = await uploadPoPhoto(data.poPhotoPath, data.nomorPo, data.namaCustomer)
       if (photoResult.success) {
-        fotoLink = photoResult.link; // Gunakan link foto baru
-        fotoSize = Number(photoResult.size || 0); // Simpan ukuran foto baru
+        fotoLink = photoResult.link // Gunakan link foto baru
+        fotoSize = Number(photoResult.size || 0) // Simpan ukuran foto baru
       } else {
-        fotoLink = `ERROR: ${photoResult.error}`;
+        fotoLink = `ERROR: ${photoResult.error}`
       }
     } else {
-       console.log(`[updatePO] 🖼️ Tidak ada foto referensi baru, mewariskan link lama: ${fotoLink}`);
-       // Jika tidak ada foto baru, kita harus mewarisi ukuran file lama.
-       // Kita asumsikan ukuran file lama adalah total (foto + jpeg).
-       // Ini akan diperbaiki oleh ukuran JPEG baru di bawah.
-       // Untuk akurasi terbaik, Anda Seharusnya memisahkan foto_size dan jpeg_size.
-       // Tapi untuk sekarang, kita akan wariskan ukuran total lama JIKA JPEG GAGAL.
-       totalFileSize = Number(prev.file_size_bytes || 0); // Warisi ukuran lama sementara
+      console.log(`[updatePO] 🖼️ Tidak ada foto referensi baru, mewariskan link lama: ${fotoLink}`)
+      // Jika tidak ada foto baru, kita harus mewarisi ukuran file lama.
+      // Kita asumsikan ukuran file lama adalah total (foto + jpeg).
+      // Ini akan diperbaiki oleh ukuran JPEG baru di bawah.
+      // Untuk akurasi terbaik, Anda Seharusnya memisahkan foto_size dan jpeg_size.
+      // Tapi untuk sekarang, kita akan wariskan ukuran total lama JIKA JPEG GAGAL.
+      totalFileSize = Number(prev.file_size_bytes || 0) // Warisi ukuran lama sementara
     }
 
     // 4. Siapkan data untuk generator JPEG
@@ -798,62 +798,62 @@ export async function updatePO(data) {
       notes: data.catatan ?? prev.notes,
       created_at: now,
       kubikasi_total: data.kubikasi_total ?? prev.kubikasi_total ?? 0,
-      
-      poPhotoPath: data.poPhotoPath,   // Path file BARU (jika ada)
-      foto_link: fotoLink,             // Link foto (BARU atau LAMA)
-      
+
+      poPhotoPath: data.poPhotoPath, // Path file BARU (jika ada)
+      foto_link: fotoLink, // Link foto (BARU atau LAMA)
+
       marketing: data.marketing ?? prev.acc_marketing
     }
 
     // 5. Buat dan upload JPEG baru (karena item/header mungkin berubah)
     const uploadResult = await generateAndUploadPO(poDataForJpeg, newRev)
-    
-    let jpegSize = 0;
+
+    let jpegSize = 0
     if (uploadResult.success) {
       newRevisionRow.set('pdf_link', uploadResult.link)
-      jpegSize = Number(uploadResult.size || 0);
+      jpegSize = Number(uploadResult.size || 0)
     } else {
       newRevisionRow.set('pdf_link', `ERROR: ${uploadResult.error}`)
       // Jika JPEG gagal, setidaknya wariskan link JPEG lama
-      newRevisionRow.set('pdf_link', prev.pdf_link || `ERROR: ${uploadResult.error}`);
+      newRevisionRow.set('pdf_link', prev.pdf_link || `ERROR: ${uploadResult.error}`)
     }
 
     // 6. Finalisasi Logika Ukuran File
     if (data.poPhotoPath) {
       // Jika ada FOTO BARU, total ukuran = ukuran foto baru + ukuran JPEG baru
-      totalFileSize = fotoSize + jpegSize;
+      totalFileSize = fotoSize + jpegSize
     } else {
       // Jika FOTO LAMA, kita tidak tahu ukurannya.
       // Solusi terbaik adalah mewarisi ukuran lama JIKA generate JPEG GAGAL
       if (!uploadResult.success) {
-        totalFileSize = Number(prev.file_size_bytes || 0);
+        totalFileSize = Number(prev.file_size_bytes || 0)
       } else {
         // Jika FOTO LAMA tapi JPEG BARU dibuat, kita tidak bisa menjumlahkannya.
         // Ini adalah kelemahan desain sheet (tidak memisah ukuran foto & JPEG).
         // KOMPROMI: Kita simpan ukuran JPEG baru + asumsi ukuran foto lama (jika ada)
         // Solusi paling aman: warisi ukuran total lama jika tidak ada foto baru
-        totalFileSize = Number(prev.file_size_bytes || 0);
+        totalFileSize = Number(prev.file_size_bytes || 0)
         // TAPI ini tidak akan update jika ukuran JPEG berubah.
-        
-        // Mari kita ambil keputusan desain: 
+
+        // Mari kita ambil keputusan desain:
         // `file_size_bytes` akan selalu dihitung ulang.
         // Jika foto lama, kita tidak bisa menghitungnya. Jadi kita anggap 0.
         // Ini akan membuat Dashboard tidak akurat untuk PO lama.
-        
+
         // Logika terbaik yang bisa kita lakukan:
         // Ukuran total = (ukuran foto baru ATAU 0) + (ukuran JPEG baru ATAU 0)
         // Jika kedua-duanya gagal/tidak ada, baru warisi yang lama.
-        totalFileSize = fotoSize + jpegSize;
+        totalFileSize = fotoSize + jpegSize
         if (totalFileSize === 0 && !data.poPhotoPath) {
-           totalFileSize = Number(prev.file_size_bytes || 0);
+          totalFileSize = Number(prev.file_size_bytes || 0)
         }
       }
     }
 
-    newRevisionRow.set('foto_link', fotoLink);
-    newRevisionRow.set('file_size_bytes', totalFileSize);
+    newRevisionRow.set('foto_link', fotoLink)
+    newRevisionRow.set('file_size_bytes', totalFileSize)
     await newRevisionRow.save() // Simpan semua perubahan
-    
+
     return { success: true, revision_number: newRev }
   } catch (err) {
     console.error('❌ updatePO error:', err.message)
@@ -2347,17 +2347,17 @@ ATURAN KETAT:
 async function uploadPoPhoto(photoPath, poNumber, customerName) {
   try {
     if (!fs.existsSync(photoPath)) throw new Error(`File foto tidak ditemukan: ${photoPath}`)
-    
+
     const auth = getDriveAuth() // Gunakan auth GDrive
     const drive = google.drive({ version: 'v3', auth })
-    
+
     const fileName = `PO-${poNumber}-${customerName.replace(/[/\\?%*:|"<>]/g, '-')}.jpg`
 
     const response = await drive.files.create({
       requestBody: {
         name: fileName,
         mimeType: 'image/jpeg',
-        parents: [PO_PHOTOS_FOLDER_ID] 
+        parents: [PO_PHOTOS_FOLDER_ID]
       },
       media: {
         mimeType: 'image/jpeg',
@@ -2369,7 +2369,7 @@ async function uploadPoPhoto(photoPath, poNumber, customerName) {
 
     console.log(`✅ Foto referensi PO berhasil diunggah: ${response.data.webViewLink}`)
     // [UBAH] Kembalikan 'size'
-    return { success: true, link: response.data.webViewLink, size: response.data.size } 
+    return { success: true, link: response.data.webViewLink, size: response.data.size }
   } catch (error) {
     console.error('❌ Gagal unggah foto referensi PO:', error)
     return { success: false, error: error.message, size: 0 }

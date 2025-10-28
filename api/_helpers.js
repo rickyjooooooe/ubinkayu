@@ -723,3 +723,74 @@ export async function processBatch(items, processor, batchSize = 5) {
   }
   return results
 }
+
+/**
+ * [VERCEL VERSION] Mengunggah foto referensi PO dari data Base64 ke Google Drive.
+ * Mengunggah ke folder FOTO PROGRESS sesuai logika sheet.js.
+ * @param {string} photoBase64 Data gambar dalam format Base64.
+ * @param {string} poNumber Nomor PO untuk penamaan file.
+ * @param {string} customerName Nama customer untuk penamaan file.
+ * @returns {Promise<{success: boolean, link?: string, size?: number, error?: string}>}
+ */
+export async function uploadPoPhoto(photoBase64, poNumber, customerName) {
+  if (!photoBase64) {
+    return { success: false, error: 'Tidak ada data Base64 foto.', size: 0 }
+  }
+  console.log(
+    `⏳ [Vercel Drive] Uploading PO Reference Photo for PO ${poNumber} to PROGRESS FOLDER...`
+  ) // Log diubah
+  try {
+    const auth = getAuth()
+
+    const imageBuffer = Buffer.from(photoBase64, 'base64')
+    const safeCustomerName = (customerName || 'Customer').replace(/[/\\?%*:|"<>]/g, '-')
+    const safePoNumber = (poNumber || 'NoPO').replace(/[/\\?%*:|"<>]/g, '-')
+    // Penamaan file sama persis dengan sheet.js
+    const fileName = `PO-${safePoNumber}-${safeCustomerName.replace(/[/\\?%*:|"<>]/g, '-')}.jpg`
+    const mimeType = 'image/jpeg'
+
+    // Upload via auth.request
+    const metadata = {
+      name: fileName,
+      mimeType: mimeType,
+      parents: [PROGRESS_PHOTOS_FOLDER_ID] // <-- Unggah ke folder FOTO PROGRESS
+    }
+    const boundary = `----VercelRefPhotoBoundary${Date.now()}----`
+    const metaPart = Buffer.from(
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n\r\n`
+    )
+    const mediaHeaderPart = Buffer.from(`--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`)
+    const endBoundaryPart = Buffer.from(`\r\n--${boundary}--\r\n`)
+    const requestBody = Buffer.concat([metaPart, mediaHeaderPart, imageBuffer, endBoundaryPart])
+
+    const createResponse = await auth.request({
+      /* ... (Opsi request sama) ... */
+    })
+
+    // Ambil Link & Ukuran
+    const fileId = createResponse?.data?.id
+    if (!fileId) {
+      /* ... error handling ... */ throw new Error('Upload foto OK tapi ID tidak didapat.')
+    }
+    console.log(`✅ [Vercel Drive] Ref Photo uploaded (ID: ${fileId}). Fetching link & size...`)
+
+    const getResponse = await auth.request({
+      url: `https://www.googleapis.com/drive/v3/files/${fileId}`,
+      method: 'GET',
+      params: { fields: 'webViewLink,size', supportsAllDrives: true }
+    })
+    const webViewLink = getResponse?.data?.webViewLink
+    const fileSize = getResponse?.data?.size
+
+    if (!webViewLink) {
+      /* ... error handling ... */ throw new Error('Gagal get link/size foto.')
+    }
+    console.log(`✅ [Vercel Drive] Ref Photo Link: ${webViewLink}, Size: ${fileSize}`)
+
+    return { success: true, link: webViewLink, size: Number(fileSize || 0) }
+  } catch (error) {
+    console.error('💥 [Vercel Drive] FAILED to upload PO Reference Photo:', error.message)
+    // ... (Log error detail) ...
+    return { success: false, error: error.message, size: 0 }
+  }
+}

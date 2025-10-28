@@ -40,7 +40,7 @@ export interface POItem {
   location: string
   notes: string
   kubikasi?: number
-  progressHistory?: ProgressUpdate[]
+  progressHistory?: ProgressLog[]
   stageDeadlines?: { stageName: string; deadline: string }[]
   customer_name?: string
   po_date?: string; // Add this line (already added previously)
@@ -123,4 +123,12 @@ export interface DeleteResult {
 export interface Message {
   sender: 'user' | 'bot'
   text: string
+}
+
+export interface ProgressLog {
+  id: string;
+  stage: ProductionStage;
+  created_at: string;
+  notes?: string;
+  photo_url?: string;
 }
