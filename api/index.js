@@ -10,6 +10,9 @@ export default async function handler(req, res) {
   try {
     switch (action) {
       // Rute untuk PO
+      case 'loginUser':
+        console.log('🚦 [Vercel API Router] Routing to handleLoginUser...')
+        return Controller.handleLoginUser(req, res)
       case 'listPOs':
         return await Controller.handleListPOs(req, res)
       case 'saveNewPO':

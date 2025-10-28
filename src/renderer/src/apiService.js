@@ -44,6 +44,23 @@ function createApiEndpoint(action, params = {}) {
   return `/api?${query}`
 }
 
+export async function loginUser(username, password) {
+  // Login SELALU melalui Vercel API, tidak perlu cek window.api
+  console.log(
+    `%cAPI SERVICE: Attempting login for ${username} via Vercel`,
+    'color: blue; font-weight: bold;'
+  )
+  // Gunakan fetchAPI. Endpointnya tidak perlu '?action=loginUser' jika kita tentukan path spesifik
+  // Tapi kita tetap pakai action agar konsisten dengan router
+  return fetchAPI(createApiEndpoint('loginUser'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ username, password })
+  })
+}
+
 // --- Fungsi CRUD untuk Purchase Order (PO) ---
 
 export function listPOs() {

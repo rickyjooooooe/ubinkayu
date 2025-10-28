@@ -47,6 +47,63 @@ const getYearMonth = (dateString) => {
   return date ? date.substring(0, 7) : null // Ambil YYYY-MM
 }
 
+export async function handleLoginUser(req, res) {
+  console.log('🏁 [Vercel] handleLoginUser started!')
+  // Hanya izinkan metode POST
+  if (req.method !== 'POST') {
+    return res.status(405).json({ success: false, error: 'Method Not Allowed' })
+  }
+
+  const { username, password } = req.body
+
+  if (!username || !password) {
+    console.warn('⚠️ [Vercel Login] Username or password missing in request body')
+    return res.status(400).json({ success: false, error: 'Username dan password harus diisi.' })
+  }
+
+  try {
+    const doc = await openDoc() // Otentikasi dengan Service Account
+    const userSheet = getSheet(doc, 'users') // Ganti 'users' jika nama sheet Anda berbeda
+    console.log(`👀 [Vercel Login] Reading users sheet for username: ${username}`)
+    const rows = await userSheet.getRows()
+
+    // Cari user berdasarkan username (case-insensitive)
+    const userRow = rows.find(
+      (row) => row.get('username')?.toLowerCase() === username.toLowerCase()
+    )
+
+    if (!userRow) {
+      console.log(`❌ [Vercel Login] User not found: ${username}`)
+      return res.status(401).json({ success: false, error: 'Username atau password salah.' })
+    }
+
+    const storedPassword = userRow.get('password') // Ambil password dari sheet
+
+    // --- PERBANDINGAN PASSWORD (PLAIN TEXT - TIDAK AMAN!) ---
+    // Di produksi, Anda HARUS menggunakan hashing (misal: bcrypt.compare)
+    if (password === storedPassword) {
+      // Login Berhasil
+      const userData = {
+        name: userRow.get('name') || username, // Ambil nama, fallback ke username
+        role: userRow.get('role') || 'user' // Ambil role, fallback ke 'user'
+      }
+      console.log(`✅ [Vercel Login] Login successful for: ${username}, Name: ${userData.name}`)
+      return res.status(200).json({ success: true, ...userData })
+    } else {
+      // Password Salah
+      console.log(`❌ [Vercel Login] Incorrect password for: ${username}`)
+      return res.status(401).json({ success: false, error: 'Username atau password salah.' })
+    }
+    // --- AKHIR PERBANDINGAN PASSWORD ---
+  } catch (err) {
+    console.error('💥 [Vercel Login] ERROR in handleLoginUser:', err.message, err.stack)
+    // @ts-ignore
+    return res
+      .status(500)
+      .json({ success: false, error: 'Internal Server Error during login', details: err.message })
+  }
+}
+
 // --- HELPERS KHUSUS UNTUK FUNGSI TERTENTU ---
 async function latestRevisionNumberForPO(poId, doc) {
   const sh = await getSheet(doc, 'purchase_orders')
