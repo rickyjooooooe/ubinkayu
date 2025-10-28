@@ -59,8 +59,14 @@ export async function loginUser(username, password) {
   try {
     console.log('Using Web/Vercel API login path (fetch)')
 
-    // GANTI '/api/login' jika URL Vercel Anda berbeda
-    const response = await fetch('/api/login', {
+    // --- UBAH BAGIAN INI ---
+    // const response = await fetch('/api/login', { ... }); // <-- Hapus/komentari baris ini
+
+    // Gunakan helper createApiEndpoint untuk membuat URL yang benar
+    const endpoint = createApiEndpoint('loginUser') // Akan menghasilkan '/api?action=loginUser'
+
+    // Panggil fetch dengan endpoint yang sudah benar
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(loginData)
