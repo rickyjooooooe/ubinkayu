@@ -1,4 +1,7 @@
 /* eslint-disable prettier/prettier */
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+
+// [DIUBAH] Impor React dan hooks yang diperlukan
 import React, { useMemo } from 'react'
 import { POHeader } from '../types'
 import { Card } from '../components/Card'
@@ -18,6 +21,8 @@ import {
 } from 'recharts'
 
 import { useWindowWidth } from '../hooks/useWindowWidth'
+// [DIHAPUS] Tidak perlu apiService untuk GDrive lagi
+// import * as apiService from '../apiService' 
 
 interface DashboardPageProps {
   poList: POHeader[]
@@ -35,8 +40,11 @@ const StatCard = ({ title, value, icon, color }) => (
 )
 
 const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
-  const windowWidth = useWindowWidth() // <-- 2. PANGGIL HOOK DI SINI
-  const isMobile = windowWidth < 500 // Tentukan breakpoint untuk mobile
+  const windowWidth = useWindowWidth()
+  const isMobile = windowWidth < 500
+
+  // [DIHAPUS] State untuk GDrive (driveUsageMB, driveError, isDriveLoading) tidak diperlukan lagi.
+  // [DIHAPUS] useEffect untuk fetchDriveSize() tidak diperlukan lagi.
 
   const dashboardData = useMemo(() => {
     if (!poList || poList.length === 0) {
@@ -44,11 +52,19 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
         totalPOs: 0,
         activePOs: 0,
         completedPOs: 0,
-        dailyPOData: [], // Diubah dari monthly
+        dailyPOData: [], 
         statusPOData: [],
-        nearingDeadlinePOs: []
+        nearingDeadlinePOs: [],
+        totalDriveUsageMB: 0 // [BARU]
       }
     }
+
+    // [PERBAIKAN] Logika kalkulasi GDrive diletakkan di sini
+    let totalDriveUsageBytes = 0; 
+    poList.forEach(po => {
+      // @ts-ignore
+      totalDriveUsageBytes += Number(po.file_size_bytes || 0);
+    });
 
     const totalPOs = poList.length
     const activePOs = poList.filter(
@@ -79,7 +95,13 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
 
     const allDaysSet = new Set([...Object.keys(dailyCounts), ...Object.keys(completedCounts)]);
     const allDaysSorted = Array.from(allDaysSet).sort((a, b) => {
-        return new Date(`${a} ${new Date().getFullYear()}`).getTime() - new Date(`${b} ${new Date().getFullYear()}`).getTime();
+        // [PERBAIKAN] Logika parsing tanggal yang lebih aman
+        const [dayA, monthA] = a.split(' ');
+        const [dayB, monthB] = b.split(' ');
+        const dateA = new Date(`${dayA} ${monthA} ${new Date().getFullYear()}`);
+        const dateB = new Date(`${dayB} ${monthB} ${new Date().getFullYear()}`);
+        if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0; // Fallback
+        return dateA.getTime() - dateB.getTime();
     });
 
 
@@ -87,7 +109,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
       name: day,
       "PO Baru": dailyCounts[day] || 0,
       "PO Selesai": completedCounts[day] || 0,
-  }));
+    }));
 
     const statusCounts = poList.reduce((acc, po) => {
       const status = po.status || 'Open'
@@ -109,8 +131,17 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
       })
       .sort((a, b) => new Date(a.deadline || 0).getTime() - new Date(b.deadline || 0).getTime())
 
-    return { totalPOs, activePOs, completedPOs, dailyPOData, statusPOData, nearingDeadlinePOs }
-  }, [poList])
+    // [PERBAIKAN] Pastikan semua nilai dikembalikan dari useMemo
+    return { 
+      totalPOs, 
+      activePOs, 
+      completedPOs, 
+      dailyPOData, 
+      statusPOData, 
+      nearingDeadlinePOs,
+      totalDriveUsageMB: totalDriveUsageBytes / (1024 * 1024) // Konversi ke MB
+    }
+  }, [poList]) // Dependensi hanya poList
 
   const todayFormatted = new Date().toLocaleDateString('id-ID', {
     weekday: 'long',
@@ -134,8 +165,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
           <p>Ringkasan aktivitas produksi PT Ubinkayu — {todayFormatted}</p>
         </div>
       </div>
-      {/* [MODIFIKASI] Tambahkan Kartu Notifikasi di sini */}
-      {/* [MODIFIKASI] Ganti blok Kartu Notifikasi yang lama dengan yang ini */}
+      
       {!isLoading && dashboardData.nearingDeadlinePOs.length > 0 && (
         <Card className="attention-card">
           <h4>Perhatian!</h4>
@@ -171,7 +201,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
         </Card>
       )}
 
-      <div className="dashboard-grid">
+      {/* [DIUBAH] Pastikan Anda memiliki CSS untuk 4 kolom */}
+      <div className="dashboard-grid-4-cols"> {/* Ganti class ini jika perlu */}
         <StatCard
           title="Total Purchase Order"
           value={isLoading ? '...' : dashboardData.totalPOs}
@@ -190,10 +221,22 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
           icon="✅"
           color="#38A169"
         />
+        
+        {/* --- [KARTU DRIVE DIPERBARUI] --- */}
+        <StatCard
+          title="Penggunaan GDrive"
+          icon="💾"
+          color="#805AD5" // Warna baru
+          value={
+            isLoading
+              ? '...' 
+              : `${dashboardData.totalDriveUsageMB.toFixed(2)} MB` // Ambil dari useMemo
+          }
+        />
       </div>
 
       <div className="dashboard-widgets-grid">
-        {/* [MODIFIKASI] Mengganti BarChart menjadi LineChart */}
+        {/* Grafik LineChart (Tidak Berubah) */}
         <Card>
           <h4>Purchase Order Baru per Hari</h4>
           {isLoading ? (
@@ -221,6 +264,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
             </ResponsiveContainer>
           )}
         </Card>
+        
+        {/* Grafik PieChart (Tidak Berubah) */}
         <Card>
           <h4>Komposisi Status PO</h4>
           {isLoading ? (
@@ -234,8 +279,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
                   nameKey="name"
                   cx="50%"
                   cy="50%"
-                  outerRadius={isMobile ? 60 : 100} // <-- Buat radius lebih kecil di mobile
-                  label={!isMobile} // <-- Sembunyikan label di mobile agar tidak berantakan
+                  outerRadius={isMobile ? 60 : 100}
+                  label={!isMobile}
                 >
                   {dashboardData.statusPOData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={PIE_COLORS[entry.name] || '#8884d8'} />
@@ -243,7 +288,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
                 </Pie>
                 <Tooltip />
                 <Legend
-                  layout={isMobile ? 'horizontal' : 'vertical'} // <-- Tata letak legend
+                  layout={isMobile ? 'horizontal' : 'vertical'}
                   verticalAlign={isMobile ? 'bottom' : 'middle'}
                   align={isMobile ? 'center' : 'right'}
                 />
@@ -253,6 +298,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
         </Card>
       </div>
 
+      {/* Tabel Deadline (Tidak Berubah) */}
       <Card>
         <h4>🚨 PO Mendekati Deadline (14 Hari ke Depan)</h4>
         {isLoading ? (

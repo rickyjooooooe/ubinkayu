@@ -105,7 +105,7 @@ async function getSheet(doc, key) {
   for (const t of titles) {
     if (doc.sheetsByTitle[t]) return doc.sheetsByTitle[t]
   }
-  throw new Error(
+  throw new Error(n
     `Sheet "${titles[0]}" tidak ditemukan. Pastikan nama sheet di Google Sheets sudah benar.`
   )
 }
@@ -331,19 +331,20 @@ async function generateAndUploadPO(poData, revisionNumber) {
       url: `https://www.googleapis.com/drive/v3/files/${fileId}`,
       method: 'GET',
       params: {
-        fields: 'webViewLink', // Minta hanya webViewLink
+        fields: 'webViewLink,size', // Minta hanya webViewLink
         supportsAllDrives: true // Tetap perlu untuk Shared Drive
       }
     })
 
     const webViewLink = getResponse?.data?.webViewLink
+    const fileSize = getResponse?.data?.size
     if (!webViewLink) {
       console.error('❌ Gagal mendapatkan webViewLink via auth.request:', getResponse.data)
       throw new Error('Gagal mendapatkan link file setelah upload berhasil.')
     }
-    console.log(`✅ Link file didapatkan via auth.request: ${webViewLink}`)
+    console.log(`✅ Link file dan size didapatkan via auth.request: ${webViewLink}`)
 
-    return { success: true, link: webViewLink }
+    return { success: true, link: webViewLink, size: fileSize }
   } catch (error) {
     // ... (Error handling sama seperti sebelumnya)
     console.error('❌ Proses Generate & Upload PO Gagal:', error.message)
@@ -600,7 +601,8 @@ export async function listPOs() {
         pdf_link: poObject.pdf_link || null,
         lastRevisedBy: lastRevisedBy,
         lastRevisedDate: lastRevisedDate,
-        acc_marketing: poObject.acc_marketing || '' // Pastikan field ini ada
+        acc_marketing: poObject.acc_marketing || '', // Pastikan field ini ada
+        file_size_bytes: poObject.file_size_bytes || 0 // [TAMBAHKAN INI]
       }
     })
 
@@ -620,6 +622,7 @@ export async function saveNewPO(data) {
     const itemSheet = await getSheet(doc, 'purchase_order_items')
 
     const poId = await getNextIdFromSheet(poSheet)
+    let totalFileSize = 0; // Variabel untuk menjumlahkan ukuran file
 
     const newPoRow = await poSheet.addRow({
       id: poId,
@@ -633,7 +636,9 @@ export async function saveNewPO(data) {
       kubikasi_total: data.kubikasi_total || 0,
       acc_marketing: data.marketing || '',
       created_at: now,
-      pdf_link: 'generating...'
+      pdf_link: 'generating...',
+      foto_link: '...', // Placeholder
+      file_size_bytes: 0 // Placeholder
     })
 
     const itemsWithIds = []
@@ -657,6 +662,21 @@ export async function saveNewPO(data) {
       await itemSheet.addRows(itemsToAdd)
     }
 
+    // 1. Upload Foto Referensi (jika ada)
+    if (data.poPhotoPath) {
+      console.log('Mengunggah foto referensi PO...')
+      const photoResult = await uploadPoPhoto(data.poPhotoPath, data.nomorPo, data.namaCustomer);
+      if (photoResult.success) {
+        newPoRow.set('foto_link', photoResult.link);
+        totalFileSize += Number(photoResult.size || 0); // Tambah ukuran foto
+      } else {
+        newPoRow.set('foto_link', `ERROR: ${photoResult.error}`);
+      }
+    } else {
+       newPoRow.set('foto_link', 'Tidak ada foto');
+    }
+
+    // 2. Siapkan data dan buat JPEG
     const poDataForJpeg = {
       po_number: data.nomorPo,
       project_name: data.namaCustomer,
@@ -667,19 +687,21 @@ export async function saveNewPO(data) {
       created_at: now,
       kubikasi_total: data.kubikasi_total || 0,
       poPhotoPath: data.poPhotoPath,
-      marketing: data.namaMarketing || 'Unknown' // <--- tambahin ini
+      marketing: data.marketing || 'Unknown' // [PERBAIKAN] Gunakan data.marketing
     }
-    console.log('TITIK C (Backend): Meneruskan ke PDF:', poDataForJpeg)
+    
     const uploadResult = await generateAndUploadPO(poDataForJpeg, 0)
 
     if (uploadResult.success) {
       newPoRow.set('pdf_link', uploadResult.link)
-      await newPoRow.save()
+      totalFileSize += Number(uploadResult.size || 0); // Tambah ukuran JPEG
     } else {
       newPoRow.set('pdf_link', `ERROR: ${uploadResult.error}`)
-      await newPoRow.save()
     }
 
+    // 3. Simpan total ukuran file dan simpan baris
+    newPoRow.set('file_size_bytes', totalFileSize);
+    await newPoRow.save(); 
     return { success: true, poId, revision_number: 0 }
   } catch (err) {
     console.error('❌ saveNewPO error:', err.message)
@@ -687,8 +709,9 @@ export async function saveNewPO(data) {
   }
 }
 
+// [GANTI SELURUH FUNGSI UPDATEPO ANDA DENGAN INI]
 export async function updatePO(data) {
-  console.log('TITIK B (Backend): Menerima data:', data)
+  console.log('TITIK B (Backend): Menerima data revisi:', data)
   try {
     const doc = await openDoc()
     const now = new Date().toISOString()
@@ -699,7 +722,12 @@ export async function updatePO(data) {
     const prevRow = latest >= 0 ? await getHeaderForRevision(String(data.poId), latest, doc) : null
     const prev = prevRow ? prevRow.toObject() : {}
     const newRev = latest >= 0 ? latest + 1 : 0
+    
+    let totalFileSize = 0; // Variabel untuk menjumlahkan ukuran file
+    let fotoLink = prev.foto_link || 'Tidak ada foto'; // Warisi link foto lama
+    let fotoSize = 0;
 
+    // 1. Buat baris revisi baru di sheet
     const newRevisionRow = await poSheet.addRow({
       id: String(data.poId),
       revision_number: newRev,
@@ -713,9 +741,12 @@ export async function updatePO(data) {
       acc_marketing: data.marketing ?? prev.acc_marketing ?? '',
       created_at: now,
       pdf_link: 'generating...',
-      revised_by: data.revisedBy || 'Unknown' // <--
+      foto_link: '...', // Placeholder
+      file_size_bytes: 0, // Placeholder
+      revised_by: data.revisedBy || 'Unknown'
     })
 
+    // 2. Tambahkan item-item baru ke sheet
     const itemsWithIds = []
     let nextItemId = parseInt(await getNextIdFromSheet(itemSheet), 10)
     const itemsToAdd = (data.items || []).map((raw) => {
@@ -737,42 +768,92 @@ export async function updatePO(data) {
       await itemSheet.addRows(itemsToAdd)
     }
 
-    if (data.poPhotoBase64) {
-      console.log(`[updatePO] 📸 Terdeteksi foto baru (base64), membuat JPEG baru...`)
-
-      const poDataForJpeg = {
-        po_number: data.nomorPo ?? prev.po_number,
-        project_name: data.namaCustomer ?? prev.project_name,
-        deadline: data.tanggalKirim ?? prev.deadline,
-        priority: data.prioritas ?? prev.priority,
-        items: itemsWithIds,
-        notes: data.catatan ?? prev.notes,
-        created_at: now,
-        kubikasi_total: data.kubikasi_total ?? prev.kubikasi_total ?? 0,
-
-        poPhotoPath: data.poPhotoPath,
-        poPhotoBase64: data.poPhotoBase64,
-
-        marketing: data.acc_marketing
-      }
-
-      const uploadResult = await generateAndUploadPO(poDataForJpeg, newRev)
-
-      if (uploadResult.success) {
-        newRevisionRow.set('pdf_link', uploadResult.link)
+    // 3. Logika Upload Foto Referensi (jika ada foto baru)
+    if (data.poPhotoPath) {
+      console.log(`[updatePO] 📸 Terdeteksi foto referensi baru, mengunggah...`)
+      const photoResult = await uploadPoPhoto(data.poPhotoPath, data.nomorPo, data.namaCustomer);
+      if (photoResult.success) {
+        fotoLink = photoResult.link; // Gunakan link foto baru
+        fotoSize = Number(photoResult.size || 0); // Simpan ukuran foto baru
       } else {
-        newRevisionRow.set('pdf_link', `ERROR: ${uploadResult.error}`)
+        fotoLink = `ERROR: ${photoResult.error}`;
       }
-      await newRevisionRow.save()
     } else {
-      console.log(
-        `[updatePO] 🖼️ Tidak ada foto baru. Menyalin link dari revisi ${latest}: ${prev.pdf_link}`
-      )
-
-      newRevisionRow.set('pdf_link', prev.pdf_link || null)
-      await newRevisionRow.save()
+       console.log(`[updatePO] 🖼️ Tidak ada foto referensi baru, mewariskan link lama: ${fotoLink}`);
+       // Jika tidak ada foto baru, kita harus mewarisi ukuran file lama.
+       // Kita asumsikan ukuran file lama adalah total (foto + jpeg).
+       // Ini akan diperbaiki oleh ukuran JPEG baru di bawah.
+       // Untuk akurasi terbaik, Anda Seharusnya memisahkan foto_size dan jpeg_size.
+       // Tapi untuk sekarang, kita akan wariskan ukuran total lama JIKA JPEG GAGAL.
+       totalFileSize = Number(prev.file_size_bytes || 0); // Warisi ukuran lama sementara
     }
 
+    // 4. Siapkan data untuk generator JPEG
+    const poDataForJpeg = {
+      po_number: data.nomorPo ?? prev.po_number,
+      project_name: data.namaCustomer ?? prev.project_name,
+      deadline: data.tanggalKirim ?? prev.deadline,
+      priority: data.prioritas ?? prev.priority,
+      items: itemsWithIds,
+      notes: data.catatan ?? prev.notes,
+      created_at: now,
+      kubikasi_total: data.kubikasi_total ?? prev.kubikasi_total ?? 0,
+      
+      poPhotoPath: data.poPhotoPath,   // Path file BARU (jika ada)
+      foto_link: fotoLink,             // Link foto (BARU atau LAMA)
+      
+      marketing: data.marketing ?? prev.acc_marketing
+    }
+
+    // 5. Buat dan upload JPEG baru (karena item/header mungkin berubah)
+    const uploadResult = await generateAndUploadPO(poDataForJpeg, newRev)
+    
+    let jpegSize = 0;
+    if (uploadResult.success) {
+      newRevisionRow.set('pdf_link', uploadResult.link)
+      jpegSize = Number(uploadResult.size || 0);
+    } else {
+      newRevisionRow.set('pdf_link', `ERROR: ${uploadResult.error}`)
+      // Jika JPEG gagal, setidaknya wariskan link JPEG lama
+      newRevisionRow.set('pdf_link', prev.pdf_link || `ERROR: ${uploadResult.error}`);
+    }
+
+    // 6. Finalisasi Logika Ukuran File
+    if (data.poPhotoPath) {
+      // Jika ada FOTO BARU, total ukuran = ukuran foto baru + ukuran JPEG baru
+      totalFileSize = fotoSize + jpegSize;
+    } else {
+      // Jika FOTO LAMA, kita tidak tahu ukurannya.
+      // Solusi terbaik adalah mewarisi ukuran lama JIKA generate JPEG GAGAL
+      if (!uploadResult.success) {
+        totalFileSize = Number(prev.file_size_bytes || 0);
+      } else {
+        // Jika FOTO LAMA tapi JPEG BARU dibuat, kita tidak bisa menjumlahkannya.
+        // Ini adalah kelemahan desain sheet (tidak memisah ukuran foto & JPEG).
+        // KOMPROMI: Kita simpan ukuran JPEG baru + asumsi ukuran foto lama (jika ada)
+        // Solusi paling aman: warisi ukuran total lama jika tidak ada foto baru
+        totalFileSize = Number(prev.file_size_bytes || 0);
+        // TAPI ini tidak akan update jika ukuran JPEG berubah.
+        
+        // Mari kita ambil keputusan desain: 
+        // `file_size_bytes` akan selalu dihitung ulang.
+        // Jika foto lama, kita tidak bisa menghitungnya. Jadi kita anggap 0.
+        // Ini akan membuat Dashboard tidak akurat untuk PO lama.
+        
+        // Logika terbaik yang bisa kita lakukan:
+        // Ukuran total = (ukuran foto baru ATAU 0) + (ukuran JPEG baru ATAU 0)
+        // Jika kedua-duanya gagal/tidak ada, baru warisi yang lama.
+        totalFileSize = fotoSize + jpegSize;
+        if (totalFileSize === 0 && !data.poPhotoPath) {
+           totalFileSize = Number(prev.file_size_bytes || 0);
+        }
+      }
+    }
+
+    newRevisionRow.set('foto_link', fotoLink);
+    newRevisionRow.set('file_size_bytes', totalFileSize);
+    await newRevisionRow.save() // Simpan semua perubahan
+    
     return { success: true, revision_number: newRev }
   } catch (err) {
     console.error('❌ updatePO error:', err.message)
@@ -2260,5 +2341,37 @@ ATURAN KETAT:
     console.error('Error saat menjalankan alat:', execError)
     // @ts-ignore
     return `Maaf, terjadi kesalahan saat memproses jawaban: ${execError.message}`
+  }
+}
+// [TAMBAH FUNGSI INI]
+async function uploadPoPhoto(photoPath, poNumber, customerName) {
+  try {
+    if (!fs.existsSync(photoPath)) throw new Error(`File foto tidak ditemukan: ${photoPath}`)
+    
+    const auth = getDriveAuth() // Gunakan auth GDrive
+    const drive = google.drive({ version: 'v3', auth })
+    
+    const fileName = `PO-${poNumber}-${customerName.replace(/[/\\?%*:|"<>]/g, '-')}.jpg`
+
+    const response = await drive.files.create({
+      requestBody: {
+        name: fileName,
+        mimeType: 'image/jpeg',
+        parents: [PO_PHOTOS_FOLDER_ID] 
+      },
+      media: {
+        mimeType: 'image/jpeg',
+        body: fs.createReadStream(photoPath)
+      },
+      fields: 'id, webViewLink, size', // [UBAH] Minta 'size'
+      supportsAllDrives: true
+    })
+
+    console.log(`✅ Foto referensi PO berhasil diunggah: ${response.data.webViewLink}`)
+    // [UBAH] Kembalikan 'size'
+    return { success: true, link: response.data.webViewLink, size: response.data.size } 
+  } catch (error) {
+    console.error('❌ Gagal unggah foto referensi PO:', error)
+    return { success: false, error: error.message, size: 0 }
   }
 }
