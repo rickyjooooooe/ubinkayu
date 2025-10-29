@@ -1689,7 +1689,7 @@ ATURAN KETAT:
   let aiDecision = { tool: 'unknown' } // Default jika AI gagal
 
   const hfToken = process.env.HUGGING_FACE_API_TOKEN
-  const modelId = process.env.HF_MODEL_ID || 'gpt2'
+  const modelId = process.env.HF_MODEL_ID || 'mistralai/Mistral-7B-Instruct-v0.1'
 
   console.log(`[Vercel AI - HF DEBUG] Using Model ID: ${modelId}`)
   console.log(
