@@ -199,27 +199,26 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
             jatuh tempo dalam 14 hari ke depan.
           </p>
 
-          {/* [MODIFIKASI] Ganti bagian ini dengan struktur yang lebih rapi */}
+          {/* [MODIFIKASI] Daftar ini sekarang akan scrollable */}
           <div className="attention-list">
             {dashboardData.nearingDeadlinePOs.map((po) => (
               <div key={po.id} className="attention-item">
-                <div>
-                  {' '}
-                  {/* Wrapper untuk teks */}
+
+                {/* Bagian Kiri: Info PO dan Customer */}
+                <div className="attention-info">
                   <p className="attention-line-1">
                     <strong>{po.po_number}</strong>
                     <span className="customer-name"> - {po.project_name}</span>
                   </p>
-                  <p className="attention-line-2">
-                    Deadline:{' '}
-                    {new Date(po.deadline || 0).toLocaleDateString('id-ID', {
-                      day: '2-digit',
-                      month: 'long',
-                      year: 'numeric'
-                    })}
-                  </p>
                 </div>
-                {/* Di sini Anda bisa menambahkan tombol jika perlu */}
+
+                {/* Bagian Kanan: Badge Deadline yang ringkas */}
+                <div className="attention-deadline-badge">
+                  {new Date(po.deadline || 0).toLocaleDateString('id-ID', {
+                    day: '2-digit',
+                    month: 'short' // Dibuat ringkas (mis: Okt)
+                  })}
+                </div>
               </div>
             ))}
           </div>

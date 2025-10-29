@@ -3008,3 +3008,58 @@ body {
      font-size: 2rem; /* Kecilkan sedikit angkanya di mobile */
   }
 }
+
+.attention-list {
+  max-height: 220px;  /* Batasi tinggi maksimum, sesuaikan jika perlu */
+  overflow-y: auto;   /* Tambahkan scrollbar jika daftar lebih panjang */
+  margin-top: 1rem;
+  padding-right: 8px; /* Beri ruang untuk scrollbar */
+  display: flex;
+  flex-direction: column;
+  gap: 10px;          /* Jarak antar item di dalam list */
+}
+
+/* 2. Styling untuk satu baris item PO */
+.attention-item {
+  display: flex;
+  justify-content: space-between; /* Info PO di kiri, deadline di kanan */
+  align-items: center;
+  padding: 10px 12px;
+  background-color: #fffaf0; /* Warna sedikit beda dari card */
+  border-radius: 8px;
+  border: 1px solid #feedc7;
+}
+
+/* 3. Styling untuk info PO (sebelah kiri) */
+.attention-info .attention-line-1 {
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin: 0;
+  line-height: 1.4;
+  padding-right: 10px; /* Jarak dari badge */
+}
+
+.attention-info .customer-name {
+  font-weight: 400;
+  color: #4b5563; /* Abu-abu gelap */
+  font-size: 0.85rem;
+  white-space: nowrap;      /* Cegah nama customer turun baris */
+  overflow: hidden;         /* Sembunyikan jika terlalu panjang */
+  text-overflow: ellipsis;  /* Beri ... jika terlalu panjang */
+  max-width: 200px;         /* Batasi lebar nama customer */
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* 4. Styling untuk "Badge" Deadline (sebelah kanan) */
+.attention-deadline-badge {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #c2410c; /* Oranye tua */
+  background-color: #fff7ed; /* Oranye sangat muda */
+  padding: 4px 10px;
+  border-radius: 999px; /* Bentuk pil */
+  border: 1px solid #fed7aa;
+  flex-shrink: 0;       /* Agar badge tidak mengecil */
+  white-space: nowrap;
+}
