@@ -21,7 +21,6 @@ import {
 } from './_helpers.js'
 import { google } from 'googleapis'
 import stream from 'stream'
-import fetch from 'node-fetch'
 
 const formatDate = (dateString) => {
   if (!dateString) return '-'
@@ -1706,7 +1705,7 @@ ATURAN KETAT:
 
     const fullPromptForHf = `${systemPrompt}\n\nPertanyaan Pengguna: "${prompt}"\n\nJSON Perintah:`
 
-    const response = await fetch(`https://api-inference.huggingface.co/models/${modelId}`, {
+    const response = await fetch(`https://api.inference.huggingface.co/models/${modelId}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${hfToken}`,
