@@ -1607,6 +1607,7 @@ export async function handleAiChat(req, res) {
     return res.status(400).json({ error: 'Prompt is required' })
   }
   console.log(`🤖 [Vercel AI - HF] Received prompt: "${prompt}"`)
+  console.log('--- MEMAKSA DEPLOY BARU UNTUK REFRESH PROVIDER ---')
 
   // 1. Dapatkan Data Konteks (PO)
   let allPOs
