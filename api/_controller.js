@@ -21,6 +21,7 @@ import {
 } from './_helpers.js'
 import { google } from 'googleapis'
 import stream from 'stream'
+import { HfInference } from '@huggingface/inference'
 
 const formatDate = (dateString) => {
   if (!dateString) return '-'
@@ -1695,61 +1696,31 @@ ATURAN KETAT:
     `[Vercel AI - HF DEBUG] Using Token (first 5): ${hfToken ? hfToken.substring(0, 5) + '...' : 'TOKEN IS MISSING'}`
   )
   try {
-    console.log('⏳ [Vercel AI - HF] Calling Hugging Face Inference API...')
-    const hfToken = process.env.HUGGING_FACE_API_TOKEN
-    const modelId = process.env.HF_MODEL_ID || 'mistralai/Mistral-7B-Instruct-v0.1' // Default jika env var tidak ada
+    console.log('⏳ [Vercel AI - HF] Calling Hugging Face Inference API via SDK...')
 
     if (!hfToken) {
       throw new Error('HUGGING_FACE_API_TOKEN environment variable is missing.')
-    }
+    } // Pastikan Anda sudah import { HfInference } from '@huggingface/inference' di atas file
 
-    const fullPromptForHf = `${systemPrompt}\n\nPertanyaan Pengguna: "${prompt}"\n\nJSON Perintah:`
+    // 1. Buat instance HfInference
+    const hf = new HfInference(hfToken)
 
-    const response = await fetch(`https://api.inference.huggingface.co/models/${modelId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${hfToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        inputs: fullPromptForHf,
-        parameters: {
-          max_new_tokens: 150, // Cukup untuk JSON perintah
-          temperature: 0.1, // Lebih deterministik
-          return_full_text: false // Penting! Hanya respons AI
-          // top_p: 0.9 // Parameter lain jika diperlukan
-        },
-        options: {
-          wait_for_model: true // Tunggu model loading jika perlu
-        }
-      })
+    const fullPromptForHf = `${systemPrompt}\n\nPertanyaan Pengguna: "${prompt}"\n\nJSON Perintah:` // 2. Panggil menggunakan metode .textGeneration()
+
+    const result = await hf.textGeneration({
+      model: modelId,
+      inputs: fullPromptForHf,
+      parameters: {
+        max_new_tokens: 150,
+        temperature: 0.1,
+        return_full_text: false // Ini penting
+      }
     })
 
-    if (!response.ok) {
-      const errorBody = await response.text() // Ambil detail error
-      console.error(`💥 [Vercel AI - HF] Hugging Face API Error (${response.status}):`, errorBody)
-      // Coba parse errorBody jika mungkin JSON
-      let detail = errorBody
-      try {
-        detail = JSON.parse(errorBody).error || errorBody
-      } catch {
-        /* abaikan jika bukan json */
-      }
-      throw new Error(`HF API request failed (${response.status}): ${detail}`)
-    }
+    console.log('✅ [Vercel AI - HF] Hugging Face raw response:', JSON.stringify(result)) // 3. Ekstrak dan bersihkan teks JSON
 
-    const result = await response.json()
-    console.log('✅ [Vercel AI - HF] Hugging Face raw response:', JSON.stringify(result)) // Log respons mentah
-
-    // Ekstrak dan bersihkan teks JSON
-    if (
-      result &&
-      Array.isArray(result) &&
-      result[0] &&
-      typeof result[0].generated_text === 'string'
-    ) {
-      aiDecisionJsonString = result[0].generated_text.trim()
-      // Bersihkan markdown ```json ... ``` jika ada
+    if (result && typeof result.generated_text === 'string') {
+      aiDecisionJsonString = result.generated_text.trim() // Bersihkan markdown ```json ... ``` jika ada
       if (aiDecisionJsonString.startsWith('```json')) {
         aiDecisionJsonString = aiDecisionJsonString.substring(7).trim() // Hapus ```json dan trim
       }
@@ -1758,7 +1729,6 @@ ATURAN KETAT:
           .substring(0, aiDecisionJsonString.length - 3)
           .trim() // Hapus ``` dan trim
       }
-      // Kadang model menambahkan penjelasan setelah JSON, coba ambil hanya bagian JSON
       const jsonStart = aiDecisionJsonString.indexOf('{')
       const jsonEnd = aiDecisionJsonString.lastIndexOf('}')
       if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
@@ -1766,26 +1736,22 @@ ATURAN KETAT:
       }
 
       console.log(` -> Cleaned JSON string: ${aiDecisionJsonString}`)
-      // Parsing JSON
-      aiDecision = JSON.parse(aiDecisionJsonString) // Coba parse
+      aiDecision = JSON.parse(aiDecisionJsonString)
       console.log('✅ [Vercel AI - HF] Parsed JSON decision:', aiDecision)
     } else {
       console.error('❌ [Vercel AI - HF] Unexpected response format:', result)
       throw new Error('Unexpected response format from Hugging Face.')
     }
   } catch (err) {
-    console.error('💥 [Vercel AI - HF] AI call or JSON parse ERROR:', err.message)
-    // Jika error HANYA saat parsing, kita tetap punya string mentahnya untuk debug
+    console.error('💥 [Vercel AI - HF] AI call or JSON parse ERROR:', err.message) // Jika error HANYA saat parsing, kita tetap punya string mentahnya untuk debug
     let clientError = 'Gagal memproses respons dari AI.'
     if (err instanceof SyntaxError) {
       clientError += ` Respons mentah: ${aiDecisionJsonString}`
     } else {
       clientError = err.message // Tampilkan error asli jika bukan parsing
     }
-    // Jangan langsung return 500, biarkan switch case menangani 'unknown'
     console.warn(' -> Proceeding with default "unknown" tool due to error.')
-    aiDecision = { tool: 'unknown' } // Set ke unknown agar switch case default jalan
-    // return res.status(500).json({ error: clientError, details: err.message });
+    aiDecision = { tool: 'unknown' }
   }
 
   // 4. Jalankan Tool Berdasarkan Keputusan AI
