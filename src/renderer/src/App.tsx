@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 
-// Impor Komponen Halaman dan Navigasi
+// Impor Komponen Halaman dan Navigasisd
 import Navbar from './components/Navbar'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
