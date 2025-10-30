@@ -1687,7 +1687,7 @@ ATURAN KETAT:
   let aiDecision = { tool: 'unknown' }
 
   const groqToken = process.env.GROQ_API_KEY // <-- Variabel BARU
-  const modelId = 'mixtral-8x7b-32768' // <-- Model yang didukung Groq
+  const modelId = 'llama3-8b-8192'
 
   console.log(`[Vercel AI - Groq] Using Model ID: ${modelId}`)
 
