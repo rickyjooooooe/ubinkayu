@@ -2149,13 +2149,29 @@ ATURAN KETAT:
         break
       }
       case 'general': {
+        // Buat tanggal UTC
         const now = new Date()
-        const hour = now.getHours()
+
+        // Buat tanggal baru dengan menambahkan offset 7 jam (WIB = UTC+7)
+        // 7 jam * 60 menit/jam * 60 detik/menit * 1000 ms/detik
+        const wibTime = new Date(now.getTime() + 7 * 60 * 60 * 1000)
+
+        // Ambil jam dalam zona waktu UTC (yang sekarang sudah disesuaikan ke WIB)
+        const hour = wibTime.getUTCHours()
+
         let greeting = 'Halo!'
-        if (hour < 11) greeting = 'Selamat pagi!'
-        else if (hour < 15) greeting = 'Selamat siang!'
-        else if (hour < 19) greeting = 'Selamat sore!'
-        else greeting = 'Selamat malam!'
+        // Logika jam Anda sekarang akan berfungsi untuk WIB
+        if (hour < 4)
+          greeting = 'Selamat malam!' // (00:00 - 03:59)
+        else if (hour < 11)
+          greeting = 'Selamat pagi!' // (04:00 - 10:59)
+        else if (hour < 15)
+          greeting = 'Selamat siang!' // (11:00 - 14:59)
+        else if (hour < 19)
+          greeting = 'Selamat sore!' // (15:00 - 18:59)
+        else greeting = 'Selamat malam!' // (19:00 - 23:59)
+
+        // Sisa kode Anda sama
         if (prompt.toLowerCase().includes('siapa')) {
           responseText = 'Saya Asisten AI Ubinkayu.'
         } else if (prompt.toLowerCase().includes('terima kasih')) {
