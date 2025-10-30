@@ -21,7 +21,6 @@ import {
 } from './_helpers.js'
 import { google } from 'googleapis'
 import stream from 'stream'
-import { InferenceClient } from '@huggingface/inference'
 
 const formatDate = (dateString) => {
   if (!dateString) return '-'
@@ -1599,29 +1598,27 @@ async function listPOsForChat() {
   return result
 }
 
-// --- Handler AI Chat (Menggunakan Hugging Face) ---
+// HAPUS FUNGSI handleAiChat LAMA ANDA, GANTI DENGAN INI
 export async function handleAiChat(req, res) {
   const { prompt } = req.body
   if (!prompt) {
-    console.warn('[Vercel AI - HF] Prompt is missing.')
+    console.warn('[Vercel AI - Groq] Prompt is missing.')
     return res.status(400).json({ error: 'Prompt is required' })
   }
-  console.log(`🤖 [Vercel AI - HF] Received prompt: "${prompt}"`)
-  console.log('--- MEMAKSA DEPLOY BARU UNTUK REFRESH PROVIDER ---')
+  console.log(`🤖 [Vercel AI - Groq] Received prompt: "${prompt}"`)
 
-  // 1. Dapatkan Data Konteks (PO)
+  // 1. Dapatkan Data Konteks (PO) - Kode ini sama
   let allPOs
   try {
     allPOs = await listPOsForChat()
     if (!Array.isArray(allPOs)) throw new Error('listPOsForChat did not return array.')
     console.log(` -> Context: Fetched ${allPOs.length} POs for AI.`)
   } catch (e) {
-    console.error('💥 [Vercel AI - HF] Failed to get PO data for context:', e.message)
-    // Kembalikan error server karena ini krusial
+    console.error('💥 [Vercel AI - Groq] Failed to get PO data for context:', e.message)
     return res.status(500).json({ error: 'Gagal mengambil data PO untuk AI.' })
   }
 
-  // 2. Siapkan System Prompt
+  // 2. Siapkan System Prompt - Kode ini sama
   const today = new Date().toISOString().split('T')[0]
   const systemPrompt = `Anda adalah Asisten ERP Ubinkayu. Tugas Anda adalah mengubah pertanyaan pengguna menjadi JSON 'perintah' berdasarkan alat (tools) yang tersedia. HANYA KEMBALIKAN JSON YANG VALID, tanpa teks tambahan sebelum atau sesudahnya.
 Hari ini adalah ${today}.
@@ -1685,121 +1682,99 @@ ATURAN KETAT:
 - JANGAN menjawab pertanyaan. HANYA KEMBALIKAN JSON.
 - Jika tidak yakin tool mana, KEMBALIKAN: {"tool": "unknown"}`
 
-  // 3. Panggil Hugging Face API
-  let aiDecisionJsonString = '' // Variabel untuk menyimpan respons mentah (untuk debug jika gagal parse)
-  let aiDecision = { tool: 'unknown' } // Default jika AI gagal
+  // 3. Panggil Groq API
+  let aiDecisionJsonString = ''
+  let aiDecision = { tool: 'unknown' }
 
-  const hfToken = process.env.HUGGING_FACE_API_TOKEN
-  const modelId = process.env.HF_MODEL_ID || 'mistralai/Mistral-7B-Instruct-v0.1'
+  const groqToken = process.env.GROQ_API_KEY // <-- Variabel BARU
+  const modelId = 'mixtral-8x7b-32768' // <-- Model yang didukung Groq
 
-  console.log(`[Vercel AI - HF DEBUG] Using Model ID: ${modelId}`)
-  console.log(
-    `[Vercel AI - HF DEBUG] Using Token (first 5): ${hfToken ? hfToken.substring(0, 5) + '...' : 'TOKEN IS MISSING'}`
-  )
-  try {
-    console.log('⏳ [Vercel AI - HF] Calling Hugging Face Inference API via MANUAL FETCH...')
+  console.log(`[Vercel AI - Groq] Using Model ID: ${modelId}`)
 
-    if (!hfToken) {
-      throw new Error('HUGGING_FACE_API_TOKEN environment variable is missing.')
-    }
+  if (!groqToken) {
+    console.error('💥 [Vercel AI - Groq] GROQ_API_KEY environment variable is missing.')
+    aiDecision = { tool: 'unknown' } // Langsung ke switch 'unknown'
+  } else {
+    try {
+      console.log('⏳ [Vercel AI - Groq] Calling Groq API via MANUAL FETCH...')
 
-    // Tentukan endpoint Serverless API
-    const API_URL = `https://api-inference.huggingface.co/models/${modelId}`
+      const API_URL = 'https://api.groq.com/openai/v1/chat/completions'
 
-    // Siapkan payload (body)
-    const payload = {
-      inputs: `${systemPrompt}\n\nPertanyaan Pengguna: "${prompt}"\n\nJSON Perintah:`,
-      parameters: {
-        max_new_tokens: 150,
+      const payload = {
+        model: modelId,
+        messages: [
+          // Format chat (lebih baik untuk model instruct)
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: prompt }
+        ],
         temperature: 0.1,
-        return_full_text: false
-      },
-      options: {
-        // Penting agar tidak menunggu model yang sedang loading
-        wait_for_model: true
+        max_tokens: 150
       }
+
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${groqToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('❌ [Vercel AI - Groq] Manual Fetch Error Response:', errorText)
+        throw new Error(`Groq API request failed with status ${response.status}: ${errorText}`)
+      }
+
+      const result = await response.json()
+      console.log('✅ [Vercel AI - Groq] Groq raw response (manual):', JSON.stringify(result))
+
+      // Groq menggunakan format OpenAI: { choices: [ { message: { content: "..." } } ] }
+      if (
+        result &&
+        result.choices &&
+        result.choices[0] &&
+        result.choices[0].message &&
+        result.choices[0].message.content
+      ) {
+        aiDecisionJsonString = result.choices[0].message.content.trim()
+
+        // --- Sisa kode parsing Anda dari sini SAMA PERSIS ---
+        if (aiDecisionJsonString.startsWith('```json')) {
+          aiDecisionJsonString = aiDecisionJsonString.substring(7).trim()
+        }
+        if (aiDecisionJsonString.endsWith('```')) {
+          aiDecisionJsonString = aiDecisionJsonString
+            .substring(0, aiDecisionJsonString.length - 3)
+            .trim()
+        }
+        const jsonStart = aiDecisionJsonString.indexOf('{')
+        const jsonEnd = aiDecisionJsonString.lastIndexOf('}')
+        if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+          aiDecisionJsonString = aiDecisionJsonString.substring(jsonStart, jsonEnd + 1)
+        }
+
+        console.log(` -> Cleaned JSON string: ${aiDecisionJsonString}`)
+        aiDecision = JSON.parse(aiDecisionJsonString)
+        console.log('✅ [Vercel AI - Groq] Parsed JSON decision:', aiDecision)
+        // --- Akhir dari kode parsing yang sama ---
+      } else {
+        console.error('❌ [Vercel AI - Groq] Unexpected response format (manual):', result)
+        throw new Error('Unexpected response format from Groq (manual fetch).')
+      }
+    } catch (err) {
+      console.error('💥 [Vercel AI - Groq] AI call or JSON parse ERROR:', err.message)
+      aiDecision = { tool: 'unknown' }
     }
-
-    // Panggil fetch manual
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${hfToken}`, // Gunakan token di sini
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    })
-
-    // Cek jika response gagal (misal: 401, 500, dll)
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('❌ [Vercel AI - HF] Manual Fetch Error Response:', errorText)
-      throw new Error(`HF API request failed with status ${response.status}: ${errorText}`)
-    }
-
-    // Ambil hasil JSON
-    const result = await response.json()
-    console.log('✅ [Vercel AI - HF] Hugging Face raw response (manual):', JSON.stringify(result))
-
-    // PENTING: API manual mengembalikan array: [ { "generated_text": "..." } ]
-    if (
-      result &&
-      Array.isArray(result) &&
-      result[0] &&
-      typeof result[0].generated_text === 'string'
-    ) {
-      // Ambil teks dari elemen pertama array
-      aiDecisionJsonString = result[0].generated_text.trim()
-
-      // --- Sisa kode parsing Anda dari sini SAMA PERSIS ---
-      if (aiDecisionJsonString.startsWith('```json')) {
-        aiDecisionJsonString = aiDecisionJsonString.substring(7).trim() // Hapus ```json dan trim
-      }
-      if (aiDecisionJsonString.endsWith('```')) {
-        aiDecisionJsonString = aiDecisionJsonString
-          .substring(0, aiDecisionJsonString.length - 3)
-          .trim() // Hapus ``` dan trim
-      }
-      const jsonStart = aiDecisionJsonString.indexOf('{')
-      const jsonEnd = aiDecisionJsonString.lastIndexOf('}')
-      if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
-        aiDecisionJsonString = aiDecisionJsonString.substring(jsonStart, jsonEnd + 1)
-      }
-
-      console.log(` -> Cleaned JSON string: ${aiDecisionJsonString}`)
-      aiDecision = JSON.parse(aiDecisionJsonString)
-      console.log('✅ [Vercel AI - HF] Parsed JSON decision:', aiDecision)
-      // --- Akhir dari kode parsing yang sama ---
-    } else {
-      console.error('❌ [Vercel AI - HF] Unexpected response format (manual):', result)
-      // Jika model sedang loading, errornya mungkin ada di sini
-      if (result && result.error) {
-        throw new Error(`HF Model Error: ${result.error}`)
-      }
-      throw new Error('Unexpected response format from Hugging Face (manual fetch).')
-    }
-  } catch (err) {
-    // Blok catch ini biarkan sama seperti kode Anda sebelumnya
-    console.error('💥 [Vercel AI - HF] AI call or JSON parse ERROR:', err.message)
-    let clientError = 'Gagal memproses respons dari AI.'
-    if (err instanceof SyntaxError) {
-      clientError += ` Respons mentah: ${aiDecisionJsonString}`
-    } else {
-      clientError = err.message
-    }
-    console.warn(' -> Proceeding with default "unknown" tool due to error.')
-    aiDecision = { tool: 'unknown' }
   }
 
-  // 4. Jalankan Tool Berdasarkan Keputusan AI
+  // 4. Jalankan Tool Berdasarkan Keputusan AI - Kode ini sama
   try {
-    console.log(`⚙️ [Vercel AI - HF] Executing tool: ${aiDecision?.tool || 'unknown'}`)
-    let responseText = '' // Variabel untuk jawaban final
+    console.log(`⚙️ [Vercel AI - Groq] Executing tool: ${aiDecision?.tool || 'unknown'}`)
+    let responseText = ''
 
-    switch (
-      aiDecision?.tool // Tambah ?. untuk keamanan
-    ) {
-      // --- SEMUA CASE TOOL ANDA MASUK DI SINI ---
+    switch (aiDecision?.tool) {
+      // --- SEMUA CASE TOOL ANDA SAMA PERSIS DI SINI ---
       case 'getTotalPO': {
         const totalPOs = allPOs.length
         const activePOsList = allPOs.filter(
@@ -2192,16 +2167,16 @@ ATURAN KETAT:
       }
       case 'unknown': // Ditangani jika AI atau parsing gagal
       default: // Juga menangani tool tak dikenal dari AI
-        console.warn(`[Vercel AI - HF] Tool "${aiDecision?.tool}" is unknown or AI failed.`)
+        console.warn(`[Vercel AI - Groq] Tool "${aiDecision?.tool}" is unknown or AI failed.`)
         responseText =
           "Maaf, saya tidak yakin bagaimana harus merespons itu. Coba tanyakan 'bantuan'."
         break
     }
 
-    console.log(`✅ [Vercel AI - HF] Tool execution complete. Sending response.`)
+    console.log(`✅ [Vercel AI - Groq] Tool execution complete. Sending response.`)
     return res.status(200).json({ response: responseText })
   } catch (execError) {
-    console.error('💥 [Vercel AI - HF] Tool execution ERROR:', execError.message, execError.stack)
+    console.error('💥 [Vercel AI - Groq] Tool execution ERROR:', execError.message, execError.stack)
     return res.status(500).json({
       error: 'Maaf, terjadi kesalahan saat menjalankan perintah.',
       details: execError.message
