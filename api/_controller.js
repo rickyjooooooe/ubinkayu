@@ -1696,43 +1696,69 @@ ATURAN KETAT:
   console.log(
     `[Vercel AI - HF DEBUG] Using Token (first 5): ${hfToken ? hfToken.substring(0, 5) + '...' : 'TOKEN IS MISSING'}`
   )
-  // KEMBALIKAN KE KODE ASLI INI
   try {
-    console.log('⏳ [Vercel AI - HF] Calling Hugging Face Inference API via SDK...')
+    console.log('⏳ [Vercel AI - HF] Calling Hugging Face Inference API via MANUAL FETCH...')
 
     if (!hfToken) {
       throw new Error('HUGGING_FACE_API_TOKEN environment variable is missing.')
     }
 
-    // 1. Buat instance HfInference (INI KODE ASLI ANDA)
-    const hf = new InferenceClient(hfToken)
+    // Tentukan endpoint Serverless API
+    const API_URL = `https://api-inference.huggingface.co/models/${modelId}`
 
-    const fullPromptForHf = `${systemPrompt}\n\nPertanyaan Pengguna: "${prompt}"\n\nJSON Perintah:`
-
-    // 2. Panggil menggunakan metode .textGeneration() (INI KODE ASLI ANDA)
-    const result = await hf.textGeneration({
-      model: modelId,
-      inputs: fullPromptForHf,
+    // Siapkan payload (body)
+    const payload = {
+      inputs: `${systemPrompt}\n\nPertanyaan Pengguna: "${prompt}"\n\nJSON Perintah:`,
       parameters: {
         max_new_tokens: 150,
         temperature: 0.1,
-        return_full_text: false // Ini penting
+        return_full_text: false
+      },
+      options: {
+        // Penting agar tidak menunggu model yang sedang loading
+        wait_for_model: true
       }
+    }
+
+    // Panggil fetch manual
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${hfToken}`, // Gunakan token di sini
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
     })
 
-    console.log('✅ [Vercel AI - HF] Hugging Face raw response:', JSON.stringify(result))
+    // Cek jika response gagal (misal: 401, 500, dll)
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('❌ [Vercel AI - HF] Manual Fetch Error Response:', errorText)
+      throw new Error(`HF API request failed with status ${response.status}: ${errorText}`)
+    }
 
-    // 3. Ekstrak dan bersihkan teks JSON (INI KODE ASLI ANDA)
-    // PERHATIKAN: SDK mengembalikan OBJEK, bukan ARRAY
-    if (result && typeof result.generated_text === 'string') {
-      aiDecisionJsonString = result.generated_text.trim()
+    // Ambil hasil JSON
+    const result = await response.json()
+    console.log('✅ [Vercel AI - HF] Hugging Face raw response (manual):', JSON.stringify(result))
+
+    // PENTING: API manual mengembalikan array: [ { "generated_text": "..." } ]
+    if (
+      result &&
+      Array.isArray(result) &&
+      result[0] &&
+      typeof result[0].generated_text === 'string'
+    ) {
+      // Ambil teks dari elemen pertama array
+      aiDecisionJsonString = result[0].generated_text.trim()
+
+      // --- Sisa kode parsing Anda dari sini SAMA PERSIS ---
       if (aiDecisionJsonString.startsWith('```json')) {
-        aiDecisionJsonString = aiDecisionJsonString.substring(7).trim()
+        aiDecisionJsonString = aiDecisionJsonString.substring(7).trim() // Hapus ```json dan trim
       }
       if (aiDecisionJsonString.endsWith('```')) {
         aiDecisionJsonString = aiDecisionJsonString
           .substring(0, aiDecisionJsonString.length - 3)
-          .trim()
+          .trim() // Hapus ``` dan trim
       }
       const jsonStart = aiDecisionJsonString.indexOf('{')
       const jsonEnd = aiDecisionJsonString.lastIndexOf('}')
@@ -1743,12 +1769,17 @@ ATURAN KETAT:
       console.log(` -> Cleaned JSON string: ${aiDecisionJsonString}`)
       aiDecision = JSON.parse(aiDecisionJsonString)
       console.log('✅ [Vercel AI - HF] Parsed JSON decision:', aiDecision)
+      // --- Akhir dari kode parsing yang sama ---
     } else {
-      console.error('❌ [Vercel AI - HF] Unexpected response format:', result)
-      throw new Error('Unexpected response format from Hugging Face.')
+      console.error('❌ [Vercel AI - HF] Unexpected response format (manual):', result)
+      // Jika model sedang loading, errornya mungkin ada di sini
+      if (result && result.error) {
+        throw new Error(`HF Model Error: ${result.error}`)
+      }
+      throw new Error('Unexpected response format from Hugging Face (manual fetch).')
     }
   } catch (err) {
-    // INI BLOK CATCH ASLI ANDA
+    // Blok catch ini biarkan sama seperti kode Anda sebelumnya
     console.error('💥 [Vercel AI - HF] AI call or JSON parse ERROR:', err.message)
     let clientError = 'Gagal memproses respons dari AI.'
     if (err instanceof SyntaxError) {
