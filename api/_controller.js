@@ -21,7 +21,7 @@ import {
 } from './_helpers.js'
 import { google } from 'googleapis'
 import stream from 'stream'
-import { HfInference } from '@huggingface/inference'
+import { InferenceClient } from '@huggingface/inference'
 
 const formatDate = (dateString) => {
   if (!dateString) return '-'
@@ -1705,7 +1705,7 @@ ATURAN KETAT:
     }
 
     // 1. Buat instance HfInference (INI KODE ASLI ANDA)
-    const hf = new HfInference(hfToken)
+    const hf = new InferenceClient(hfToken)
 
     const fullPromptForHf = `${systemPrompt}\n\nPertanyaan Pengguna: "${prompt}"\n\nJSON Perintah:`
 
