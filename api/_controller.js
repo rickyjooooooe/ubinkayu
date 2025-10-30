@@ -1687,7 +1687,7 @@ ATURAN KETAT:
   let aiDecision = { tool: 'unknown' }
 
   const groqToken = process.env.GROQ_API_KEY // <-- Variabel BARU
-  const modelId = 'llama3-8b-8192'
+  const modelId = 'llama-3.1-8b-instant'
 
   console.log(`[Vercel AI - Groq] Using Model ID: ${modelId}`)
 
