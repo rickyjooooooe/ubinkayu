@@ -1,5 +1,7 @@
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-explicit-any */
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+require('dotenv').config()
 
 interface ICustomAPI {
   // --- [BARU] Fungsi Login & Autentikasi ---

@@ -3,6 +3,8 @@
 import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron'
 import path from 'node:path'
 import fs from 'fs'
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+require('dotenv').config()
 
 import {
   testSheetConnection,
@@ -27,7 +29,7 @@ import {
   addNewProduct,
   getSalesItemData,
   updateStageDeadline,
-  handleOllamaChat
+  handleGroqChat
 } from '../../electron/sheet.js'
 
 if (process.platform === 'win32') {
@@ -127,7 +129,7 @@ app.whenReady().then(() => {
   ipcMain.handle('progress:updateDeadline', (_event, data) => updateStageDeadline(data));
 
   ipcMain.handle('ai:ollamaChat', async (_event, prompt) => {
-    return await handleOllamaChat(prompt);
+    return await handleGroqChat(prompt);
   });
 
   createWindow()

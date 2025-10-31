@@ -6,6 +6,8 @@ import { app, dialog } from 'electron'
 import { google } from 'googleapis'
 import { generatePOJpeg } from './jpegGenerator.js'
 import stream from 'node:stream'
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+require('dotenv').config()
 
 const SPREADSHEET_ID = '1Bp5rETvaAe9nT4DrNpm-WsQqQlPNaau4gIzw1nA5Khk'
 const PO_ARCHIVE_FOLDER_ID = '1-1Gw1ay4iQoFNFe2KcKDgCwOIi353QEC'
@@ -1890,17 +1892,22 @@ export async function addNewProduct(productData) {
   }
 }
 
-export async function handleOllamaChat(prompt) {
+/**
+ * Menangani logika chat AI menggunakan Groq API.
+ * (Pengganti handleOllamaChat)
+ */
+export async function handleGroqChat(prompt) {
+  // =================================================================
+  // 2. AMBIL KONTEKS DATA PO (Logika asli Anda dari Ollama)
+  // =================================================================
   let allPOs
   try {
-    allPOs = await listPOs() // Panggil fungsi listPOs yang sudah ada
-    // Validasi data PO (pastikan array dan bukan kosong jika diperlukan)
+    allPOs = await listPOs() // Memanggil listPOs() yang diimpor
     if (!Array.isArray(allPOs)) {
       console.error('listPOs did not return an array.')
       allPOs = [] // Fallback ke array kosong
     }
     if (allPOs.length === 0) {
-      // Tetap izinkan pertanyaan dasar
       if (
         ['bantuan', 'help', 'siapa', 'halo', 'info'].some((k) => prompt.toLowerCase().includes(k))
       ) {
@@ -1915,10 +1922,13 @@ export async function handleOllamaChat(prompt) {
     return 'Maaf, saya gagal mengambil data PO terbaru untuk menjawab pertanyaan Anda.'
   }
 
+  // =================================================================
+  // 3. SIAPKAN SAPAAN & SYSTEM PROMPT (Logika asli Anda dari Ollama)
+  // =================================================================
   const now = new Date()
-  const currentHour = now.getHours() // Jam (0-23)
-  // const today = now.toISOString().split('T')[0]
-  let timeOfDayGreeting = 'Halo!' // Default greeting
+  const currentHour = now.getHours()
+  let timeOfDayGreeting = 'Halo!'
+  // Logika sapaan ini adalah untuk WAKTU LOKAL (Electron), bukan UTC (Vercel)
   if (currentHour >= 4 && currentHour < 11) {
     timeOfDayGreeting = 'Selamat pagi!'
   } else if (currentHour >= 11 && currentHour < 15) {
@@ -1930,12 +1940,13 @@ export async function handleOllamaChat(prompt) {
   }
 
   const today = new Date().toISOString().split('T')[0]
-  const systemPrompt = `Anda adalah Asisten ERP Ubinkayu. Tugas Anda adalah mengubah pertanyaan pengguna menjadi JSON 'perintah' berdasarkan alat (tools) yang tersedia.
+  // System prompt lengkap Anda, identik dengan Vercel
+  const systemPrompt = `Anda adalah Asisten ERP Ubinkayu. Tugas Anda adalah mengubah pertanyaan pengguna menjadi JSON 'perintah' berdasarkan alat (tools) yang tersedia. HANYA KEMBALIKAN JSON YANG VALID, tanpa teks tambahan sebelum atau sesudahnya.
 Hari ini adalah ${today}.
 
 Alat (Tools) yang Tersedia:
 1. "getTotalPO": Menghitung jumlah total SEMUA PO, SEMUA PO aktif (status BUKAN Completed/Cancelled), dan SEMUA PO selesai. Memberikan rincian jumlah Open & In Progress untuk PO Aktif.
-   - Keywords: "jumlah po", "total po", "ada berapa po", "semua po aktif", "berapa po aktif", "jumlah po yang sedang berjalan", "how many purchase orders".
+   - Keywords: "jumlah po", "total po", "ada berapa po", "semua po aktif", "berapa poaktif", "jumlah po yang sedang berjalan", "how many purchase orders".
    - **PENTING:** Gunakan tool ini jika user bertanya jumlah PO "aktif" secara umum.
    - JANGAN gunakan tool ini jika user HANYA bertanya tentang PO Urgent atau status spesifik (Open/In Progress).
    - JSON: {"tool": "getTotalPO"}
@@ -1993,7 +2004,6 @@ ATURAN KETAT:
 - Jika user bertanya "berapa po aktif?" atau "jumlah po aktif", KEMBALIKAN: {"tool": "getTotalPO"}
 - Jika user tanya "status po 123", KEMBALIKAN: {"tool": "getPOStatus", "param": "123"}
 - Jika user tanya "detail po customer PT ABC", KEMBALIKAN: {"tool": "findPODetails", "param": {"poNumber": null, "customerName": "PT ABC"}}
-// Hapus formatting Markdown
 - Jika user bertanya tentang PO yang mungkin tidak ada (misal "status po 999", "cari PO xyz"), TETAP pilih tool getPOStatus atau findPODetails dan ekstrak parameternya. Biarkan backend menangani jika data tidak ditemukan.
 - Contoh Tanggal Relatif (jika ${today} adalah 2025-10-25):
     - "po kemarin": {"tool": "getPOsByDateRange", "startDate": "2025-10-24", "endDate": "2025-10-24"}
@@ -2001,48 +2011,105 @@ ATURAN KETAT:
     - "po minggu ini" (Asumsi Minggu awal): {"tool": "getPOsByDateRange", "startDate": "2025-10-19", "endDate": "2025-10-25"}
 - Jika tidak yakin tool mana yang paling cocok, KEMBALIKAN: {"tool": "unknown"}
 - Jika user tanya "cara buat po", KEMBALIKAN: {"tool": "getApplicationHelp", "topic": "buat PO"}
-  - Jika user tanya "gimana cara nambah produk master?", KEMBALIKAN: {"tool": "getApplicationHelp", "topic": "tambah produk"} // Contoh baru
-  - Jika user tanya "step by step update progress", KEMBALIKAN: {"tool": "getApplicationHelp", "topic": "update progress"} // Contoh baru
+- Jika user tanya "gimana cara nambah produk master?", KEMBALIKAN: {"tool": "getApplicationHelp", "topic": "tambah produk"}
+- Jika user tanya "step by step update progress", KEMBALIKAN: {"tool": "getApplicationHelp", "topic": "update progress"}
 `
 
-  let aiDecision
-  try {
-    const response = await fetch('http://localhost:11434/api/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'phi3:latest',
-        prompt: `Pertanyaan Pengguna: "${prompt}"\n\nJSON Perintah:`,
-        system: systemPrompt,
-        stream: false,
-        format: 'json'
-      })
-    })
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(`Ollama API error: ${errorData.error || response.statusText}`)
-    }
-    const data = await response.json()
-    // Tambahkan validasi JSON dasar
-    if (typeof data.response !== 'string' || !data.response.startsWith('{')) {
-      throw new Error('Ollama tidak mengembalikan format JSON yang valid.')
-    }
-    aiDecision = JSON.parse(data.response)
-  } catch (err) {
-    console.error('Error klasifikasi Ollama:', err)
-    // @ts-ignore
-    if (
-      err.message &&
-      (err.message.includes('ECONNREFUSED') || err.message.includes('fetch failed'))
-    ) {
-      return 'Koneksi ke server AI Ollama lokal gagal. Pastikan Ollama sudah berjalan.'
-    }
-    // @ts-ignore
-    return `Maaf, terjadi kesalahan saat memahami permintaan Anda di Electron: ${err.message}`
+  // =================================================================
+  // 4. PANGGIL GROQ API (PENGGANTI OLLAMA)
+  // =================================================================
+  let aiDecisionJsonString = ''
+  let aiDecision = { tool: 'unknown' }
+
+  // Ambil API key dari file .env (Pastikan .env sudah di-load di main process)
+  const groqToken = process.env.GROQ_API_KEY
+  const modelId = 'llama-3.1-8b-instant' // Model yang sama dengan Vercel
+
+  console.log(`[Electron AI - Groq] Using Model ID: ${modelId}`)
+
+  if (!groqToken) {
+    console.error('💥 [Electron AI - Groq] GROQ_API_KEY tidak ditemukan di process.env')
+    return 'Maaf, GROQ_API_KEY tidak ditemukan. Pastikan Anda sudah membuat file .env dan me-restart Electron.'
   }
 
-  // 4. Jalankan Alat (Tools) di JavaScript berdasarkan keputusan AI
   try {
+    console.log('⏳ [Electron AI - Groq] Calling Groq API via MANUAL FETCH...')
+
+    const API_URL = 'https://api.groq.com/openai/v1/chat/completions'
+
+    const payload = {
+      model: modelId,
+      messages: [
+        // Format chat (lebih baik untuk model instruct)
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.1,
+      max_tokens: 150
+    }
+
+    // Menggunakan 'fetch' yang tersedia secara global di Electron (atau node-fetch jika di main process)
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${groqToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('❌ [Electron AI - Groq] Manual Fetch Error Response:', errorText)
+      throw new Error(`Groq API request failed with status ${response.status}: ${errorText}`)
+    }
+
+    const result = await response.json()
+    console.log('✅ [Electron AI - Groq] Groq raw response (manual):', JSON.stringify(result))
+
+    // Ekstrak respons dari format Groq/OpenAI
+    if (
+      result &&
+      result.choices &&
+      result.choices[0] &&
+      result.choices[0].message &&
+      result.choices[0].message.content
+    ) {
+      aiDecisionJsonString = result.choices[0].message.content.trim()
+
+      // Pembersihan JSON yang sama persis dengan Vercel
+      if (aiDecisionJsonString.startsWith('```json')) {
+        aiDecisionJsonString = aiDecisionJsonString.substring(7).trim()
+      }
+      if (aiDecisionJsonString.endsWith('```')) {
+        aiDecisionJsonString = aiDecisionJsonString
+          .substring(0, aiDecisionJsonString.length - 3)
+          .trim()
+      }
+      const jsonStart = aiDecisionJsonString.indexOf('{')
+      const jsonEnd = aiDecisionJsonString.lastIndexOf('}')
+      if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+        aiDecisionJsonString = aiDecisionJsonString.substring(jsonStart, jsonEnd + 1)
+      }
+
+      console.log(` -> Cleaned JSON string: ${aiDecisionJsonString}`)
+      aiDecision = JSON.parse(aiDecisionJsonString)
+      console.log('✅ [Electron AI - Groq] Parsed JSON decision:', aiDecision)
+    } else {
+      console.error('❌ [Electron AI - Groq] Unexpected response format (manual):', result)
+      throw new Error('Unexpected response format from Groq (manual fetch).')
+    }
+  } catch (err) {
+    console.error('💥 [Electron AI - Groq] AI call or JSON parse ERROR:', err.message)
+    // @ts-ignore
+    return `Maaf, terjadi kesalahan saat menghubungi Groq: ${err.message}`
+  }
+
+  // =================================================================
+  // 5. JALANKAN ALAT (TOOLS) (Logika asli Anda dari Ollama)
+  // =================================================================
+  try {
+    console.log(`[Electron AI - Groq] Executing tool: ${aiDecision?.tool || 'unknown'}`)
     switch (aiDecision.tool) {
       case 'getTotalPO': {
         const totalPOs = allPOs.length
@@ -2149,14 +2216,14 @@ ATURAN KETAT:
             .map(
               (item) =>
                 `- ${item.product_name || 'Item Tanpa Nama'} (${item.quantity || 0} ${item.satuan || 'unit'})`
-            ) // Handle item kosong
+            )
             .join('\n')
           return (
             `✅ PO ditemukan:\n` +
             `Nomor PO: ${po.po_number || 'N/A'}\n` +
             `Customer: ${po.project_name || 'N/A'}\n` +
-            `Tgl Masuk: ${formatDate(po.created_at)}\n` +
-            `Target Kirim: ${formatDate(po.deadline)}\n` +
+            `Tgl Masuk: ${formatDate(po.created_at)}\n` + // Menggunakan formatDate() yang diimpor
+            `Target Kirim: ${formatDate(po.deadline)}\n` + // Menggunakan formatDate() yang diimpor
             `Status: ${po.status || 'Open'}\n` +
             `Progress: ${po.progress?.toFixed(0) || 0}%\n` +
             `Prioritas: ${po.priority || 'Normal'}\n` +
@@ -2165,7 +2232,7 @@ ATURAN KETAT:
         } else if (foundPOs.length > 1) {
           const poList = foundPOs
             .map((po) => `- ${po.po_number || 'N/A'} (${po.project_name || 'N/A'})`)
-            .slice(0, 5) // Batasi tampilan jika terlalu banyak
+            .slice(0, 5)
             .join('\n')
           let response = `Saya menemukan ${foundPOs.length} PO yang cocok:\n${poList}`
           if (foundPOs.length > 5) response += `\n... dan lainnya.`
@@ -2240,9 +2307,10 @@ ATURAN KETAT:
         return 'Tidak dapat menemukan data PO.'
       }
       case 'getPOsByDateRange': {
+        // @ts-ignore
         const { startDate, endDate } = aiDecision
         if (!startDate || !endDate) return 'Maaf, tidak mengerti rentang tanggal.'
-        // Validasi format tanggal YYYY-MM-DD
+
         const dateRegex = /^\d{4}-\d{2}-\d{2}$/
         if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
           return 'Maaf, format tanggal yang diterima AI tidak valid. Seharusnya YYYY-MM-DD.'
@@ -2250,7 +2318,6 @@ ATURAN KETAT:
         let start, end
         try {
           start = new Date(startDate).getTime()
-          // Set end date ke akhir hari
           end = new Date(endDate)
           end.setHours(23, 59, 59, 999)
           end = end.getTime()
@@ -2321,19 +2388,18 @@ ATURAN KETAT:
       case 'help':
         return 'Anda bisa bertanya tentang:\n- Jumlah total PO (detail status aktif)\n- Produk terlaris/Customer terbesar (dari PO Selesai)\n- Status PO [nomor]\n- Detail PO [nomor/nama customer]\n- PO Urgent/Deadline Dekat\n- PO terbaru / terlama\n- PO berdasarkan tanggal\n- Jumlah PO Open / In Progress\n- Cara menggunakan aplikasi (misal: "cara buat po")'
       case 'general': {
-        // Nomor jadi 14
         if (prompt.toLowerCase().includes('siapa')) {
           return 'Saya adalah Asisten AI Ubinkayu.'
         }
         if (prompt.toLowerCase().includes('terima kasih')) {
           return 'Sama-sama! Senang bisa membantu.'
         }
-        // Tambahkan sapaan berdasarkan waktu
+        // Menggunakan sapaan berbasis waktu lokal yang sudah dibuat
         return `${timeOfDayGreeting} Ada yang bisa saya bantu?`
       }
-      case 'unknown': // Handle 'unknown' secara eksplisit
+      case 'unknown':
         return "Maaf, saya tidak yakin bagaimana harus merespons itu. Coba tanyakan 'bantuan'."
-      default: // Default case jika tool tidak dikenal
+      default:
         console.warn('Menerima tool tidak dikenal dari AI:', aiDecision.tool)
         return 'Maaf, terjadi kesalahan internal saat memproses permintaan Anda (tool tidak dikenal).'
     }
@@ -2343,6 +2409,7 @@ ATURAN KETAT:
     return `Maaf, terjadi kesalahan saat memproses jawaban: ${execError.message}`
   }
 }
+
 // [TAMBAH FUNGSI INI]
 async function uploadPoPhoto(photoPath, poNumber, customerName) {
   try {
