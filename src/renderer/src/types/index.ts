@@ -1,4 +1,3 @@
-/* eslint-disable prettier/prettier */
 // src/renderer/src/types/index.ts
 
 export type ProductionStage =
@@ -43,8 +42,8 @@ export interface POItem {
   progressHistory?: ProgressLog[]
   stageDeadlines?: { stageName: string; deadline: string }[]
   customer_name?: string
-  po_date?: string; // Add this line (already added previously)
-  created_at?: string;
+  po_date?: string
+  created_at?: string
 }
 
 export interface POHeader {
@@ -61,8 +60,8 @@ export interface POHeader {
   progress?: number
   items?: POItem[]
   photo_url?: string | null
-  acc_marketing?: string;
-  alamat_kirim?: string;
+  acc_marketing?: string
+  alamat_kirim?: string
   completed_at?: string | null
   lastRevisedBy?: string
   lastRevisedDate?: string
@@ -81,21 +80,20 @@ export interface PORevision {
   created_at: string
   pdf_link?: string | null
   acc_marketing?: string
-  revised_by?: string;
-  alamat_kirim?: string; // <-- Add this line
+  revised_by?: string
+  alamat_kirim?: string
 }
 
 export interface ProductMaster {
-  id: string; // Atau number, sesuaikan dengan data Anda
-  product_name: string;
-  wood_type?: string | null;
-  profile?: string | null;
-  color?: string | null;
-  finishing?: string | null;
-  sample?: string | null;
-  marketing?: string | null;
-  satuan?: string | null; // Kolom 'satuan' sepertinya ada di sheet Anda
-  // Tambahkan properti lain jika ada kolom lain di sheet product_master
+  id: string
+  product_name: string
+  wood_type?: string | null
+  profile?: string | null
+  color?: string | null
+  finishing?: string | null
+  sample?: string | null
+  marketing?: string | null
+  satuan?: string | null
 }
 
 export interface RevisionHistoryItem {
@@ -124,12 +122,13 @@ export interface DeleteResult {
 export interface Message {
   sender: 'user' | 'bot'
   text: string
+  timestamp: Date
 }
 
 export interface ProgressLog {
-  id: string;
-  stage: ProductionStage;
-  created_at: string;
-  notes?: string;
-  photo_url?: string;
+  id: string
+  stage: ProductionStage
+  created_at: string
+  notes?: string
+  photo_url?: string
 }

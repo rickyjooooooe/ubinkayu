@@ -45,7 +45,8 @@ interface SessionData {
 // Pesan awal untuk Chatbot
 const initialChatMessage: Message = {
   sender: 'bot',
-  text: 'Halo! Saya Asisten AI Ubinkayu. Ada yang bisa saya bantu?'
+  text: 'Halo! Saya Asisten AI Ubinkayu. Ada yang bisa saya bantu?',
+  timestamp: new Date()
 }
 
 function App() {
@@ -253,26 +254,40 @@ function App() {
   }
   const handleChatSendMessage = async () => {
     if (!chatInputText.trim() || isChatProcessing) return
-    const userMessage: Message = { sender: 'user', text: chatInputText }
+
+    // 1. Buat pesan user DENGAN timestamp
+    const userMessage: Message = {
+      sender: 'user',
+      text: chatInputText,
+      timestamp: new Date() // <-- TAMBAHKAN INI
+    }
     setChatMessages((prev) => [...prev, userMessage])
+
     const currentInput = chatInputText
     setChatInputText('')
     setIsChatProcessing(true)
+
     try {
-      const botText = await apiService.ollamaChat(currentInput)
+      const botText = await apiService.ollamaChat(currentInput) // Anda memanggil ollamaChat, tapi ini ke Groq
+
+      // 2. Buat pesan bot DENGAN timestamp
       const botMessage: Message = {
         sender: 'bot',
-        text: botText || 'Maaf, saya tidak menerima respons.'
+        text: botText || 'Maaf, saya tidak menerima respons.',
+        timestamp: new Date() // <-- TAMBAHKAN INI
       }
       setChatMessages((prev) => [...prev, botMessage])
     } catch (error) {
       console.error('Error sending chat message:', error)
+
+      // 3. Buat pesan error DENGAN timestamp
       const errorMessage: Message = {
         sender: 'bot',
-        text: `Maaf, terjadi error: ${(error as Error).message}`
+        text: `Maaf, terjadi error: ${(error as Error).message}`,
+        timestamp: new Date() // <-- TAMBAHKAN INI
       }
       setChatMessages((prev) => [...prev, errorMessage])
-      setChatInputText(currentInput)
+      setChatInputText(currentInput) // Kembalikan input jika gagal
     } finally {
       setIsChatProcessing(false)
     }

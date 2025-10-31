@@ -415,3 +415,21 @@
     box-shadow: -12px 0 rgba(153, 153, 153, 0.3), 12px 0 #999;
   }
 }
+
+.message-timestamp {
+  font-size: 0.75rem; /* 12px */
+  color: #999; /* Warna abu-abu muda untuk timestamp */
+  margin-top: 8px; /* Jarak dari teks di atasnya */
+  text-align: right; /* Sejajarkan ke kanan */
+}
+
+/* Untuk pesan bot (bubble abu-abu), buat timestamp sedikit lebih gelap */
+.message.bot .message-timestamp {
+  color: #777;
+}
+
+/* Untuk pesan user (bubble biru/oranye), buat timestamp lebih terang */
+.message.user .message-timestamp {
+  /* ganti #eee dengan warna yang cocok jika bubble Anda bukan biru tua */
+  color: #eee;
+}

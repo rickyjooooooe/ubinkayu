@@ -1,7 +1,6 @@
 // file: src/renderer/src/components/Chatbot.tsx
 import React, { useState, useEffect, useRef } from 'react'
 import { Message } from '../types'
-// Hapus POHeader dan POItem karena tidak lagi dibutuhkan di sini
 import {
   LuSend,
   LuBrainCircuit,
@@ -15,9 +14,14 @@ import { Card } from './Card'
 import { Button } from './Button'
 import './Chatbot.css'
 
-// Updated props
+// BARU: Helper function untuk memformat waktu menjadi HH:MM
+const formatTime = (date: Date) => {
+  const hours = date.getHours().toString().padStart(2, '0')
+  const minutes = date.getMinutes().toString().padStart(2, '0')
+  return `${hours}:${minutes}`
+}
+
 interface ChatbotProps {
-  // allPOs: POHeader[] // <-- HAPUS PROP INI
   mode: 'page' | 'widget'
   onMaximize?: () => void
   onMinimize?: () => void
@@ -31,7 +35,6 @@ interface ChatbotProps {
 }
 
 const Chatbot: React.FC<ChatbotProps> = ({
-  // allPOs, // <-- HAPUS PROP INI
   mode,
   onMaximize,
   onMinimize,
@@ -65,13 +68,17 @@ const Chatbot: React.FC<ChatbotProps> = ({
     <>
       <div className="chat-messages">
         {messages.map((msg, index) => (
+          // BARU: Kita tambahkan render timestamp di sini
           <div key={index} className={`message ${msg.sender}`}>
+            {/* Teks pesan */}
             {msg.text.split('\n').map((line, i) => (
               <React.Fragment key={i}>
                 {line}
                 <br />
               </React.Fragment>
             ))}
+            {/* BARU: Tampilkan timestamp di bawah teks */}
+            <div className="message-timestamp">{formatTime(msg.timestamp)}</div>
           </div>
         ))}
         {isProcessing && (
@@ -101,7 +108,7 @@ const Chatbot: React.FC<ChatbotProps> = ({
     </>
   )
 
-  // --- RENDER LOGIC BASED ON MODE PROP ---
+  // --- RENDER LOGIC BASED ON MODE PROP (Tidak ada perubahan di bawah ini) ---
   if (mode === 'page') {
     return (
       <div className="page-container ai-chat-page-container">
