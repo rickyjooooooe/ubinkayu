@@ -149,7 +149,7 @@ const Chatbot: React.FC<ChatbotProps> = ({
         {messages.map((msg, index) => {
           // --- Logika Baru Dimulai ---
           let messageText = msg.text
-          let chartPayload = null
+          let chartPayload: any = null;
 
           // Cek apakah ini pesan bot dan berisi payload chart
           if (msg.sender === 'bot' && msg.text.includes('CHART_JSON::')) {
