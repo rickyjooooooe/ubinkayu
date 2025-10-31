@@ -14,6 +14,18 @@ import {
   LuVolume2,
   LuVolumeX
 } from 'react-icons/lu'
+
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  CartesianGrid
+} from 'recharts'
+
 import { Card } from './Card'
 import { Button } from './Button'
 import './Chatbot.css'
@@ -134,20 +146,73 @@ const Chatbot: React.FC<ChatbotProps> = ({
   const ChatInterface = (
     <>
       <div className="chat-messages">
-        {messages.map((msg, index) => (
-          // BARU: Kita tambahkan render timestamp di sini
-          <div key={index} className={`message ${msg.sender}`}>
-            {/* Teks pesan */}
-            {msg.text.split('\n').map((line, i) => (
-              <React.Fragment key={i}>
-                {line}
-                <br />
-              </React.Fragment>
-            ))}
-            {/* BARU: Tampilkan timestamp di bawah teks */}
-            <div className="message-timestamp">{formatTime(msg.timestamp)}</div>
-          </div>
-        ))}
+        {messages.map((msg, index) => {
+          // --- Logika Baru Dimulai ---
+          let messageText = msg.text
+          let chartPayload = null
+
+          // Cek apakah ini pesan bot dan berisi payload chart
+          if (msg.sender === 'bot' && msg.text.includes('CHART_JSON::')) {
+            const parts = msg.text.split('CHART_JSON::')
+            messageText = parts[0] // Ambil teks pengantar sebelum delimiter
+            try {
+              chartPayload = JSON.parse(parts[1]) // Parse data JSON chart
+            } catch (e) {
+              console.error('Gagal parse JSON chart:', e)
+              messageText = msg.text // Jika JSON rusak, tampilkan teks aslinya
+            }
+          }
+          // --- Logika Baru Selesai ---
+
+          return (
+            <div key={index} className={`message ${msg.sender}`}>
+              {/* Render Teks Pesan (teks pengantar atau teks utuh) */}
+              {messageText.split('\n').map((line, i) => (
+                <React.Fragment key={i}>
+                  {line}
+                  <br />
+                </React.Fragment>
+              ))}
+
+              {/* Render Timestamp (tetap ada) */}
+              <div className="message-timestamp">{formatTime(msg.timestamp)}</div>
+
+              {/* --- BARU: Render Chart jika ada payload --- */}
+              {chartPayload && chartPayload.type === 'bar' && (
+                <div
+                  style={{
+                    width: '100%',
+                    height: '250px', // Beri tinggi tetap untuk chart
+                    marginTop: '1rem',
+                    color: '#333' // Set warna teks fallback untuk tooltip/legend
+                  }}
+                >
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart
+                      data={chartPayload.data}
+                      margin={{ top: 5, right: 5, left: 0, bottom: 20 }} // Beri margin bawah untuk label
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey={chartPayload.nameKey}
+                        fontSize="10px"
+                        interval={0} // Tampilkan semua label
+                        angle={-30} // Miringkan label
+                        textAnchor="end" // Ratakan label miring
+                      />
+                      <YAxis allowDecimals={false} />
+                      <Tooltip />
+                      <Legend />
+                      <Bar dataKey={chartPayload.dataKey} fill="#F7931E" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+              {/* --- Akhir Render Chart --- */}
+            </div>
+          )
+        })}
+
         {isProcessing && (
           <div className="message bot loading-indicator">
             <div className="dot-flashing"></div>

@@ -1998,6 +1998,15 @@ Alat (Tools) yang Tersedia:
 14. "general": Untuk pertanyaan umum atau sapaan yang tidak terkait langsung dengan data PO.
     - Keywords: "halo", "kamu siapa", "dengan siapa ini", "terima kasih".
     - JSON: {"tool": "general"}
+15. "findPOFile": Mencari link file (JPEG arsip) untuk PO berdasarkan nomor PO dan (opsional) nomor revisi.
+    - Keywords: "carikan file", "JPEG arsip", "dokumen PO", "file PO [nomor]", "link PO [nomor] Rev [nomor]".
+    - AI HARUS mengekstrak "poNumber" dan "revisionNumber" (jika ada).
+    - Jika "revisionNumber" tidak disebut, AI akan mencari revisi TERBARU.
+    - JSON: {"tool": "findPOFile", "param": {"poNumber": "...", "revisionNumber": "..."}}
+16. "getTopSellingProductsChart": Menampilkan grafik batang (bar chart) 5 produk terlaris.
+    - Keywords: "grafik produk", "chart penjualan", "produk terlaris", "tampilkan grafik".
+    - (Catatan: Versi ini belum mendukung parameter kustom seperti "3 produk" atau "6 bulan").
+    - JSON: {"tool": "getTopSellingProductsChart"}
 
 ATURAN KETAT:
 - JANGAN menjawab pertanyaan secara langsung. HANYA kembalikan JSON.
@@ -2384,6 +2393,124 @@ ATURAN KETAT:
         } else {
           return 'Saya bisa membantu menjelaskan cara:\n- Membuat PO baru\n- Update progress PO\n- Revisi PO\n- Menambah produk master.\n\nFitur mana yang ingin Anda ketahui?'
         }
+      }
+      case 'findPOFile': {
+        // @ts-ignore
+        const { poNumber, revisionNumber } = aiDecision.param
+        if (!poNumber) {
+          responseText = 'Mohon sebutkan nomor PO yang ingin Anda cari filenya.'
+          break
+        }
+
+        // --- AWAL PERUBAHAN ---
+
+        /**
+         * Fungsi 'sanitasi' untuk membersihkan string PO.
+         * Ini akan:
+         * 1. Mengubah ke huruf kecil.
+         * 2. Menghapus prefix "po-" atau "po " (jika ada).
+         * 3. Menghapus semua spasi dan titik (.).
+         * Contoh: "PO-2509 263" -> "2509263"
+         * Contoh: "0.2509.263"  -> "02509263"
+         * Contoh: "PO-1"        -> "1"
+         */
+        const sanitizePOString = (str) => {
+          if (!str) return ''
+          return str
+            .toLowerCase()
+            .replace(/po-|po /g, '') // Hapus prefix "po-" atau "po "
+            .replace(/[ .]/g, '') // Hapus spasi dan titik
+        }
+
+        const sanitizedQuery = sanitizePOString(poNumber) // Query Anda yang sudah bersih
+
+        const matchingPOs = allPOs.filter((p) => {
+          const sanitizedData = sanitizePOString(p.po_number) // Data sheet yang sudah bersih
+          if (!sanitizedData) return false
+
+          // Cek apakah data bersih MENGANDUNG query bersih
+          return sanitizedData.includes(sanitizedQuery)
+        })
+        // --- AKHIR PERUBAHAN ---
+
+        if (matchingPOs.length === 0) {
+          responseText = `PO yang cocok dengan '${poNumber}' tidak ditemukan.`
+          break
+        }
+
+        // --- Sisa logika (pencarian revisi) tetap sama ---
+        let foundPO = null
+        if (revisionNumber !== undefined && revisionNumber !== null) {
+          const revNum = toNum(revisionNumber, -1)
+          foundPO = matchingPOs.find((p) => toNum(p.revision_number, -1) === revNum)
+
+          if (!foundPO) {
+            foundPO = matchingPOs.sort(
+              (a, b) => toNum(b.revision_number, -1) - toNum(a.revision_number, -1)
+            )[0]
+            responseText = `Tidak menemukan Revisi ${revisionNumber} untuk PO ${poNumber}. Menampilkan file untuk revisi terbaru (Rev ${foundPO.revision_number}):\n`
+          } else {
+            responseText = `File ditemukan untuk PO ${foundPO.po_number} (Rev ${revNum}):\n`
+          }
+        } else {
+          foundPO = matchingPOs.sort(
+            (a, b) => toNum(b.revision_number, -1) - toNum(a.revision_number, -1)
+          )[0]
+          responseText = `File ditemukan untuk revisi terbaru (Rev ${foundPO.revision_number}):\n`
+        }
+
+        // Logika untuk menampilkan link (tetap sama)
+        if (foundPO.pdf_link && foundPO.pdf_link.startsWith('http')) {
+          responseText += foundPO.pdf_link
+        } else if (foundPO.pdf_link) {
+          responseText = `Saya menemukan PO ${foundPO.po_number}, tapi link filenya bermasalah: ${foundPO.pdf_link}`
+        } else {
+          responseText = `Maaf, PO ${foundPO.po_number} (Rev ${foundPO.revision_number}) tidak memiliki link file.`
+        }
+        break
+      }
+      case 'getTopSellingProductsChart': {
+        // 1. Replikasi logika dari getProductSalesAnalysis (menggunakan allPOs)
+        const completedPOs = allPOs.filter((p) => p.status === 'Completed')
+        if (completedPOs.length === 0) {
+          responseText = 'Belum ada data PO Selesai untuk membuat grafik.'
+          break // Fallback ke respons teks
+        }
+
+        const salesData = {}
+        completedPOs
+          .flatMap((p) => p.items || [])
+          .forEach((item) => {
+            if (item.product_name)
+              // @ts-ignore
+              salesData[item.product_name] =
+                // @ts-ignore
+                (salesData[item.product_name] || 0) + Number(item.quantity || 0)
+          })
+
+        // 2. Format data untuk chart (ambil Top 5)
+        const chartData = Object.entries(salesData)
+          // @ts-ignore
+          .map(([name, quantity]) => ({ name, Kuantitas: Number(quantity) }))
+          .sort((a, b) => b.Kuantitas - a.Kuantitas)
+          .slice(0, 5)
+
+        if (chartData.length === 0) {
+          responseText = 'Tidak dapat menemukan data penjualan produk untuk membuat grafik.'
+          break
+        }
+
+        // 3. Buat payload JSON untuk chart
+        const chartPayload = {
+          type: 'bar', // Tipe chart
+          data: chartData, // Data
+          dataKey: 'Kuantitas', // Key untuk sumbu Y (harus sama dengan di atas)
+          nameKey: 'name' // Key untuk sumbu X
+        }
+
+        // 4. SELIPKAN JSON ke dalam responseText dengan delimiter khusus
+        responseText = `Tentu, berikut adalah grafik 5 produk terlaris (berdasarkan kuantitas dari PO Selesai):\nCHART_JSON::${JSON.stringify(chartPayload)}`
+        break
       }
       case 'help':
         return 'Anda bisa bertanya tentang:\n- Jumlah total PO (detail status aktif)\n- Produk terlaris/Customer terbesar (dari PO Selesai)\n- Status PO [nomor]\n- Detail PO [nomor/nama customer]\n- PO Urgent/Deadline Dekat\n- PO terbaru / terlama\n- PO berdasarkan tanggal\n- Jumlah PO Open / In Progress\n- Cara menggunakan aplikasi (misal: "cara buat po")'
