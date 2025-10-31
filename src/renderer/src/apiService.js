@@ -47,38 +47,41 @@ function createApiEndpoint(action, params = {}) {
 export async function loginUser(username, password) {
   const loginData = { username, password }
 
-  // 1. Cek apakah kita sedang berjalan di Electron
+  // 1. Cek jalur Electron
   if (window.api && window.api.loginUser) {
     console.log('Using Electron login path (window.api)')
-    // Memanggil fungsi login dari sheet.js (via main.js & preload.js)
     return await window.api.loginUser(loginData)
   }
 
-  // 2. Jika tidak, kita asumsikan sedang di Web (Vercel)
-  // Gunakan fetch untuk memanggil Vercel API
+  // 2. Jalur Web/Vercel (dengan perbaikan di 'catch')
   try {
     console.log('Using Web/Vercel API login path (fetch)')
+    const endpoint = createApiEndpoint('loginUser')
 
-    // --- UBAH BAGIAN INI ---
-    // const response = await fetch('/api/login', { ... }); // <-- Hapus/komentari baris ini
-
-    // Gunakan helper createApiEndpoint untuk membuat URL yang benar
-    const endpoint = createApiEndpoint('loginUser') // Akan menghasilkan '/api?action=loginUser'
-
-    // Panggil fetch dengan endpoint yang sudah benar
-    const response = await fetch(endpoint, {
+    // fetchAPI akan mengembalikan JSON jika status 200 (OK)
+    const result = await fetchAPI(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(loginData)
     })
 
-    // Kembalikan JSON dari Vercel (baik sukses maupun error)
-    // LoginPage.tsx akan menangani logikanya
-    return await response.json()
-  } catch (networkError) {
-    // Ini untuk error jaringan (misal Vercel down atau tidak ada internet)
-    console.error('Network error during Vercel login:', networkError)
-    return { success: false, error: 'Koneksi ke server login gagal.' }
+    // Jika sukses (status 200), 'result' adalah { success: true, ... }
+    return result
+
+  } catch (err) {
+    // Jika fetchAPI melempar error (status 401, 500, atau network fail)
+    // 'err.message' akan berisi pesan error dari JSON server,
+    // contoh: "Username atau password salah."
+
+    console.error('Login error caught in apiService:', err.message)
+
+    // ✅ PERBAIKAN:
+    // Kembalikan objek error dengan pesan yang ASLI dari 'err.message',
+    // bukan pesan "Koneksi gagal" yang di-hardcode.
+    return {
+      success: false,
+      error: err.message || 'Koneksi ke server login gagal.'
+    }
   }
 }
 
