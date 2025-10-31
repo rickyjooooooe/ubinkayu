@@ -71,6 +71,7 @@ function App() {
   const [chatMessages, setChatMessages] = useState<Message[]>([initialChatMessage])
   const [chatInputText, setChatInputText] = useState('')
   const [isChatProcessing, setIsChatProcessing] = useState(false)
+  const [isTtsEnabled, setIsTtsEnabled] = useState(true)
 
   // --- Efek: Cek Sesi Saat Aplikasi Dimuat ---
   useEffect(() => {
@@ -122,6 +123,7 @@ function App() {
       setAllPOs([]) // Pastikan data PO kosong
       setIsLoadingPOs(false) // Pastikan loading PO mati
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, isAuthLoading]) // <-- Berjalan saat currentUser atau isAuthLoading berubah
 
   // --- Fungsi Pengambilan Data PO ---
@@ -252,6 +254,29 @@ function App() {
   const handleMinimizeChat = () => {
     setView(previousView)
   }
+
+  const speak = (text: string) => {
+    // BARIS KUNCI: Jangan lakukan apa-apa jika TTS tidak aktif
+    if (!isTtsEnabled) return
+
+    try {
+      window.speechSynthesis.cancel()
+      const utterance = new SpeechSynthesisUtterance(text)
+      utterance.lang = 'id-ID'
+      window.speechSynthesis.speak(utterance)
+    } catch (error) {
+      console.error('Text-to-Speech error:', error)
+    }
+  }
+
+  const handleToggleTts = (): void => {
+    setIsTtsEnabled((prev) => !prev)
+    // Hentikan suara jika sedang diputar saat mematikan
+    if (isTtsEnabled) {
+      window.speechSynthesis.cancel()
+    }
+  }
+
   const handleChatSendMessage = async () => {
     if (!chatInputText.trim() || isChatProcessing) return
 
@@ -268,26 +293,32 @@ function App() {
     setIsChatProcessing(true)
 
     try {
-      const botText = await apiService.ollamaChat(currentInput) // Anda memanggil ollamaChat, tapi ini ke Groq
+      const botText = await apiService.ollamaChat(currentInput) // Ini memanggil Groq
 
-      // 2. Buat pesan bot DENGAN timestamp
       const botMessage: Message = {
         sender: 'bot',
         text: botText || 'Maaf, saya tidak menerima respons.',
-        timestamp: new Date() // <-- TAMBAHKAN INI
+        timestamp: new Date()
       }
       setChatMessages((prev) => [...prev, botMessage])
+
+      // PANGGIL FUNGSI SPEAK DI SINI
+      speak(botText)
     } catch (error) {
       console.error('Error sending chat message:', error)
+      const errorText = `Maaf, terjadi error: ${(error as Error).message}` // Teks error
 
-      // 3. Buat pesan error DENGAN timestamp
       const errorMessage: Message = {
         sender: 'bot',
-        text: `Maaf, terjadi error: ${(error as Error).message}`,
-        timestamp: new Date() // <-- TAMBAHKAN INI
+        text: errorText,
+        timestamp: new Date()
       }
       setChatMessages((prev) => [...prev, errorMessage])
-      setChatInputText(currentInput) // Kembalikan input jika gagal
+
+      // (Opsional) Anda bisa juga membuat bot membacakan pesan error
+      // speak(errorText)
+
+      setChatInputText(currentInput)
     } finally {
       setIsChatProcessing(false)
     }
@@ -379,20 +410,21 @@ function App() {
           />
         )
       case 'analysis':
-        // AnalysisPage punya loading internal
         return <AnalysisPage />
       case 'aiChat':
         return (
           <Chatbot
-            mode="page" // <-- Set mode ke page
-            onMinimize={handleMinimizeChat} // <-- Prop untuk kembali
+            mode="page"
+            onMinimize={handleMinimizeChat}
             messages={chatMessages}
             inputText={chatInputText}
             isProcessing={isChatProcessing}
             onSendMessage={handleChatSendMessage}
             onInputChange={handleChatInputChange}
             onKeyDown={handleChatKeyDown}
-            onChatReset={handleChatReset} // <-- Prop untuk reset
+            onChatReset={handleChatReset}
+            isTtsEnabled={isTtsEnabled}
+            onToggleTts={handleToggleTts}
           />
         )
       default:
@@ -446,6 +478,8 @@ function App() {
           onInputChange={handleChatInputChange}
           onKeyDown={handleChatKeyDown}
           onChatReset={handleChatReset}
+          isTtsEnabled={isTtsEnabled}
+          onToggleTts={handleToggleTts}
         />
       )}
     </div>

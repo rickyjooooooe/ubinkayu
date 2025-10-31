@@ -8,7 +8,11 @@ import {
   LuX,
   LuMaximize2,
   LuChevronDown,
-  LuEraser
+  LuEraser,
+  LuMic,
+  LuMicOff,
+  LuVolume2,
+  LuVolumeX
 } from 'react-icons/lu'
 import { Card } from './Card'
 import { Button } from './Button'
@@ -32,6 +36,8 @@ interface ChatbotProps {
   onSendMessage: () => void
   onInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
+  isTtsEnabled: boolean
+  onToggleTts: () => void
 }
 
 const Chatbot: React.FC<ChatbotProps> = ({
@@ -44,12 +50,16 @@ const Chatbot: React.FC<ChatbotProps> = ({
   onSendMessage,
   onInputChange,
   onKeyDown,
-  onChatReset
+  onChatReset,
+  isTtsEnabled,
+  onToggleTts
 }) => {
   const [isOpen, setIsOpen] = useState(false)
+  const [isListening, setIsListening] = useState(false) // <-- BARU
+  const recognitionRef = useRef<SpeechRecognition | null>(null) // <-- BARU
   const messagesEndRef = useRef<null | HTMLDivElement>(null)
 
-  const scrollToBottom = () => {
+  const scrollToBottom = (): void => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
@@ -59,9 +69,66 @@ const Chatbot: React.FC<ChatbotProps> = ({
     }
   }, [messages, isOpen, mode])
 
-  const toggleChat = () => {
+  const toggleChat = (): void => {
     setIsOpen(!isOpen)
   }
+
+  const handleMicClick = () => {
+    // Cek apakah SpeechRecognition API ada (prefik webkit untuk Chrome/Electron)
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      alert('Maaf, browser Anda tidak mendukung Speech-to-Text.')
+      return
+    }
+
+    if (isListening) {
+      // Jika sedang merekam, hentikan
+      recognitionRef.current?.stop()
+      setIsListening(false)
+    } else {
+      // Jika tidak merekam, mulai
+      const recognition = new SpeechRecognition()
+      recognition.lang = 'id-ID' // Set bahasa ke Indonesia
+      recognition.interimResults = true // Tampilkan hasil sementara saat berbicara
+      recognitionRef.current = recognition
+
+      recognition.onstart = () => {
+        setIsListening(true)
+      }
+
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
+        const transcript = Array.from(event.results)
+          .map((result) => result[0])
+          .map((result) => result.transcript)
+          .join('')
+
+        onInputChange({
+          target: { value: transcript }
+        } as React.ChangeEvent<HTMLTextAreaElement>)
+      }
+
+      recognition.onend = () => {
+        setIsListening(false)
+        recognitionRef.current = null
+        // Setelah selesai berbicara, otomatis kirim pesan
+        onSendMessage()
+      }
+
+      recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+        console.error('Speech recognition error:', event.error)
+        setIsListening(false)
+      }
+
+      recognition.start()
+    }
+  }
+
+  // Efek untuk membersihkan jika komponen unmount
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.stop()
+    }
+  }, [])
 
   // --- Core Chat UI (Shared between modes) ---
   const ChatInterface = (
@@ -98,6 +165,14 @@ const Chatbot: React.FC<ChatbotProps> = ({
           disabled={isProcessing}
         />
         <Button
+          onClick={handleMicClick}
+          variant={isListening ? 'danger' : 'secondary'} // Ganti warna saat merekam
+          aria-label={isListening ? 'Berhenti Merekam' : 'Mulai Merekam'}
+          disabled={isProcessing} // Nonaktifkan jika bot sedang memproses
+        >
+          {isListening ? <LuMicOff /> : <LuMic />}
+        </Button>
+        <Button
           onClick={onSendMessage}
           disabled={!inputText.trim() || isProcessing}
           aria-label="Kirim Pesan"
@@ -120,6 +195,16 @@ const Chatbot: React.FC<ChatbotProps> = ({
             <p>Tanyakan apapun tentang data Purchase Order Anda.</p>
           </div>
           <div className="ai-chat-page-header-actions">
+            <Button
+              variant="secondary"
+              onClick={onToggleTts}
+              aria-label={isTtsEnabled ? 'Matikan Suara' : 'Nyalakan Suara'}
+              className="ai-chat-tts-btn" // Anda bisa tambahkan style khusus jika perlu
+            >
+              {isTtsEnabled ? <LuVolume2 /> : <LuVolumeX />}
+              {/* Tampilkan teks berbeda berdasarkan state */}
+              <span>{isTtsEnabled ? 'Suara Aktif' : 'Suara Mati'}</span>
+            </Button>
             <Button
               variant="secondary"
               onClick={onChatReset}
@@ -164,6 +249,13 @@ const Chatbot: React.FC<ChatbotProps> = ({
           <div className="chatbot-header">
             <h4>Asisten AI</h4>
             <div className="chatbot-header-actions">
+              <button
+                onClick={onToggleTts}
+                aria-label={isTtsEnabled ? 'Matikan Suara' : 'Nyalakan Suara'}
+                className="chatbot-header-btn"
+              >
+                {isTtsEnabled ? <LuVolume2 /> : <LuVolumeX />}
+              </button>
               <button
                 onClick={onChatReset}
                 disabled={isProcessing}
