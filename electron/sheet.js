@@ -108,7 +108,7 @@ async function getSheet(doc, key) {
     if (doc.sheetsByTitle[t]) return doc.sheetsByTitle[t]
   }
   throw new Error(
-    n`Sheet "${titles[0]}" tidak ditemukan. Pastikan nama sheet di Google Sheets sudah benar.`
+    `Sheet "${titles[0]}" tidak ditemukan. Pastikan nama sheet di Google Sheets sudah benar.`
   )
 }
 
@@ -333,20 +333,21 @@ async function generateAndUploadPO(poData, revisionNumber) {
       url: `https://www.googleapis.com/drive/v3/files/${fileId}`,
       method: 'GET',
       params: {
-        fields: 'webViewLink,size', // Minta hanya webViewLink
+        fields: 'webViewLink,size,name', // Minta webViewLink, size, name
         supportsAllDrives: true // Tetap perlu untuk Shared Drive
       }
     })
 
     const webViewLink = getResponse?.data?.webViewLink
     const fileSize = getResponse?.data?.size
+    const fileNameOnDrive = getResponse?.data?.name || fileName
     if (!webViewLink) {
       console.error('❌ Gagal mendapatkan webViewLink via auth.request:', getResponse.data)
       throw new Error('Gagal mendapatkan link file setelah upload berhasil.')
     }
     console.log(`✅ Link file dan size didapatkan via auth.request: ${webViewLink}`)
 
-    return { success: true, link: webViewLink, size: fileSize }
+    return { success: true, link: webViewLink, size: fileSize, name: fileNameOnDrive }
   } catch (error) {
     // ... (Error handling sama seperti sebelumnya)
     console.error('❌ Proses Generate & Upload PO Gagal:', error.message)
@@ -432,9 +433,8 @@ async function processBatch(items, processor, batchSize = 5) {
 }
 
 /**
- * Delete a file from Google Drive
- * @param {string} fileId - Google Drive file ID
- * @returns {Promise<{success: boolean, error?: string, fileId: string}>}
+ * MENGGANTI FUNGSI INI UNTUK MENGATASI ERROR 401/404
+ * Menggunakan google.drive client untuk penghapusan yang lebih stabil
  */
 async function deleteGoogleDriveFile(fileId) {
   try {
@@ -442,9 +442,17 @@ async function deleteGoogleDriveFile(fileId) {
       return { success: false, error: 'File ID tidak valid', fileId }
     }
 
-    const auth = getAuth()
+    // 1. Dapatkan objek auth (JWT)
+    const auth = getAuth() // Hanya membuat objek JWT
+
+    // 2. Otorisasi objek auth sebelum digunakan
+    await auth.authorize()
+    console.log(`🔑 Otorisasi ulang untuk menghapus file ${fileId} berhasil.`)
+
+    // 3. Buat klien Drive menggunakan auth yang sudah terotorisasi
     const drive = google.drive({ version: 'v3', auth })
 
+    // 4. Gunakan method files.delete yang lebih andal
     await drive.files.delete({
       fileId: fileId,
       supportsAllDrives: true
@@ -454,7 +462,24 @@ async function deleteGoogleDriveFile(fileId) {
     return { success: true, fileId }
   } catch (error) {
     console.error(`❌ Gagal menghapus file dari Google Drive (${fileId}):`, error.message)
-    return { success: false, error: error.message, fileId }
+
+    // Periksa response untuk detail API
+    const apiError = error.response?.data?.error || {}
+
+    // 5. TANGANI 404/401/403 DENGAN ELEGAN
+    if (error.code === 404 || apiError.code === 404) {
+      console.log(`ℹ️ File ${fileId} tidak ditemukan (404), dianggap sudah terhapus.`)
+      return { success: true, fileId } // Anggap berhasil jika tidak ditemukan
+    }
+
+    // Tangani error otorisasi
+    if (error.code === 401 || error.code === 403 || apiError.code === 401 || apiError.code === 403) {
+      // Log error otorisasi lebih jelas
+      console.error(`🚫 Akses Ditolak/Otentikasi Gagal untuk ${fileId}.`)
+      return { success: false, error: `Akses Ditolak/Login Gagal: ${apiError.message || error.message}`, fileId }
+    }
+
+    return { success: false, error: error.message || String(error), fileId }
   }
 }
 
@@ -468,13 +493,13 @@ async function uploadProgressPhoto(photoPath, poNumber, itemId) {
     const response = await drive.files.create({
       requestBody: { name: fileName, mimeType: 'image/jpeg', parents: [PROGRESS_PHOTOS_FOLDER_ID] },
       media: { mimeType: 'image/jpeg', body: fs.createReadStream(photoPath) },
-      fields: 'id, webViewLink',
+      fields: 'id, webViewLink, name, size',
       supportsAllDrives: true
     })
-    return { success: true, link: response.data.webViewLink }
+    return { success: true, link: response.data.webViewLink, name: response.data.name, size: response.data.size }
   } catch (error) {
     console.error('❌ Gagal unggah foto progress:', error)
-    return { success: false, error: error.message }
+    return { success: false, error: error.message, size: 0 }
   }
 }
 
@@ -639,7 +664,9 @@ export async function saveNewPO(data) {
       acc_marketing: data.marketing || '',
       created_at: now,
       pdf_link: 'generating...',
+      pdf_file_name: '', // new column for file name
       foto_link: '...', // Placeholder
+      foto_file_name: '', // new column for foto file name
       file_size_bytes: 0 // Placeholder
     })
 
@@ -670,6 +697,7 @@ export async function saveNewPO(data) {
       const photoResult = await uploadPoPhoto(data.poPhotoPath, data.nomorPo, data.namaCustomer)
       if (photoResult.success) {
         newPoRow.set('foto_link', photoResult.link)
+        newPoRow.set('foto_file_name', photoResult.name || '')
         totalFileSize += Number(photoResult.size || 0) // Tambah ukuran foto
       } else {
         newPoRow.set('foto_link', `ERROR: ${photoResult.error}`)
@@ -696,9 +724,11 @@ export async function saveNewPO(data) {
 
     if (uploadResult.success) {
       newPoRow.set('pdf_link', uploadResult.link)
+      newPoRow.set('pdf_file_name', uploadResult.name || '')
       totalFileSize += Number(uploadResult.size || 0) // Tambah ukuran JPEG
     } else {
       newPoRow.set('pdf_link', `ERROR: ${uploadResult.error}`)
+      newPoRow.set('pdf_file_name', '')
     }
 
     // 3. Simpan total ukuran file dan simpan baris
@@ -728,6 +758,7 @@ export async function updatePO(data) {
     let totalFileSize = 0 // Variabel untuk menjumlahkan ukuran file
     let fotoLink = prev.foto_link || 'Tidak ada foto' // Warisi link foto lama
     let fotoSize = 0
+    let fotoFileName = prev.foto_file_name || ''
 
     // 1. Buat baris revisi baru di sheet
     const newRevisionRow = await poSheet.addRow({
@@ -743,7 +774,9 @@ export async function updatePO(data) {
       acc_marketing: data.marketing ?? prev.acc_marketing ?? '',
       created_at: now,
       pdf_link: 'generating...',
+      pdf_file_name: '', // placeholder
       foto_link: '...', // Placeholder
+      foto_file_name: fotoFileName, // warisi nama file foto jika ada
       file_size_bytes: 0, // Placeholder
       revised_by: data.revisedBy || 'Unknown'
     })
@@ -777,16 +810,13 @@ export async function updatePO(data) {
       if (photoResult.success) {
         fotoLink = photoResult.link // Gunakan link foto baru
         fotoSize = Number(photoResult.size || 0) // Simpan ukuran foto baru
+        fotoFileName = photoResult.name || ''
       } else {
         fotoLink = `ERROR: ${photoResult.error}`
+        fotoFileName = ''
       }
     } else {
       console.log(`[updatePO] 🖼️ Tidak ada foto referensi baru, mewariskan link lama: ${fotoLink}`)
-      // Jika tidak ada foto baru, kita harus mewarisi ukuran file lama.
-      // Kita asumsikan ukuran file lama adalah total (foto + jpeg).
-      // Ini akan diperbaiki oleh ukuran JPEG baru di bawah.
-      // Untuk akurasi terbaik, Anda Seharusnya memisahkan foto_size dan jpeg_size.
-      // Tapi untuk sekarang, kita akan wariskan ukuran total lama JIKA JPEG GAGAL.
       totalFileSize = Number(prev.file_size_bytes || 0) // Warisi ukuran lama sementara
     }
 
@@ -813,11 +843,11 @@ export async function updatePO(data) {
     let jpegSize = 0
     if (uploadResult.success) {
       newRevisionRow.set('pdf_link', uploadResult.link)
+      newRevisionRow.set('pdf_file_name', uploadResult.name || '')
       jpegSize = Number(uploadResult.size || 0)
     } else {
       newRevisionRow.set('pdf_link', `ERROR: ${uploadResult.error}`)
-      // Jika JPEG gagal, setidaknya wariskan link JPEG lama
-      newRevisionRow.set('pdf_link', prev.pdf_link || `ERROR: ${uploadResult.error}`)
+      newRevisionRow.set('pdf_file_name', prev.pdf_file_name || '')
     }
 
     // 6. Finalisasi Logika Ukuran File
@@ -825,34 +855,14 @@ export async function updatePO(data) {
       // Jika ada FOTO BARU, total ukuran = ukuran foto baru + ukuran JPEG baru
       totalFileSize = fotoSize + jpegSize
     } else {
-      // Jika FOTO LAMA, kita tidak tahu ukurannya.
-      // Solusi terbaik adalah mewarisi ukuran lama JIKA generate JPEG GAGAL
-      if (!uploadResult.success) {
-        totalFileSize = Number(prev.file_size_bytes || 0)
-      } else {
-        // Jika FOTO LAMA tapi JPEG BARU dibuat, kita tidak bisa menjumlahkannya.
-        // Ini adalah kelemahan desain sheet (tidak memisah ukuran foto & JPEG).
-        // KOMPROMI: Kita simpan ukuran JPEG baru + asumsi ukuran foto lama (jika ada)
-        // Solusi paling aman: warisi ukuran total lama jika tidak ada foto baru
-        totalFileSize = Number(prev.file_size_bytes || 0)
-        // TAPI ini tidak akan update jika ukuran JPEG berubah.
-
-        // Mari kita ambil keputusan desain:
-        // `file_size_bytes` akan selalu dihitung ulang.
-        // Jika foto lama, kita tidak bisa menghitungnya. Jadi kita anggap 0.
-        // Ini akan membuat Dashboard tidak akurat untuk PO lama.
-
-        // Logika terbaik yang bisa kita lakukan:
-        // Ukuran total = (ukuran foto baru ATAU 0) + (ukuran JPEG baru ATAU 0)
-        // Jika kedua-duanya gagal/tidak ada, baru warisi yang lama.
-        totalFileSize = fotoSize + jpegSize
-        if (totalFileSize === 0 && !data.poPhotoPath) {
-          totalFileSize = Number(prev.file_size_bytes || 0)
-        }
-      }
+      // Kompromi: hitung ulang berdasarkan available
+      totalFileSize = (jpegSize || 0) + (fotoSize || Number(prev.file_size_bytes || 0) - (Number(prev.file_size_bytes || 0) - (jpegSize || 0)))
+      // fallback conservative
+      if (!totalFileSize) totalFileSize = Number(prev.file_size_bytes || 0)
     }
 
     newRevisionRow.set('foto_link', fotoLink)
+    newRevisionRow.set('foto_file_name', fotoFileName)
     newRevisionRow.set('file_size_bytes', totalFileSize)
     await newRevisionRow.save() // Simpan semua perubahan
 
@@ -892,20 +902,30 @@ export async function deletePO(poId) {
     )
 
     const fileIds = new Set()
+    const fileIdToName = new Map() // map untuk menyimpan nama file jika tersedia
 
+    // MENGAMBIL NAMA FILE DARI SHEET (Perbaikan Logging)
     toDelHdr.forEach((poRow) => {
       const pdfLink = poRow.get('pdf_link')
+      const pdfName = poRow.get('pdf_file_name') || null // Ambil nama file yang tersimpan
       if (pdfLink && !pdfLink.startsWith('ERROR:') && !pdfLink.includes('generating')) {
         const fileId = extractGoogleDriveFileId(pdfLink)
-        if (fileId) fileIds.add(fileId)
+        if (fileId) {
+          fileIds.add(fileId)
+          if (pdfName) fileIdToName.set(fileId, pdfName)
+        }
       }
     })
 
     poProgressRows.forEach((progressRow) => {
       const photoUrl = progressRow.get('photo_url')
+      const photoName = progressRow.get('photo_file_name') || null // Ambil nama file yang tersimpan
       if (photoUrl) {
         const fileId = extractGoogleDriveFileId(photoUrl)
-        if (fileId) fileIds.add(fileId)
+        if (fileId) {
+          fileIds.add(fileId)
+          if (photoName) fileIdToName.set(fileId, photoName)
+        }
       }
     })
 
@@ -925,8 +945,9 @@ export async function deletePO(poId) {
           deletedFilesCount++
         } else {
           failedFilesCount++
-          failedFiles.push({ fileId: result.fileId, error: result.error })
-          console.warn(`⚠️ Gagal menghapus file ${result.fileId}: ${result.error}`)
+          const name = fileIdToName.get(result.fileId) || null
+          failedFiles.push({ fileId: result.fileId, fileName: name, error: result.error })
+          console.warn(`⚠️ Gagal menghapus file ${result.fileId} (${name || 'unknown name'}): ${result.error}`)
         }
       })
     }
@@ -1077,6 +1098,7 @@ export async function getRevisionHistory(poId) {
 export async function updateItemProgress(data) {
   let auth // Deklarasikan auth di luar try
   let photoLink = null // Default link foto null
+  let photoName = null // store file name
   let filePath = null // Path foto lokal
   const { poId, itemId, poNumber, stage, notes, photoPath } = data // Ambil photoPath dari data
 
@@ -1151,18 +1173,20 @@ export async function updateItemProgress(data) {
         url: `https://www.googleapis.com/drive/v3/files/${fileId}`,
         method: 'GET',
         params: {
-          fields: 'webViewLink',
+          fields: 'webViewLink,name,size',
           supportsAllDrives: true
         }
       })
 
       const webViewLink = getResponse?.data?.webViewLink
+      const nameOnDrive = getResponse?.data?.name
       if (!webViewLink) {
         console.error('❌ Gagal mendapatkan webViewLink foto progress:', getResponse.data)
         throw new Error('Gagal mendapatkan link foto setelah upload berhasil.')
       }
       photoLink = webViewLink // Simpan link foto
-      console.log(`✅ Link foto progress didapatkan: ${photoLink}`)
+      photoName = nameOnDrive || fileName
+      console.log(`✅ Link foto progress didapatkan: ${photoLink} (name: ${photoName})`)
 
       // Jangan hapus file lokal di sini, biarkan di finally
     } // Akhir dari blok if (photoPath)
@@ -1188,6 +1212,7 @@ export async function updateItemProgress(data) {
       stage: stage,
       notes: notes || '', // Pastikan notes dihandle jika kosong
       photo_url: photoLink, // Gunakan link yang didapat (bisa null jika tidak ada foto)
+      photo_file_name: photoName || '', // simpan file name agar mudah dicocokkan/hapus
       created_at: new Date().toISOString()
     })
     console.log(`✅ Log progress untuk item ID ${itemId} berhasil disimpan ke Sheet.`)
@@ -1245,7 +1270,7 @@ export async function getActivePOsWithProgress() {
     const byId = new Map()
     for (const r of poRows) {
       const id = String(r.get('id')).trim()
-      const rev = toNum(r.get('revision_number'), -1)
+      const rev = toNum(r.get('revision_number', -1))
       if (!byId.has(id) || rev > byId.get(id).rev) {
         byId.set(id, { rev, row: r })
       }
@@ -1262,7 +1287,7 @@ export async function getActivePOsWithProgress() {
 
     const latestItemRevisions = itemRows.reduce((acc, item) => {
       const poId = item.get('purchase_order_id')
-      const rev = toNum(item.get('revision_number'), -1)
+      const rev = toNum(item.get('revision_number', -1))
       if (!acc.has(poId) || rev > acc.get(poId)) {
         acc.set(poId, rev)
       }
@@ -1322,6 +1347,9 @@ export async function getActivePOsWithProgress() {
   }
 }
 
+/**
+ * MENGGANTI FUNGSI INI UNTUK MENGATASI ERROR 'Invalid time value'
+ */
 export async function getPOItemsWithDetails(poId) {
   try {
     const doc = await openDoc()
@@ -1337,38 +1365,50 @@ export async function getPOItemsWithDetails(poId) {
     ])
 
     // --- LOGIKA BARU: Cari revisi terakhir yang memiliki item ---
-    // 1. Filter semua item yang relevan untuk PO ini
     const allItemsForPO = itemRows.filter((r) => r.get('purchase_order_id') === poId)
 
-    // 2. Jika tidak ada item sama sekali untuk PO ini, langsung kembalikan array kosong.
     if (allItemsForPO.length === 0) {
       console.warn(`Tidak ada item sama sekali untuk PO ID ${poId} di sheet items.`)
       return []
     }
 
-    // 3. Cari nomor revisi tertinggi DARI ITEM YANG ADA.
     const latestItemRev = Math.max(-1, ...allItemsForPO.map((r) => toNum(r.get('revision_number'))))
 
-    // 4. Ambil header PO yang cocok dengan revisi item terakhir ini.
     const poData = poRows.find(
       (r) => r.get('id') === poId && toNum(r.get('revision_number')) === latestItemRev
     )
-    // --- AKHIR LOGIKA BARU ---
 
     if (!poData) {
-      // Ini bisa terjadi jika ada item tetapi tidak ada header PO yang cocok (inkonsistensi data).
       console.error(
         `Inkonsistensi Data: Ditemukan item untuk PO ID ${poId} rev ${latestItemRev}, tetapi tidak ada header PO yang cocok.`
       )
       throw new Error(`Data PO untuk revisi terbaru (rev ${latestItemRev}) tidak ditemukan.`)
     }
 
-    const poStartDate = new Date(poData.get('created_at'))
-    const poDeadline = new Date(poData.get('deadline'))
+    // --- PERBAIKAN TANGGAL: Validasi dan Fallback ---
+    const poStartDateRaw = poData.get('created_at')
+    const poDeadlineRaw = poData.get('deadline')
+
+    let poStartDate = new Date(poStartDateRaw)
+    let poDeadline = new Date(poDeadlineRaw)
+
+    // Jika created_at tidak valid, gunakan tanggal saat ini
+    if (isNaN(poStartDate.getTime())) {
+      console.warn(`Tanggal created_at PO ${poId} tidak valid, menggunakan tanggal saat ini.`)
+      poStartDate = new Date()
+    }
+
+    // Jika deadline tidak valid, gunakan created_at + 7 hari
+    if (isNaN(poDeadline.getTime())) {
+      console.warn(`Tanggal deadline PO ${poId} tidak valid, menggunakan created_at + 7 hari.`)
+      poDeadline = new Date(poStartDate.getTime() + (7 * 24 * 60 * 60 * 1000))
+    }
+    // --- AKHIR PERBAIKAN TANGGAL ---
+
 
     // Logika perhitungan deadline yang sudah benar
     let stageDeadlines = []
-    let cumulativeDate = new Date(poStartDate)
+    let cumulativeDate = new Date(poStartDate) // Mulai dari tanggal yang sudah divalidasi
     stageDeadlines = PRODUCTION_STAGES.map((stageName) => {
       if (stageName === 'Siap Kirim') {
         return { stageName, deadline: poDeadline.toISOString() }
@@ -1684,7 +1724,7 @@ export async function getProductSalesAnalysis() {
       // 7. Data untuk Tren Produk
       try {
         salesByDateForTrend.push({ date: new Date(po.created_at), name: productName, quantity })
-      } catch {}
+      } catch { }
     })
 
     // --- Proses Agregasi per PO (Marketing & Customer) ---
@@ -2167,8 +2207,8 @@ ATURAN KETAT:
         const topCustomer =
           Object.keys(customerData).length > 0
             ? Object.keys(customerData).reduce((a, b) =>
-                customerData[a] > customerData[b] ? a : b
-              )
+              customerData[a] > customerData[b] ? a : b
+            )
             : 'N/A'
         return topCustomer !== 'N/A'
           ? `Customer terbesar (m³) dari PO Selesai adalah: ${topCustomer} (${customerData[topCustomer].toFixed(3)} m³).`
@@ -2542,28 +2582,28 @@ async function uploadPoPhoto(photoPath, poNumber, customerName) {
   try {
     if (!fs.existsSync(photoPath)) throw new Error(`File foto tidak ditemukan: ${photoPath}`)
 
-    const auth = getDriveAuth() // Gunakan auth GDrive
+    const auth = getAuth() // gunakan existing getAuth
     const drive = google.drive({ version: 'v3', auth })
 
-    const fileName = `PO-${poNumber}-${customerName.replace(/[/\\?%*:|"<>]/g, '-')}.jpg`
+    const safeCustomer = String(customerName || '').replace(/[/\\?%*:|"<>]/g, '-')
+    const fileName = `PO-${poNumber}-${safeCustomer}.jpg`
 
     const response = await drive.files.create({
       requestBody: {
         name: fileName,
         mimeType: 'image/jpeg',
-        parents: [PO_PHOTOS_FOLDER_ID]
+        parents: [PROGRESS_PHOTOS_FOLDER_ID] // using existing photos folder
       },
       media: {
         mimeType: 'image/jpeg',
         body: fs.createReadStream(photoPath)
       },
-      fields: 'id, webViewLink, size', // [UBAH] Minta 'size'
+      fields: 'id, webViewLink, name, size',
       supportsAllDrives: true
     })
 
     console.log(`✅ Foto referensi PO berhasil diunggah: ${response.data.webViewLink}`)
-    // [UBAH] Kembalikan 'size'
-    return { success: true, link: response.data.webViewLink, size: response.data.size }
+    return { success: true, link: response.data.webViewLink, name: response.data.name, size: response.data.size }
   } catch (error) {
     console.error('❌ Gagal unggah foto referensi PO:', error)
     return { success: false, error: error.message, size: 0 }
