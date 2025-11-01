@@ -222,7 +222,7 @@ const Chatbot: React.FC<ChatbotProps> = ({
       </div>
       <div className="chat-input">
         <textarea
-          placeholder={isProcessing ? 'Memproses...' : 'Ketik pertanyaan Anda...'}
+          placeholder={isProcessing ? 'Memproses...' : 'Ketik pertanyaanmu...'}
           value={inputText}
           onChange={onInputChange}
           onKeyDown={onKeyDown}

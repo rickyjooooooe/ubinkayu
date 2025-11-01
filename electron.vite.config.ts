@@ -6,21 +6,19 @@ export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
     build: {
-      // --- TAMBAHAN BARU ---
-      // Baris-baris ini memaksa dev server untuk memantau
-      // perubahan pada file di dalam folder 'electron/'
       watch: {
         include: ['electron/**/*']
       },
-      // --- AKHIR TAMBAHAN ---
-
       rollupOptions: {
+        // --- TAMBAHKAN BARIS INI ---
+        input: resolve(__dirname, 'src/main/index.ts'),
+        // --- AKHIR TAMBAHAN ---
         external: [
           'google-spreadsheet',
           'google-auth-library',
           'pdfkit',
-          'fs-extra', // Jika Anda pakai
-          'canvas', // Jika Anda pakai canvas di main process (sepertinya tidak)
+          'fs-extra',
+          'canvas',
           'stream'
         ]
       }
