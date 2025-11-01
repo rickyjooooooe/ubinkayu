@@ -1,6 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-require('dotenv').config()
 
 console.log('✅ --- PRELOAD SCRIPT STARTED ---')
 
