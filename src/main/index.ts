@@ -2806,6 +2806,24 @@ async function createWindow() {
   await win.loadFile(loadingPath)
 }
 
+async function loadMainWindow() {
+  // 1. Lakukan tugas berat (koneksi sheet, dll)
+  try {
+    await testSheetConnection()
+    console.log('Koneksi dan setup awal selesai.')
+  } catch (e) {
+    console.error('Gagal setup awal:', e)
+  }
+
+  // 2. Ganti jendela ke aplikasi React utama
+  if (process.env.VITE_DEV_SERVER_URL) {
+    await win.loadURL(process.env.VITE_DEV_SERVER_URL)
+    win.webContents.openDevTools()
+  } else {
+    await win.loadFile(path.join(__dirname, '../renderer/index.html'))
+  }
+}
+
 app.whenReady().then(async () => {
   testSheetConnection()
 
@@ -2875,26 +2893,16 @@ app.whenReady().then(async () => {
 
   await createWindow()
 
-  // [PERUBAHAN 6] Lakukan tugas berat (koneksi sheet, dll)
-  // Jendela loading akan tampil selama proses ini
-  try {
-    await testSheetConnection()
-    console.log('Koneksi dan setup awal selesai.')
-  } catch (e) {
-    console.error('Gagal setup awal:', e)
-    // Anda bisa kirim IPC ke jendela loading untuk tampilkan error
-  }
+  // 2. Muat aplikasi utama
+  await loadMainWindow()
 
-  // [PERUBAHAN 7] Ganti jendela ke aplikasi React utama
-  if (process.env.VITE_DEV_SERVER_URL) {
-    await win.loadURL(process.env.VITE_DEV_SERVER_URL)
-    win.webContents.openDevTools()
-  } else {
-    await win.loadFile(path.join(__dirname, '../renderer/index.html'))
-  }
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  app.on('activate', async () => { // <-- Jadikan async
+    // Ini terpicu saat ikon Dock diklik (hanya macOS)
+    if (BrowserWindow.getAllWindows().length === 0) {
+      // [PERBAIKAN] Jalankan urutan yang sama persis
+      await createWindow()   // 1. Tampilkan loading spinner lagi
+      await loadMainWindow() // 2. Muat aplikasi utama lagi
+    }
   })
 })
 
