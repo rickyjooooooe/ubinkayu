@@ -920,24 +920,42 @@ export async function deletePO(poId) {
     )
 
     const fileIds = new Set()
-    const fileIdToName = new Map() // map untuk menyimpan nama file jika tersedia
+    const fileIdToName = new Map()
 
-    // MENGAMBIL NAMA FILE DARI SHEET (Perbaikan Logging)
     toDelHdr.forEach((poRow) => {
+      // Cek 1: Link PDF (JPEG PO)
       const pdfLink = poRow.get('pdf_link')
-      const pdfName = poRow.get('pdf_file_name') || null // Ambil nama file yang tersimpan
+      const pdfName = poRow.get('pdf_file_name') || null
       if (pdfLink && !pdfLink.startsWith('ERROR:') && !pdfLink.includes('generating')) {
         const fileId = extractGoogleDriveFileId(pdfLink)
         if (fileId) {
           fileIds.add(fileId)
           if (pdfName) fileIdToName.set(fileId, pdfName)
         }
+      } // --- [INI PERBAIKANNYA] ---
+      // Cek 2: Link Foto Referensi
+      const fotoLink = poRow.get('foto_link')
+      const fotoName = poRow.get('foto_file_name') || null
+      if (
+        fotoLink &&
+        !fotoLink.startsWith('ERROR:') &&
+        !fotoLink.includes('generating') &&
+        fotoLink !== 'Tidak ada foto'
+      ) {
+        const fileId = extractGoogleDriveFileId(fotoLink)
+        if (fileId) {
+          fileIds.add(fileId)
+          if (fotoName) fileIdToName.set(fileId, fotoName)
+          console.log(`Found foto_link to delete: ${fileId}`) // Log tambahan
+        }
       }
+      // --- [AKHIR PERBAIKAN] ---
     })
 
     poProgressRows.forEach((progressRow) => {
+      // Cek 3: Foto Progress
       const photoUrl = progressRow.get('photo_url')
-      const photoName = progressRow.get('photo_file_name') || null // Ambil nama file yang tersimpan
+      const photoName = progressRow.get('photo_file_name') || null
       if (photoUrl) {
         const fileId = extractGoogleDriveFileId(photoUrl)
         if (fileId) {
@@ -948,6 +966,7 @@ export async function deletePO(poId) {
     })
 
     const uniqueFileIds = Array.from(fileIds)
+    console.log(`Found ${uniqueFileIds.length} unique file(s) to delete.`, uniqueFileIds) // Log tambahan
 
     let deletedFilesCount = 0
     let failedFilesCount = 0
@@ -956,6 +975,7 @@ export async function deletePO(poId) {
     if (uniqueFileIds.length > 0) {
       console.log(`🗂️ Menghapus ${uniqueFileIds.length} file dari Google Drive dalam batch...`)
 
+      // Panggil fungsi yang sudah benar namanya (deleteGoogleDriveFile, huruf kecil 'd')
       const deleteResults = await processBatch(uniqueFileIds, deleteGoogleDriveFile, 5)
 
       deleteResults.forEach((result) => {
@@ -963,9 +983,12 @@ export async function deletePO(poId) {
           deletedFilesCount++
         } else {
           failedFilesCount++
+          // @ts-ignore
           const name = fileIdToName.get(result.fileId) || null
+          // @ts-ignore
           failedFiles.push({ fileId: result.fileId, fileName: name, error: result.error })
           console.warn(
+            // @ts-ignore
             `⚠️ Gagal menghapus file ${result.fileId} (${name || 'unknown name'}): ${result.error}`
           )
         }
@@ -975,18 +998,9 @@ export async function deletePO(poId) {
     console.log(`📄 Menghapus data dari spreadsheet...`)
 
     const sheetDeletions = []
-
-    poProgressRows.reverse().forEach((row) => {
-      sheetDeletions.push(row.delete())
-    })
-
-    toDelHdr.reverse().forEach((row) => {
-      sheetDeletions.push(row.delete())
-    })
-
-    toDelItems.reverse().forEach((row) => {
-      sheetDeletions.push(row.delete())
-    })
+    poProgressRows.reverse().forEach((row) => sheetDeletions.push(row.delete()))
+    toDelHdr.reverse().forEach((row) => sheetDeletions.push(row.delete()))
+    toDelItems.reverse().forEach((row) => sheetDeletions.push(row.delete()))
 
     await Promise.allSettled(sheetDeletions)
 
@@ -1018,7 +1032,9 @@ export async function deletePO(poId) {
   } catch (err) {
     const endTime = Date.now()
     const duration = ((endTime - startTime) / 1000).toFixed(1)
+    // @ts-ignore
     console.error(`❌ Gagal menghapus PO ID ${poId} setelah ${duration}s:`, err.message)
+    // @ts-ignore
     return { success: false, error: err.message, duration: `${duration}s` }
   }
 }
@@ -1984,7 +2000,7 @@ export async function handleGroqChat(prompt) {
   const currentHour = now.getHours()
   let timeOfDayGreeting = 'Halo!'
   if (currentHour >= 4 && currentHour < 11) {
-    timeOfDayGreeting = 'Selamat pagi!'
+    timeOfDayGreeting = 'Selamat pagii!'
   } else if (currentHour >= 11 && currentHour < 15) {
     timeOfDayGreeting = 'Selamat siang!'
   } else if (currentHour >= 15 && currentHour < 19) {

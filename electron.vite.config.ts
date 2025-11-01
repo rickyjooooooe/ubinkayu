@@ -6,6 +6,14 @@ export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
     build: {
+      // --- TAMBAHAN BARU ---
+      // Baris-baris ini memaksa dev server untuk memantau
+      // perubahan pada file di dalam folder 'electron/'
+      watch: {
+        include: ['electron/**/*']
+      },
+      // --- AKHIR TAMBAHAN ---
+
       rollupOptions: {
         external: [
           'google-spreadsheet',
@@ -13,7 +21,7 @@ export default defineConfig({
           'pdfkit',
           'fs-extra', // Jika Anda pakai
           'canvas', // Jika Anda pakai canvas di main process (sepertinya tidak)
-          'stream' // <-- TAMBAHKAN BARIS INI
+          'stream'
         ]
       }
     }
