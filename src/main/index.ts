@@ -2786,8 +2786,10 @@ if (process.platform === 'win32') {
   app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
 }
 
+let win: BrowserWindow
+
 async function createWindow() {
-  const win = new BrowserWindow({
+  win = new BrowserWindow({
     width: 1200,
     height: 800,
     webPreferences: {
@@ -2797,15 +2799,14 @@ async function createWindow() {
     }
   })
 
-  if (process.env.VITE_DEV_SERVER_URL) {
-    await win.loadURL(process.env.VITE_DEV_SERVER_URL)
-    win.webContents.openDevTools()
-  } else {
-    await win.loadFile(path.join(__dirname, '../renderer/index.html'))
-  }
+  const loadingPath = app.isPackaged
+    ? path.join(__dirname, '../../resources/loading.html')
+    : path.join(process.cwd(), 'resources/loading.html')
+
+  await win.loadFile(loadingPath)
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   testSheetConnection()
 
   // --- IPC Handlers ---
@@ -2872,7 +2873,26 @@ app.whenReady().then(() => {
     return await handleGroqChat(prompt)
   })
 
-  createWindow()
+  await createWindow()
+
+  // [PERUBAHAN 6] Lakukan tugas berat (koneksi sheet, dll)
+  // Jendela loading akan tampil selama proses ini
+  try {
+    await testSheetConnection()
+    console.log('Koneksi dan setup awal selesai.')
+  } catch (e) {
+    console.error('Gagal setup awal:', e)
+    // Anda bisa kirim IPC ke jendela loading untuk tampilkan error
+  }
+
+  // [PERUBAHAN 7] Ganti jendela ke aplikasi React utama
+  if (process.env.VITE_DEV_SERVER_URL) {
+    await win.loadURL(process.env.VITE_DEV_SERVER_URL)
+    win.webContents.openDevTools()
+  } else {
+    await win.loadFile(path.join(__dirname, '../renderer/index.html'))
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
