@@ -1,4 +1,7 @@
 /* eslint-disable no-irregular-whitespace */
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+/* eslint-disable @typescript-eslint/explicit-function-return-type */
+
 import { GoogleSpreadsheet } from 'google-spreadsheet'
 import { JWT } from 'google-auth-library'
 import path from 'node:path'
@@ -28,7 +31,6 @@ const PRODUCTION_STAGES = [
 const formatDate = (dateString) => {
   if (!dateString) return '-'
   try {
-    // Format YYYY-MM-DD dari ISO string
     const isoDate = new Date(dateString).toISOString().split('T')[0]
     const [year, month, day] = isoDate.split('-')
     return `${day}/${month}/${year}` // Format DD/MM/YYYY
@@ -42,7 +44,6 @@ const DEFAULT_STAGE_DURATIONS = {
   Moulding: 7, // 1 minggu
   KD: 14, // 2 minggu
   Coating: 14, // 2 minggu
-  // Tahap lain bisa diberi default 0 jika tidak ada durasi spesifik
   'Cari Bahan Baku': 0,
   Sawmill: 0,
   'Siap Kirim': 0
@@ -59,8 +60,8 @@ function getAuth() {
     const title = 'Error Kredensial Kritis'
     const content = `File credentials.json tidak dapat ditemukan di aplikasi.\n\nLokasi yang dicari:\n${credPath}`
 
-    console.error(content) // Tetap log di terminal
-    dialog.showErrorBox(title, content) // <-- INI AKAN MEMUNCULKAN POPUP ERROR
+    console.error(content)
+    dialog.showErrorBox(title, content)
 
     throw new Error('File credentials.json tidak ditemukan.')
   }
@@ -86,13 +87,9 @@ async function openDoc() {
 
 async function openUserDoc() {
   const auth = getAuth()
-  const doc = new GoogleSpreadsheet(USER_SPREADSHEET_ID, auth) // <- Ini pakai ID user
+  const doc = new GoogleSpreadsheet(USER_SPREADSHEET_ID, auth)
   await doc.loadInfo()
   return doc
-}
-
-function ensureDirSync(dirPath) {
-  if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true })
 }
 
 const ALIASES = {
@@ -124,6 +121,7 @@ async function getNextIdFromSheet(sheet) {
   if (rows.length === 0) return '1'
   let maxId = 0
   rows.forEach((r) => {
+    // @ts-ignore
     const val = toNum(r.get('id'), NaN)
     if (!Number.isNaN(val)) maxId = Math.max(maxId, val)
   })
@@ -139,7 +137,9 @@ async function latestRevisionNumberForPO(poId, doc) {
   const sh = await getSheet(doc, 'purchase_orders')
   const rows = await sh.getRows()
   const nums = rows
+    // @ts-ignore
     .filter((r) => String(r.get('id')).trim() === String(poId).trim())
+    // @ts-ignore
     .map((r) => toNum(r.get('revision_number'), -1))
   return nums.length ? Math.max(...nums) : -1
 }
@@ -150,7 +150,9 @@ async function getHeaderForRevision(poId, rev, doc) {
   return (
     rows.find(
       (r) =>
+        // @ts-ignore
         String(r.get('id')).trim() === String(poId).trim() &&
+        // @ts-ignore
         toNum(r.get('revision_number'), -1) === toNum(rev, -1)
     ) || null
   )
@@ -162,7 +164,9 @@ async function getItemsByRevision(poId, rev, doc) {
   return rows
     .filter(
       (r) =>
+        // @ts-ignore
         String(r.get('purchase_order_id')).trim() === String(poId).trim() &&
+        // @ts-ignore
         toNum(r.get('revision_number'), -1) === toNum(rev, -1)
     )
     .map((r) => r.toObject())
@@ -178,43 +182,35 @@ export async function handleLoginUser(loginData) {
   console.log('🏁 [Electron] handleLoginUser started!')
   const { username, password } = loginData
 
-  // Validasi input dasar
   if (!username || !password) {
     console.warn('⚠️ [Electron Login] Missing username or password.')
-    // Ganti res.json -> return object
     return { success: false, error: 'Username dan password harus diisi.' }
   }
 
   try {
-    const doc = await openUserDoc() // Ini akan memanggil openDoc() milik Electron
-    const userSheet = await getSheet(doc, 'users') // Ini memanggil alias 'users' yang baru
+    const doc = await openUserDoc()
+    const userSheet = await getSheet(doc, 'users')
     console.log(`✅ [Electron Login] Accessed sheet: ${userSheet.title}`)
 
-    // Muat header
     await userSheet.loadHeaderRow()
     const headers = userSheet.headerValues
     console.log('✅ [Electron Login] Sheet headers:', headers)
 
-    // --- SESUAIKAN NAMA KOLOM DI SINI (sudah sama) ---
     const usernameHeader = 'login_username'
     const passwordHeader = 'login_pwd'
     const nameHeader = 'name'
     const roleHeader = 'role'
-    // --- AKHIR PENYESUAIAN NAMA KOLOM ---
 
     if (!headers.includes(usernameHeader) || !headers.includes(passwordHeader)) {
       console.error(
         `❌ [Electron Login] Missing required columns (${usernameHeader} or ${passwordHeader}) in sheet "${userSheet.title}"`
       )
-      // Ganti res.json -> return object
       return { success: false, error: 'Kesalahan konfigurasi sheet.' }
     }
 
-    // Ambil semua baris data user
     const rows = await userSheet.getRows()
     console.log(`ℹ️ [Electron Login] Found ${rows.length} user rows.`)
 
-    // Cari user
     const trimmedUsernameLower = username.trim().toLowerCase()
     const userRow = rows.find(
       (row) => row.get(usernameHeader)?.trim().toLowerCase() === trimmedUsernameLower
@@ -228,31 +224,28 @@ export async function handleLoginUser(loginData) {
 
       if (storedPassword === password) {
         console.log(`✅ [Electron Login] Password match for user: ${foundUsername}`)
-        // Login berhasil
         const userName =
           headers.includes(nameHeader) && userRow.get(nameHeader)
             ? userRow.get(nameHeader)
             : foundUsername
         const userRole = headers.includes(roleHeader) ? userRow.get(roleHeader) : undefined
 
-        // Ganti res.json -> return object
         return { success: true, name: userName, role: userRole }
       } else {
         console.warn(`🔑 [Electron Login] Password mismatch for user: ${foundUsername}`)
-        // Ganti res.json -> return object
         return { success: false, error: 'Username atau password salah.' }
       }
     } else {
       console.warn(`❓ [Electron Login] User not found: ${username}`)
-      // Ganti res.json -> return object
       return { success: false, error: 'Username atau password salah.' }
     }
   } catch (err) {
+    // @ts-ignore
     console.error('💥 [Electron Login] ERROR:', err.message, err.stack)
-    // Ganti res.json -> return object
     return {
       success: false,
       error: 'Terjadi kesalahan pada server saat login.',
+      // @ts-ignore
       details: err.message
     }
   }
@@ -263,7 +256,6 @@ async function generateAndUploadPO(poData, revisionNumber) {
   let filePath
 
   try {
-    // 1. Generate JPEG
     // @ts-ignore
     const pdfResult = await generatePOJpeg(poData, revisionNumber, false)
     if (!pdfResult.success || !pdfResult.path) {
@@ -275,9 +267,8 @@ async function generateAndUploadPO(poData, revisionNumber) {
       throw new Error(`File JPEG tidak ditemukan di path: ${filePath}`)
     }
 
-    // 2. Dapatkan objek auth dan authorize
     console.log('🔄 Mendapatkan otentikasi baru sebelum upload/get...')
-    auth = getAuth() // Panggil fungsi getAuth Anda
+    auth = getAuth()
     await auth.authorize()
     console.log('✅ Otorisasi ulang berhasil.')
 
@@ -286,7 +277,6 @@ async function generateAndUploadPO(poData, revisionNumber) {
 
     console.log(`🚀 Mengunggah file via auth.request: ${fileName} ke Drive...`)
 
-    // --- Upload via auth.request (Sama seperti sebelumnya) ---
     const fileStream = fs.createReadStream(filePath)
     const metadata = {
       name: fileName,
@@ -295,7 +285,6 @@ async function generateAndUploadPO(poData, revisionNumber) {
     }
     const boundary = `----UbinkayuERPBoundary${Date.now()}----`
     const readable = new stream.PassThrough()
-    // ... (Kode untuk menulis metadata dan pipe fileStream ke readable - sama seperti sebelumnya)
     readable.write(`--${boundary}\r\n`)
     readable.write('Content-Type: application/json; charset=UTF-8\r\n\r\n')
     readable.write(JSON.stringify(metadata) + '\r\n\r\n')
@@ -319,7 +308,6 @@ async function generateAndUploadPO(poData, revisionNumber) {
       maxContentLength: Infinity
     })
 
-    // --- Ambil webViewLink via auth.request ---
     const fileId = createResponse?.data?.id
     if (!fileId) {
       console.error('❌ Upload berhasil, tetapi ID file tidak ditemukan:', createResponse.data)
@@ -329,13 +317,12 @@ async function generateAndUploadPO(poData, revisionNumber) {
       `✅ File berhasil diunggah (ID: ${fileId}). Mengambil webViewLink via auth.request...`
     )
 
-    // Panggil files.get endpoint menggunakan auth.request
     const getResponse = await auth.request({
       url: `https://www.googleapis.com/drive/v3/files/${fileId}`,
       method: 'GET',
       params: {
-        fields: 'webViewLink,size,name', // Minta webViewLink, size, name
-        supportsAllDrives: true // Tetap perlu untuk Shared Drive
+        fields: 'webViewLink,size,name',
+        supportsAllDrives: true
       }
     })
 
@@ -350,13 +337,14 @@ async function generateAndUploadPO(poData, revisionNumber) {
 
     return { success: true, link: webViewLink, size: fileSize, name: fileNameOnDrive }
   } catch (error) {
-    // ... (Error handling sama seperti sebelumnya)
+    // @ts-ignore
     console.error('❌ Proses Generate & Upload PO Gagal:', error.message)
     // @ts-ignore
     if (error.response && error.response.data && error.response.data.error) {
       // @ts-ignore
       console.error(
         '   -> Detail Error Google API:',
+        // @ts-ignore
         JSON.stringify(error.response.data.error, null, 2)
       )
       // @ts-ignore
@@ -369,50 +357,35 @@ async function generateAndUploadPO(poData, revisionNumber) {
     // @ts-ignore
     return { success: false, error: error.message }
   } finally {
-    // Hapus file lokal
     if (filePath && fs.existsSync(filePath)) {
       try {
         fs.unlinkSync(filePath)
         console.log(`🗑️ File lokal ${path.basename(filePath)} dihapus.`)
       } catch (unlinkErr) {
+        // @ts-ignore
         console.warn(`⚠️ Gagal menghapus file lokal ${path.basename(filePath)}:`, unlinkErr.message)
       }
     }
   }
 }
 
-/**
- * Extract Google Drive file ID from various Drive URL formats
- * @param {string} driveUrl - Google Drive URL
- * @returns {string|null} - File ID or null if not found
- */
 function extractGoogleDriveFileId(driveUrl) {
   if (!driveUrl || typeof driveUrl !== 'string') return null
-
   const patterns = [
     /\/d\/([a-zA-Z0-9-_]+)/,
     /id=([a-zA-Z0-9-_]+)/,
     /file\/d\/([a-zA-Z0-9-_]+)/,
     /open\?id=([a-zA-Z0-9-_]+)/
   ]
-
   for (const pattern of patterns) {
     const match = driveUrl.match(pattern)
     if (match && match[1]) {
       return match[1]
     }
   }
-
   return null
 }
 
-/**
- * Process items in batches to prevent API rate limiting
- * @param {Array} items - Items to process
- * @param {Function} processor - Function to process each item
- * @param {number} batchSize - Number of items to process simultaneously
- * @returns {Promise<Array>} - Array of results
- */
 async function processBatch(items, processor, batchSize = 5) {
   const results = []
   for (let i = 0; i < items.length; i += batchSize) {
@@ -422,7 +395,8 @@ async function processBatch(items, processor, batchSize = 5) {
       ...batchResults.map((result) =>
         result.status === 'fulfilled'
           ? result.value
-          : { success: false, error: result.reason?.message || 'Unknown error' }
+          : // @ts-ignore
+            { success: false, error: result.reason?.message || 'Unknown error' }
       )
     )
 
@@ -433,27 +407,17 @@ async function processBatch(items, processor, batchSize = 5) {
   return results
 }
 
-/**
- * MENGGANTI FUNGSI INI UNTUK MENGATASI ERROR 401/404
- * Menggunakan google.drive client untuk penghapusan yang lebih stabil
- */
 async function deleteGoogleDriveFile(fileId) {
   try {
     if (!fileId) {
       return { success: false, error: 'File ID tidak valid', fileId }
     }
-
-    // 1. Dapatkan objek auth (JWT)
-    const auth = getAuth() // Hanya membuat objek JWT
-
-    // 2. Otorisasi objek auth sebelum digunakan
+    const auth = getAuth()
     await auth.authorize()
     console.log(`🔑 Otorisasi ulang untuk menghapus file ${fileId} berhasil.`)
 
-    // 3. Buat klien Drive menggunakan auth yang sudah terotorisasi
     const drive = google.drive({ version: 'v3', auth })
 
-    // 4. Gunakan method files.delete yang lebih andal
     await drive.files.delete({
       fileId: fileId,
       supportsAllDrives: true
@@ -462,33 +426,26 @@ async function deleteGoogleDriveFile(fileId) {
     console.log(`✅ File berhasil dihapus dari Google Drive: ${fileId}`)
     return { success: true, fileId }
   } catch (error) {
+    // @ts-ignore
     console.error(`❌ Gagal menghapus file dari Google Drive (${fileId}):`, error.message)
-
-    // Periksa response untuk detail API
+    // @ts-ignore
     const apiError = error.response?.data?.error || {}
-
-    // 5. TANGANI 404/401/403 DENGAN ELEGAN
+    // @ts-ignore
     if (error.code === 404 || apiError.code === 404) {
       console.log(`ℹ️ File ${fileId} tidak ditemukan (404), dianggap sudah terhapus.`)
-      return { success: true, fileId } // Anggap berhasil jika tidak ditemukan
+      return { success: true, fileId }
     }
-
-    // Tangani error otorisasi
-    if (
-      error.code === 401 ||
-      error.code === 403 ||
-      apiError.code === 401 ||
-      apiError.code === 403
-    ) {
-      // Log error otorisasi lebih jelas
+    // @ts-ignore
+    if (error.code === 401 || error.code === 403 || apiError.code === 401 || apiError.code === 403) {
       console.error(`🚫 Akses Ditolak/Otentikasi Gagal untuk ${fileId}.`)
       return {
         success: false,
+        // @ts-ignore
         error: `Akses Ditolak/Login Gagal: ${apiError.message || error.message}`,
         fileId
       }
     }
-
+    // @ts-ignore
     return { success: false, error: error.message || String(error), fileId }
   }
 }
@@ -513,7 +470,9 @@ async function uploadProgressPhoto(photoPath, poNumber, itemId) {
       size: response.data.size
     }
   } catch (error) {
+    // @ts-ignore
     console.error('❌ Gagal unggah foto progress:', error)
+    // @ts-ignore
     return { success: false, error: error.message, size: 0 }
   }
 }
@@ -523,6 +482,7 @@ export async function testSheetConnection() {
     const doc = await openDoc()
     console.log(`✅ Tes koneksi OK: "${doc.title}"`)
   } catch (err) {
+    // @ts-ignore
     console.error('❌ Gagal tes koneksi ke Google Sheets:', err.message)
   }
 }
@@ -534,36 +494,37 @@ export async function listPOs() {
     const itemSheet = await getSheet(doc, 'purchase_order_items')
     const progressSheet = await getSheet(doc, 'progress_tracking')
 
-    // Ambil data mentah (rows)
     const rawPoRows = await poSheet.getRows()
     const rawItemRows = await itemSheet.getRows()
     const rawProgressRows = await progressSheet.getRows()
 
-    // Lakukan pembersihan objek di sini untuk menghindari error cloning
     const poRows = rawPoRows.map((r) => r.toObject())
     const itemRows = rawItemRows.map((r) => r.toObject())
     const progressRows = rawProgressRows.map((r) => r.toObject())
 
-    // 1. Ambil Revisi Header Terbaru (dari data yang sudah bersih)
     const byId = new Map()
     for (const r of poRows) {
       const id = String(r.id).trim()
+      // @ts-ignore
       const rev = toNum(r.revision_number, -1)
       const keep = byId.get(id)
       if (!keep || rev > keep.rev) byId.set(id, { rev, row: r })
     }
     const latestPoObjects = Array.from(byId.values()).map(({ row }) => row)
 
-    // 2. Siapkan Helper Maps
     const progressByCompositeKey = progressRows.reduce((acc, row) => {
+      // @ts-ignore
       const key = `${row.purchase_order_id}-${row.purchase_order_item_id}`
       if (!acc[key]) acc[key] = []
+      // @ts-ignore
       acc[key].push({ stage: row.stage, created_at: row.created_at })
       return acc
     }, {})
 
     const latestItemRevisions = itemRows.reduce((acc, item) => {
+      // @ts-ignore
       const poId = item.purchase_order_id
+      // @ts-ignore
       const rev = toNum(item.revision_number, -1)
       if (!acc.has(poId) || rev > acc.get(poId)) {
         acc.set(poId, rev)
@@ -571,28 +532,33 @@ export async function listPOs() {
       return acc
     }, new Map())
 
-    // 3. Gabungkan dan Hitung Status/Progress
     const result = latestPoObjects.map((poObject) => {
+      // @ts-ignore
       const poId = poObject.id
-      // [PERBAIKAN] Gunakan poObject dan akses properti langsung
+      // @ts-ignore
       const lastRevisedBy = poObject.revised_by || 'N/A'
-      const lastRevisedDate = poObject.created_at // Ambil timestamp dari revisi terakhir (baris ini)
+      // @ts-ignore
+      const lastRevisedDate = poObject.created_at
 
       const latestRev = latestItemRevisions.get(poId) ?? -1
       const poItems = itemRows.filter(
-        (item) => item.purchase_order_id === poId && toNum(item.revision_number, -1) === latestRev
+        (item) =>
+          // @ts-ignore
+          item.purchase_order_id === poId && toNum(item.revision_number, -1) === latestRev
       )
 
       let poProgress = 0
-      let finalStatus = poObject.status || 'Open' // Status default dari sheet/Open
+      // @ts-ignore
+      let finalStatus = poObject.status || 'Open'
       let completed_at = null
 
-      // Hitung Progress
       if (poItems.length > 0) {
         let totalPercentage = 0
         poItems.forEach((item) => {
+          // @ts-ignore
           const itemId = item.id
           const compositeKey = `${poId}-${itemId}`
+          // @ts-ignore
           const itemProgressHistory = progressByCompositeKey[compositeKey] || []
           let latestStageIndex = -1
 
@@ -600,7 +566,7 @@ export async function listPOs() {
             const latestProgress = itemProgressHistory.sort(
               (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
             )[0]
-            // Gunakan PRODUCTION_STAGES yang terimpor
+            // @ts-ignore
             latestStageIndex = PRODUCTION_STAGES.indexOf(latestProgress.stage)
           }
 
@@ -611,16 +577,15 @@ export async function listPOs() {
         poProgress = totalPercentage / poItems.length
       }
 
-      // Tentukan Status (Menggantikan status lama dengan status yang dihitung)
       const roundedProgress = Math.round(poProgress)
 
       if (finalStatus !== 'Cancelled') {
         if (roundedProgress >= 100) {
           finalStatus = 'Completed'
-
-          // Cari tanggal update progress terakhir untuk PO ini
           const allProgressForPO = progressRows
+            // @ts-ignore
             .filter((row) => row.purchase_order_id === poId)
+            // @ts-ignore
             .map((row) => new Date(row.created_at).getTime())
 
           if (allProgressForPO.length > 0) {
@@ -633,23 +598,26 @@ export async function listPOs() {
         }
       }
 
-      // KUNCI: Kembalikan objek JavaScript murni dan lengkap (Deep Clone)
       return {
         ...poObject,
         items: poItems,
         progress: roundedProgress,
         status: finalStatus,
         completed_at: completed_at,
+        // @ts-ignore
         pdf_link: poObject.pdf_link || null,
         lastRevisedBy: lastRevisedBy,
         lastRevisedDate: lastRevisedDate,
-        acc_marketing: poObject.acc_marketing || '', // Pastikan field ini ada
-        file_size_bytes: poObject.file_size_bytes || 0 // [TAMBAHKAN INI]
+        // @ts-ignore
+        acc_marketing: poObject.acc_marketing || '',
+        // @ts-ignore
+        file_size_bytes: poObject.file_size_bytes || 0
       }
     })
 
     return result
   } catch (err) {
+    // @ts-ignore
     console.error('❌ listPOs error:', err.message)
     return []
   }
@@ -664,25 +632,27 @@ export async function saveNewPO(data) {
     const itemSheet = await getSheet(doc, 'purchase_order_items')
 
     const poId = await getNextIdFromSheet(poSheet)
-    let totalFileSize = 0 // Variabel untuk menjumlahkan ukuran file
+    let totalFileSize = 0
 
     const newPoRow = await poSheet.addRow({
       id: poId,
       revision_number: 0,
       po_number: data.nomorPo,
       project_name: data.namaCustomer,
-      deadline: data.tanggalKirim || '',
+      deadline: data.tanggalKirim || null,
       status: 'Open',
-      priority: data.prioritas || '',
+      priority: data.prioritas || 'Normal',
       notes: data.catatan || '',
       kubikasi_total: data.kubikasi_total || 0,
       acc_marketing: data.marketing || '',
       created_at: now,
       pdf_link: 'generating...',
-      pdf_file_name: '', // new column for file name
-      foto_link: '...', // Placeholder
-      foto_file_name: '', // new column for foto file name
-      file_size_bytes: 0 // Placeholder
+      pdf_file_name: '',
+      foto_link: '...',
+      foto_file_name: '',
+      file_size_bytes: 0,
+      alamat_kirim: data.alamatKirim || '',
+      revised_by: 'N/A'
     })
 
     const itemsWithIds = []
@@ -706,22 +676,23 @@ export async function saveNewPO(data) {
       await itemSheet.addRows(itemsToAdd)
     }
 
-    // 1. Upload Foto Referensi (jika ada)
     if (data.poPhotoPath) {
       console.log('Mengunggah foto referensi PO...')
       const photoResult = await uploadPoPhoto(data.poPhotoPath, data.nomorPo, data.namaCustomer)
       if (photoResult.success) {
         newPoRow.set('foto_link', photoResult.link)
+        // @ts-ignore
         newPoRow.set('foto_file_name', photoResult.name || '')
-        totalFileSize += Number(photoResult.size || 0) // Tambah ukuran foto
+        // @ts-ignore
+        totalFileSize += Number(photoResult.size || 0)
       } else {
+        // @ts-ignore
         newPoRow.set('foto_link', `ERROR: ${photoResult.error}`)
       }
     } else {
       newPoRow.set('foto_link', 'Tidak ada foto')
     }
 
-    // 2. Siapkan data dan buat JPEG
     const poDataForJpeg = {
       po_number: data.nomorPo,
       project_name: data.namaCustomer,
@@ -732,31 +703,35 @@ export async function saveNewPO(data) {
       created_at: now,
       kubikasi_total: data.kubikasi_total || 0,
       poPhotoPath: data.poPhotoPath,
-      marketing: data.marketing || 'Unknown' // [PERBAIKAN] Gunakan data.marketing
+      marketing: data.marketing || 'Unknown',
+      alamat_kirim: data.alamatKirim || ''
     }
 
     const uploadResult = await generateAndUploadPO(poDataForJpeg, 0)
 
     if (uploadResult.success) {
       newPoRow.set('pdf_link', uploadResult.link)
+      // @ts-ignore
       newPoRow.set('pdf_file_name', uploadResult.name || '')
-      totalFileSize += Number(uploadResult.size || 0) // Tambah ukuran JPEG
+      // @ts-ignore
+      totalFileSize += Number(uploadResult.size || 0)
     } else {
+      // @ts-ignore
       newPoRow.set('pdf_link', `ERROR: ${uploadResult.error}`)
       newPoRow.set('pdf_file_name', '')
     }
 
-    // 3. Simpan total ukuran file dan simpan baris
     newPoRow.set('file_size_bytes', totalFileSize)
     await newPoRow.save()
     return { success: true, poId, revision_number: 0 }
   } catch (err) {
+    // @ts-ignore
     console.error('❌ saveNewPO error:', err.message)
+    // @ts-ignore
     return { success: false, error: err.message }
   }
 }
 
-// [GANTI SELURUH FUNGSI UPDATEPO ANDA DENGAN INI]
 export async function updatePO(data) {
   console.log('TITIK B (Backend): Menerima data revisi:', data)
   try {
@@ -770,33 +745,43 @@ export async function updatePO(data) {
     const prev = prevRow ? prevRow.toObject() : {}
     const newRev = latest >= 0 ? latest + 1 : 0
 
-    let totalFileSize = 0 // Variabel untuk menjumlahkan ukuran file
-    let fotoLink = prev.foto_link || 'Tidak ada foto' // Warisi link foto lama
+    let totalFileSize = 0
+    // @ts-ignore
+    let fotoLink = prev.foto_link || 'Tidak ada foto'
     let fotoSize = 0
+    // @ts-ignore
     let fotoFileName = prev.foto_file_name || ''
 
-    // 1. Buat baris revisi baru di sheet
     const newRevisionRow = await poSheet.addRow({
       id: String(data.poId),
       revision_number: newRev,
+      // @ts-ignore
       po_number: data.nomorPo ?? prev.po_number ?? '',
+      // @ts-ignore
       project_name: data.namaCustomer ?? prev.project_name ?? '',
-      deadline: data.tanggalKirim ?? prev.deadline ?? '',
+      // @ts-ignore
+      deadline: data.tanggalKirim ?? prev.deadline ?? null,
+      // @ts-ignore
       status: data.status ?? prev.status ?? 'Open',
-      priority: data.prioritas ?? prev.priority ?? '',
+      // @ts-ignore
+      priority: data.prioritas ?? prev.priority ?? 'Normal',
+      // @ts-ignore
       notes: data.catatan ?? prev.notes ?? '',
+      // @ts-ignore
       kubikasi_total: data.kubikasi_total ?? prev.kubikasi_total ?? 0,
+      // @ts-ignore
       acc_marketing: data.marketing ?? prev.acc_marketing ?? '',
       created_at: now,
       pdf_link: 'generating...',
-      pdf_file_name: '', // placeholder
-      foto_link: '...', // Placeholder
-      foto_file_name: fotoFileName, // warisi nama file foto jika ada
-      file_size_bytes: 0, // Placeholder
-      revised_by: data.revisedBy || 'Unknown'
+      pdf_file_name: '',
+      foto_link: '...',
+      foto_file_name: fotoFileName,
+      file_size_bytes: 0,
+      revised_by: data.revisedBy || 'Unknown',
+      // @ts-ignore
+      alamat_kirim: data.alamatKirim ?? prev.alamat_kirim ?? ''
     })
 
-    // 2. Tambahkan item-item baru ke sheet
     const itemsWithIds = []
     let nextItemId = parseInt(await getNextIdFromSheet(itemSheet), 10)
     const itemsToAdd = (data.items || []).map((raw) => {
@@ -818,75 +803,85 @@ export async function updatePO(data) {
       await itemSheet.addRows(itemsToAdd)
     }
 
-    // 3. Logika Upload Foto Referensi (jika ada foto baru)
     if (data.poPhotoPath) {
       console.log(`[updatePO] 📸 Terdeteksi foto referensi baru, mengunggah...`)
       const photoResult = await uploadPoPhoto(data.poPhotoPath, data.nomorPo, data.namaCustomer)
       if (photoResult.success) {
-        fotoLink = photoResult.link // Gunakan link foto baru
-        fotoSize = Number(photoResult.size || 0) // Simpan ukuran foto baru
+        fotoLink = photoResult.link
+        // @ts-ignore
+        fotoSize = Number(photoResult.size || 0)
+        // @ts-ignore
         fotoFileName = photoResult.name || ''
       } else {
+        // @ts-ignore
         fotoLink = `ERROR: ${photoResult.error}`
         fotoFileName = ''
       }
     } else {
       console.log(`[updatePO] 🖼️ Tidak ada foto referensi baru, mewariskan link lama: ${fotoLink}`)
-      totalFileSize = Number(prev.file_size_bytes || 0) // Warisi ukuran lama sementara
+      // @ts-ignore
+      totalFileSize = Number(prev.file_size_bytes || 0)
     }
 
-    // 4. Siapkan data untuk generator JPEG
     const poDataForJpeg = {
+      // @ts-ignore
       po_number: data.nomorPo ?? prev.po_number,
+      // @ts-ignore
       project_name: data.namaCustomer ?? prev.project_name,
+      // @ts-ignore
       deadline: data.tanggalKirim ?? prev.deadline,
+      // @ts-ignore
       priority: data.prioritas ?? prev.priority,
       items: itemsWithIds,
+      // @ts-ignore
       notes: data.catatan ?? prev.notes,
       created_at: now,
+      // @ts-ignore
       kubikasi_total: data.kubikasi_total ?? prev.kubikasi_total ?? 0,
-
-      poPhotoPath: data.poPhotoPath, // Path file BARU (jika ada)
-      foto_link: fotoLink, // Link foto (BARU atau LAMA)
-
-      marketing: data.marketing ?? prev.acc_marketing
+      poPhotoPath: data.poPhotoPath,
+      foto_link: fotoLink,
+      // @ts-ignore
+      marketing: data.marketing ?? prev.acc_marketing,
+      // @ts-ignore
+      alamat_kirim: data.alamatKirim ?? prev.alamat_kirim ?? ''
     }
 
-    // 5. Buat dan upload JPEG baru (karena item/header mungkin berubah)
     const uploadResult = await generateAndUploadPO(poDataForJpeg, newRev)
 
     let jpegSize = 0
     if (uploadResult.success) {
       newRevisionRow.set('pdf_link', uploadResult.link)
+      // @ts-ignore
       newRevisionRow.set('pdf_file_name', uploadResult.name || '')
+      // @ts-ignore
       jpegSize = Number(uploadResult.size || 0)
     } else {
+      // @ts-ignore
       newRevisionRow.set('pdf_link', `ERROR: ${uploadResult.error}`)
+      // @ts-ignore
       newRevisionRow.set('pdf_file_name', prev.pdf_file_name || '')
     }
 
-    // 6. Finalisasi Logika Ukuran File
     if (data.poPhotoPath) {
-      // Jika ada FOTO BARU, total ukuran = ukuran foto baru + ukuran JPEG baru
       totalFileSize = fotoSize + jpegSize
     } else {
-      // Kompromi: hitung ulang berdasarkan available
-      totalFileSize =
-        (jpegSize || 0) +
-        (fotoSize ||
-          Number(prev.file_size_bytes || 0) - (Number(prev.file_size_bytes || 0) - (jpegSize || 0)))
-      // fallback conservative
-      if (!totalFileSize) totalFileSize = Number(prev.file_size_bytes || 0)
+      totalFileSize = fotoSize + jpegSize
+      if (totalFileSize === 0 && !data.poPhotoPath) {
+        // @ts-ignore
+        totalFileSize = Number(prev.file_size_bytes || 0)
+      }
     }
 
     newRevisionRow.set('foto_link', fotoLink)
     newRevisionRow.set('foto_file_name', fotoFileName)
     newRevisionRow.set('file_size_bytes', totalFileSize)
-    await newRevisionRow.save() // Simpan semua perubahan
+    await newRevisionRow.save()
 
     return { success: true, revision_number: newRev }
   } catch (err) {
+    // @ts-ignore
     console.error('❌ updatePO error:', err.message)
+    // @ts-ignore
     return { success: false, error: err.message }
   }
 }
@@ -897,14 +892,12 @@ export async function deletePO(poId) {
 
   try {
     const doc = await openDoc()
-
     console.log(`📄 Mengambil data dari 3 sheet...`)
     const [poSheet, itemSheet, progressSheet] = await Promise.all([
       getSheet(doc, 'purchase_orders'),
       getSheet(doc, 'purchase_order_items'),
       getSheet(doc, 'progress_tracking')
     ])
-
     const [poRows, itemRows, progressRows] = await Promise.all([
       poSheet.getRows(),
       itemSheet.getRows(),
@@ -923,7 +916,6 @@ export async function deletePO(poId) {
     const fileIdToName = new Map()
 
     toDelHdr.forEach((poRow) => {
-      // Cek 1: Link PDF (JPEG PO)
       const pdfLink = poRow.get('pdf_link')
       const pdfName = poRow.get('pdf_file_name') || null
       if (pdfLink && !pdfLink.startsWith('ERROR:') && !pdfLink.includes('generating')) {
@@ -932,8 +924,8 @@ export async function deletePO(poId) {
           fileIds.add(fileId)
           if (pdfName) fileIdToName.set(fileId, pdfName)
         }
-      } // --- [INI PERBAIKANNYA] ---
-      // Cek 2: Link Foto Referensi
+      }
+
       const fotoLink = poRow.get('foto_link')
       const fotoName = poRow.get('foto_file_name') || null
       if (
@@ -946,14 +938,12 @@ export async function deletePO(poId) {
         if (fileId) {
           fileIds.add(fileId)
           if (fotoName) fileIdToName.set(fileId, fotoName)
-          console.log(`Found foto_link to delete: ${fileId}`) // Log tambahan
+          console.log(`Found foto_link to delete: ${fileId}`)
         }
       }
-      // --- [AKHIR PERBAIKAN] ---
     })
 
     poProgressRows.forEach((progressRow) => {
-      // Cek 3: Foto Progress
       const photoUrl = progressRow.get('photo_url')
       const photoName = progressRow.get('photo_file_name') || null
       if (photoUrl) {
@@ -966,7 +956,7 @@ export async function deletePO(poId) {
     })
 
     const uniqueFileIds = Array.from(fileIds)
-    console.log(`Found ${uniqueFileIds.length} unique file(s) to delete.`, uniqueFileIds) // Log tambahan
+    console.log(`Found ${uniqueFileIds.length} unique file(s) to delete.`, uniqueFileIds)
 
     let deletedFilesCount = 0
     let failedFilesCount = 0
@@ -975,7 +965,6 @@ export async function deletePO(poId) {
     if (uniqueFileIds.length > 0) {
       console.log(`🗂️ Menghapus ${uniqueFileIds.length} file dari Google Drive dalam batch...`)
 
-      // Panggil fungsi yang sudah benar namanya (deleteGoogleDriveFile, huruf kecil 'd')
       const deleteResults = await processBatch(uniqueFileIds, deleteGoogleDriveFile, 5)
 
       deleteResults.forEach((result) => {
@@ -987,8 +976,8 @@ export async function deletePO(poId) {
           const name = fileIdToName.get(result.fileId) || null
           // @ts-ignore
           failedFiles.push({ fileId: result.fileId, fileName: name, error: result.error })
+          // @ts-ignore
           console.warn(
-            // @ts-ignore
             `⚠️ Gagal menghapus file ${result.fileId} (${name || 'unknown name'}): ${result.error}`
           )
         }
@@ -996,12 +985,10 @@ export async function deletePO(poId) {
     }
 
     console.log(`📄 Menghapus data dari spreadsheet...`)
-
     const sheetDeletions = []
     poProgressRows.reverse().forEach((row) => sheetDeletions.push(row.delete()))
     toDelHdr.reverse().forEach((row) => sheetDeletions.push(row.delete()))
     toDelItems.reverse().forEach((row) => sheetDeletions.push(row.delete()))
-
     await Promise.allSettled(sheetDeletions)
 
     const endTime = Date.now()
@@ -1030,6 +1017,7 @@ export async function deletePO(poId) {
       summary
     }
   } catch (err) {
+    // @ts-ignore
     const endTime = Date.now()
     const duration = ((endTime - startTime) / 1000).toFixed(1)
     // @ts-ignore
@@ -1044,6 +1032,7 @@ export async function listPOItems(poId) {
     const doc = await openDoc()
     return await getLivePOItems(String(poId), doc)
   } catch (err) {
+    // @ts-ignore
     console.error('❌ listPOItems error:', err.message)
     return []
   }
@@ -1055,10 +1044,13 @@ export async function listPORevisions(poId) {
     const poSheet = await getSheet(doc, 'purchase_orders')
     const rows = await poSheet.getRows()
     return rows
+      // @ts-ignore
       .filter((r) => String(r.get('id')).trim() === String(poId).trim())
       .map((r) => r.toObject())
+      // @ts-ignore
       .sort((a, b) => a.revision_number - b.revision_number)
   } catch (err) {
+    // @ts-ignore
     console.error('❌ listPORevisions error:', err.message)
     return []
   }
@@ -1067,8 +1059,10 @@ export async function listPORevisions(poId) {
 export async function listPOItemsByRevision(poId, revisionNumber) {
   try {
     const doc = await openDoc()
+    // @ts-ignore
     return await getItemsByRevision(String(poId), toNum(revisionNumber, 0), doc)
   } catch (err) {
+    // @ts-ignore
     console.error('❌ listPOItemsByRevision error:', err.message)
     return []
   }
@@ -1081,6 +1075,7 @@ export async function getProducts() {
     const rows = await sheet.getRows()
     return rows.map((r) => r.toObject())
   } catch (err) {
+    // @ts-ignore
     console.error('❌ getProducts error:', err.message)
     return []
   }
@@ -1097,11 +1092,16 @@ export async function previewPO(data) {
       items: data.items || [],
       notes: data.catatan || '',
       kubikasi_total: data.kubikasi_total || 0,
-      poPhotoPath: data.poPhotoPath
+      poPhotoPath: data.poPhotoPath,
+      marketing: data.marketing || 'Unknown',
+      alamat_kirim: data.alamatKirim || ''
     }
+    // @ts-ignore
     return await generatePOJpeg(poData, 'preview', true)
   } catch (err) {
+    // @ts-ignore
     console.error('❌ previewPO error:', err.message)
+    // @ts-ignore
     return { success: false, error: err.message }
   }
 }
@@ -1118,56 +1118,58 @@ export async function getRevisionHistory(poId) {
       items: allItemRows
         .filter(
           (r) =>
+            // @ts-ignore
             String(r.get('purchase_order_id')) === String(poId) &&
+            // @ts-ignore
             toNum(r.get('revision_number'), -1) === toNum(m.revision_number, -1)
         )
         .map((r) => r.toObject())
     }))
+    // @ts-ignore
     history.sort((a, b) => b.revision.revision_number - a.revision.revision_number)
     return history
   } catch (err) {
+    // @ts-ignore
     console.error('❌ getRevisionHistory error:', err.message)
     return []
   }
 }
 
 export async function updateItemProgress(data) {
-  let auth // Deklarasikan auth di luar try
-  let photoLink = null // Default link foto null
-  let photoName = null // store file name
-  let filePath = null // Path foto lokal
-  const { poId, itemId, poNumber, stage, notes, photoPath } = data // Ambil photoPath dari data
+  let auth
+  let photoLink = null // ⬅️ PERBAIKAN
+  let photoName = null
+  let filePath = null // ⬅️ PERBAIKAN
+  const { poId, itemId, poNumber, stage, notes, photoPath } = data
 
   try {
-    // --- Bagian Upload Foto (jika ada) ---
     if (photoPath) {
-      filePath = photoPath // Simpan path untuk unlink
+      filePath = photoPath
       if (!fs.existsSync(filePath)) {
         throw new Error(`File foto tidak ditemukan: ${filePath}`)
       }
 
-      // 1. Dapatkan auth dan authorize
       console.log('🔄 Mendapatkan otentikasi baru sebelum upload foto progress...')
-      auth = getAuth() // Panggil fungsi getAuth Anda
+      auth = getAuth()
       await auth.authorize()
       console.log('✅ Otorisasi ulang berhasil.')
 
-      const fileName = `PO-${poNumber}_ITEM-${itemId}_${new Date().toISOString().replace(/:/g, '-')}.jpg`
-      const mimeType = 'image/jpeg' // Asumsi foto selalu JPEG
+      const fileName = `PO-${poNumber}_ITEM-${itemId}_${new Date()
+        .toISOString()
+        .replace(/:/g, '-')}.jpg`
+      const mimeType = 'image/jpeg'
 
       console.log(`🚀 Mengunggah foto progress via auth.request: ${fileName} ke Drive...`)
 
-      // --- Gunakan auth.request untuk Upload ---
       const fileStream = fs.createReadStream(filePath)
       const metadata = {
         name: fileName,
         mimeType: mimeType,
-        parents: [PROGRESS_PHOTOS_FOLDER_ID] // Gunakan folder ID foto progress
+        parents: [PROGRESS_PHOTOS_FOLDER_ID]
       }
       const boundary = `----UbinkayuProgressBoundary${Date.now()}----`
       const readable = new stream.PassThrough()
 
-      // Tulis bagian metadata dan file (sama seperti generateAndUploadPO)
       readable.write(`--${boundary}\r\n`)
       readable.write('Content-Type: application/json; charset=UTF-8\r\n\r\n')
       readable.write(JSON.stringify(metadata) + '\r\n\r\n')
@@ -1183,7 +1185,6 @@ export async function updateItemProgress(data) {
         readable.destroy(err)
       })
 
-      // Panggil API create
       const createResponse = await auth.request({
         url: `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true`,
         method: 'POST',
@@ -1193,7 +1194,6 @@ export async function updateItemProgress(data) {
         maxContentLength: Infinity
       })
 
-      // --- Ambil webViewLink via auth.request ---
       const fileId = createResponse?.data?.id
       if (!fileId) {
         console.error(
@@ -1204,7 +1204,6 @@ export async function updateItemProgress(data) {
       }
       console.log(`✅ Foto progress berhasil diunggah (ID: ${fileId}). Mengambil webViewLink...`)
 
-      // Panggil files.get endpoint menggunakan auth.request
       const getResponse = await auth.request({
         url: `https://www.googleapis.com/drive/v3/files/${fileId}`,
         method: 'GET',
@@ -1220,25 +1219,21 @@ export async function updateItemProgress(data) {
         console.error('❌ Gagal mendapatkan webViewLink foto progress:', getResponse.data)
         throw new Error('Gagal mendapatkan link foto setelah upload berhasil.')
       }
-      photoLink = webViewLink // Simpan link foto
+      photoLink = webViewLink
       photoName = nameOnDrive || fileName
       console.log(`✅ Link foto progress didapatkan: ${photoLink} (name: ${photoName})`)
+    }
 
-      // Jangan hapus file lokal di sini, biarkan di finally
-    } // Akhir dari blok if (photoPath)
-
-    // --- Bagian Simpan Log ke Google Sheet ---
-    // Jika tidak ada upload foto, kita tetap butuh auth untuk Sheet
     if (!auth) {
       console.log('🔄 Mendapatkan otentikasi untuk Google Sheet...')
       auth = getAuth()
-      await auth.authorize() // Authorize jika belum
+      await auth.authorize()
       console.log('✅ Otorisasi Sheet berhasil.')
     }
 
-    const doc = await openDoc() // Pastikan openDoc menggunakan auth atau sudah terkonfigurasi
-    const progressSheet = await getSheet(doc, 'progress_tracking') // Pastikan getSheet menggunakan doc
-    const nextId = await getNextIdFromSheet(progressSheet) // Pastikan getNextIdFromSheet menggunakan sheet
+    const doc = await openDoc()
+    const progressSheet = await getSheet(doc, 'progress_tracking')
+    const nextId = await getNextIdFromSheet(progressSheet)
 
     console.log(`📝 Menyimpan log progress ke Sheet... (Stage: ${stage})`)
     await progressSheet.addRow({
@@ -1246,21 +1241,23 @@ export async function updateItemProgress(data) {
       purchase_order_id: poId,
       purchase_order_item_id: itemId,
       stage: stage,
-      notes: notes || '', // Pastikan notes dihandle jika kosong
-      photo_url: photoLink, // Gunakan link yang didapat (bisa null jika tidak ada foto)
-      photo_file_name: photoName || '', // simpan file name agar mudah dicocokkan/hapus
+      notes: notes || '',
+      photo_url: photoLink, // ⬅️ PERBAIKAN
+      photo_file_name: photoName || '',
       created_at: new Date().toISOString()
     })
     console.log(`✅ Log progress untuk item ID ${itemId} berhasil disimpan ke Sheet.`)
 
     return { success: true }
   } catch (err) {
+    // @ts-ignore
     console.error('❌ Gagal update item progress:', err.message)
     // @ts-ignore
     if (err.response && err.response.data && err.response.data.error) {
       // @ts-ignore
       console.error(
         '   -> Detail Error Google API:',
+        // @ts-ignore
         JSON.stringify(err.response.data.error, null, 2)
       )
       // @ts-ignore
@@ -1273,14 +1270,15 @@ export async function updateItemProgress(data) {
     // @ts-ignore
     return { success: false, error: err.message }
   } finally {
-    // Hapus file foto lokal jika ada path-nya
     if (filePath && fs.existsSync(filePath)) {
       try {
         fs.unlinkSync(filePath)
         console.log(`🗑️ File foto lokal ${path.basename(filePath)} dihapus.`)
       } catch (unlinkErr) {
+        // @ts-ignore
         console.warn(
           `⚠️ Gagal menghapus file foto lokal ${path.basename(filePath)}:`,
+          // @ts-ignore
           unlinkErr.message
         )
       }
@@ -1302,41 +1300,45 @@ export async function getActivePOsWithProgress() {
       progressSheet.getRows()
     ])
 
-    // 1. Ambil semua revisi PO terbaru (tanpa filter status)
     const byId = new Map()
     for (const r of poRows) {
       const id = String(r.get('id')).trim()
-      const rev = toNum(r.get('revision_number', -1))
+      // @ts-ignore
+      const rev = toNum(r.get('revision_number'), -1)
+      // @ts-ignore
       if (!byId.has(id) || rev > byId.get(id).rev) {
         byId.set(id, { rev, row: r })
       }
     }
     const latestPoRows = Array.from(byId.values()).map(({ row }) => row)
 
-    // 2. Siapkan data helper
     const progressByCompositeKey = progressRows.reduce((acc, row) => {
+      // @ts-ignore
       const key = `${row.get('purchase_order_id')}-${row.get('purchase_order_item_id')}`
       if (!acc[key]) acc[key] = []
+      // @ts-ignore
       acc[key].push({ stage: row.get('stage'), created_at: row.get('created_at') })
       return acc
     }, {})
 
     const latestItemRevisions = itemRows.reduce((acc, item) => {
+      // @ts-ignore
       const poId = item.get('purchase_order_id')
-      const rev = toNum(item.get('revision_number', -1))
+      // @ts-ignore
+      const rev = toNum(item.get('revision_number'), -1)
       if (!acc.has(poId) || rev > acc.get(poId)) {
         acc.set(poId, rev)
       }
       return acc
     }, new Map())
 
-    // 3. Hitung progress dan status untuk SETIAP PO
     const allPOsWithCalculatedStatus = latestPoRows.map((po) => {
       const poId = po.get('id')
       const latestRev = latestItemRevisions.get(poId) ?? -1
       const poItems = itemRows.filter(
         (item) =>
           item.get('purchase_order_id') === poId &&
+          // @ts-ignore
           toNum(item.get('revision_number'), -1) === latestRev
       )
 
@@ -1344,12 +1346,14 @@ export async function getActivePOsWithProgress() {
       if (poItems.length > 0) {
         poItems.forEach((item) => {
           const itemId = item.get('id')
+          // @ts-ignore
           const itemProgressHistory = progressByCompositeKey[`${poId}-${itemId}`] || []
           let latestStageIndex = -1
           if (itemProgressHistory.length > 0) {
             const latestProgress = [...itemProgressHistory].sort(
               (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
             )[0]
+            // @ts-ignore
             latestStageIndex = PRODUCTION_STAGES.indexOf(latestProgress.stage)
           }
           totalPercentage +=
@@ -1360,7 +1364,6 @@ export async function getActivePOsWithProgress() {
       const poProgress = poItems.length > 0 ? totalPercentage / poItems.length : 0
       const poObject = po.toObject()
 
-      // Hitung status secara dinamis
       let finalStatus = poObject.status
       if (finalStatus !== 'Cancelled') {
         if (poProgress >= 100) finalStatus = 'Completed'
@@ -1371,21 +1374,18 @@ export async function getActivePOsWithProgress() {
       return { ...poObject, progress: Math.round(poProgress), status: finalStatus }
     })
 
-    // 4. BARU LAKUKAN FILTER di akhir berdasarkan status yang sudah dihitung
     const activePOs = allPOsWithCalculatedStatus.filter(
       (po) => po.status !== 'Completed' && po.status !== 'Cancelled'
     )
 
     return activePOs
   } catch (err) {
+    // @ts-ignore
     console.error('❌ Gagal get active POs with progress:', err.message)
     return []
   }
 }
 
-/**
- * MENGGANTI FUNGSI INI UNTUK MENGATASI ERROR 'Invalid time value'
- */
 export async function getPOItemsWithDetails(poId) {
   try {
     const doc = await openDoc()
@@ -1400,7 +1400,6 @@ export async function getPOItemsWithDetails(poId) {
       progressSheet.getRows()
     ])
 
-    // --- LOGIKA BARU: Cari revisi terakhir yang memiliki item ---
     const allItemsForPO = itemRows.filter((r) => r.get('purchase_order_id') === poId)
 
     if (allItemsForPO.length === 0) {
@@ -1408,9 +1407,11 @@ export async function getPOItemsWithDetails(poId) {
       return []
     }
 
+    // @ts-ignore
     const latestItemRev = Math.max(-1, ...allItemsForPO.map((r) => toNum(r.get('revision_number'))))
 
     const poData = poRows.find(
+      // @ts-ignore
       (r) => r.get('id') === poId && toNum(r.get('revision_number')) === latestItemRev
     )
 
@@ -1421,40 +1422,36 @@ export async function getPOItemsWithDetails(poId) {
       throw new Error(`Data PO untuk revisi terbaru (rev ${latestItemRev}) tidak ditemukan.`)
     }
 
-    // --- PERBAIKAN TANGGAL: Validasi dan Fallback ---
     const poStartDateRaw = poData.get('created_at')
     const poDeadlineRaw = poData.get('deadline')
 
     let poStartDate = new Date(poStartDateRaw)
     let poDeadline = new Date(poDeadlineRaw)
 
-    // Jika created_at tidak valid, gunakan tanggal saat ini
     if (isNaN(poStartDate.getTime())) {
       console.warn(`Tanggal created_at PO ${poId} tidak valid, menggunakan tanggal saat ini.`)
       poStartDate = new Date()
     }
 
-    // Jika deadline tidak valid, gunakan created_at + 7 hari
     if (isNaN(poDeadline.getTime())) {
       console.warn(`Tanggal deadline PO ${poId} tidak valid, menggunakan created_at + 7 hari.`)
       poDeadline = new Date(poStartDate.getTime() + 7 * 24 * 60 * 60 * 1000)
     }
-    // --- AKHIR PERBAIKAN TANGGAL ---
 
-    // Logika perhitungan deadline yang sudah benar
     let stageDeadlines = []
-    let cumulativeDate = new Date(poStartDate) // Mulai dari tanggal yang sudah divalidasi
+    let cumulativeDate = new Date(poStartDate)
     stageDeadlines = PRODUCTION_STAGES.map((stageName) => {
       if (stageName === 'Siap Kirim') {
         return { stageName, deadline: poDeadline.toISOString() }
       }
+      // @ts-ignore
       const durationDays = DEFAULT_STAGE_DURATIONS[stageName] || 0
       cumulativeDate.setDate(cumulativeDate.getDate() + durationDays)
       return { stageName, deadline: new Date(cumulativeDate).toISOString() }
     })
 
-    // 5. Filter item sekali lagi untuk hanya mendapatkan item dari revisi yang valid.
     const poItemsForLatestRev = allItemsForPO.filter(
+      // @ts-ignore
       (item) => toNum(item.get('revision_number'), -1) === latestItemRev
     )
 
@@ -1470,14 +1467,16 @@ export async function getPOItemsWithDetails(poId) {
     const result = poItemsForLatestRev.map((item) => {
       const itemObject = item.toObject()
       const itemId = String(itemObject.id)
+      // @ts-ignore
       const history = (progressByItemId[itemId] || []).sort(
-        (a, b) => new Date(a.created_at) - new Date(b.created_at)
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime() // ⬅️ PERBAIKAN
       )
       return { ...itemObject, progressHistory: history, stageDeadlines }
     })
 
     return result
   } catch (err) {
+    // @ts-ignore
     console.error(`❌ Gagal get PO items with details for PO ID ${poId}:`, err.message)
     return []
   }
@@ -1497,6 +1496,7 @@ export async function updateStageDeadline(data) {
     })
     return { success: true }
   } catch (err) {
+    // @ts-ignore
     return { success: false, error: err.message }
   }
 }
@@ -1518,7 +1518,9 @@ export async function getRecentProgressUpdates(limit = 10) {
     const poMap = new Map()
     poRows.forEach((r) => {
       const poId = r.get('id')
+      // @ts-ignore
       const rev = toNum(r.get('revision_number'))
+      // @ts-ignore
       if (!poMap.has(poId) || rev > poMap.get(poId).revision_number) {
         poMap.set(poId, r.toObject())
       }
@@ -1532,14 +1534,17 @@ export async function getRecentProgressUpdates(limit = 10) {
 
     const enrichedUpdates = recentUpdates
       .map((update) => {
+        // @ts-ignore
         const item = itemMap.get(update.purchase_order_item_id)
         if (!item) return null
 
+        // @ts-ignore
         const po = poMap.get(item.purchase_order_id)
         if (!po) return null
 
         return {
           ...update,
+          // @ts-ignore
           item_name: item.product_name,
           po_number: po.po_number
         }
@@ -1548,6 +1553,7 @@ export async function getRecentProgressUpdates(limit = 10) {
 
     return enrichedUpdates
   } catch (err) {
+    // @ts-ignore
     console.error('❌ Gagal get recent progress updates:', err.message)
     return []
   }
@@ -1569,7 +1575,9 @@ export async function getAttentionData() {
     const byId = new Map()
     poRows.forEach((r) => {
       const id = r.get('id')
+      // @ts-ignore
       const rev = toNum(r.get('revision_number'))
+      // @ts-ignore
       if (!byId.has(id) || rev > byId.get(id).rev) {
         byId.set(id, { rev, row: r })
       }
@@ -1581,6 +1589,7 @@ export async function getAttentionData() {
     const latestItemRevisions = new Map()
     itemRows.forEach((item) => {
       const poId = item.get('purchase_order_id')
+      // @ts-ignore
       const rev = toNum(item.get('revision_number'), -1)
       const current = latestItemRevisions.get(poId)
       if (!current || rev > current) {
@@ -1595,6 +1604,7 @@ export async function getAttentionData() {
       return (
         po.get('status') !== 'Completed' &&
         po.get('status') !== 'Cancelled' &&
+        // @ts-ignore
         toNum(item.get('revision_number')) === latestRev
       )
     })
@@ -1604,6 +1614,7 @@ export async function getAttentionData() {
       const itemId = row.get('purchase_order_item_id')
       const key = `${poId}-${itemId}`
       if (!acc[key]) acc[key] = []
+      // @ts-ignore
       acc[key].push({ stage: row.get('stage'), created_at: row.get('created_at') })
       return acc
     }, {})
@@ -1620,6 +1631,7 @@ export async function getAttentionData() {
       const poId = po.get('id')
       const itemId = item.get('id')
       const compositeKey = `${poId}-${itemId}`
+      // @ts-ignore
       const itemProgressHistory = progressByCompositeKey[compositeKey] || []
       const latestProgress = itemProgressHistory.sort(
         (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -1633,25 +1645,29 @@ export async function getAttentionData() {
       }
 
       if (po.get('priority') === 'Urgent') {
+        // @ts-ignore
         urgentItems.push(attentionItem)
       }
 
       const deadline = new Date(po.get('deadline'))
-      if (deadline <= sevenDaysFromNow && deadline >= today && currentStage !== 'Kirim') {
+      if (deadline <= sevenDaysFromNow && deadline >= today && currentStage !== 'Siap Kirim') {
+        // @ts-ignore
         nearingDeadline.push({ ...attentionItem, deadline: po.get('deadline') })
       }
 
       if (
         latestProgress &&
         new Date(latestProgress.created_at) < fiveDaysAgo &&
-        currentStage !== 'Kirim'
+        currentStage !== 'Siap Kirim'
       ) {
+        // @ts-ignore
         stuckItems.push({ ...attentionItem, last_update: latestProgress.created_at })
       }
     })
 
     return { nearingDeadline, stuckItems, urgentItems }
   } catch (err) {
+    // @ts-ignore
     console.error('❌ Gagal get attention data:', err.message)
     return { nearingDeadline: [], stuckItems: [], urgentItems: [] }
   }
@@ -1681,33 +1697,31 @@ export async function getProductSalesAnalysis() {
       getSheet(doc, 'purchase_orders'),
       getSheet(doc, 'product_master')
     ])
-    // Ambil data mentah sekali saja
     const [rawItemRows, rawPoRows, rawProductRows] = await Promise.all([
       itemSheet.getRows(),
       poSheet.getRows(),
       productSheet.getRows()
     ])
 
-    // Konversi ke Objek Biasa sekali saja
     const itemRows = rawItemRows.map((r) => r.toObject())
     const poRows = rawPoRows.map((r) => r.toObject())
     const productRows = rawProductRows.map((r) => r.toObject())
 
-    // Buat Map PO Revisi Terbaru (semua status kecuali Cancelled)
     const latestPoMap = poRows.reduce((map, po) => {
+      // @ts-ignore
       const poId = po.id
+      // @ts-ignore
       const rev = toNum(po.revision_number)
+      // @ts-ignore
       if (po.status !== 'Cancelled') {
         // @ts-ignore
         if (!map.has(poId) || rev > map.get(poId).revision_number) {
-          // Simpan seluruh objek PO terbaru
-          map.set(poId, { ...po, revision_number: rev }) // Pastikan revision_number adalah number
+          map.set(poId, { ...po, revision_number: rev })
         }
       }
       return map
     }, new Map())
 
-    // --- Inisialisasi Struktur Data Baru ---
     const salesByProduct = {}
     const salesByMarketing = {}
     const monthlySalesByProduct = {}
@@ -1717,18 +1731,21 @@ export async function getProductSalesAnalysis() {
     const salesByDateForTrend = []
     const soldProductNames = new Set()
 
-    // --- Proses Item ---
     itemRows.forEach((item) => {
+      // @ts-ignore
       const po = latestPoMap.get(item.purchase_order_id)
-      // Pastikan item berasal dari PO revisi terbaru yang valid (tidak cancelled)
       // @ts-ignore
       if (!po || toNum(item.revision_number) !== po.revision_number) {
         return
       }
 
+      // @ts-ignore
       const productName = item.product_name
+      // @ts-ignore
       const quantity = toNum(item.quantity, 0)
+      // @ts-ignore
       const kubikasi = toNum(item.kubikasi, 0)
+      // @ts-ignore
       const woodType = item.wood_type
       const yearMonth = getYearMonth(po.created_at)
 
@@ -1736,109 +1753,117 @@ export async function getProductSalesAnalysis() {
 
       soldProductNames.add(productName)
 
-      // 1. Agregasi Total per Produk
+      // @ts-ignore
       salesByProduct[productName] = salesByProduct[productName] || {
         totalQuantity: 0,
         totalKubikasi: 0,
         name: productName
       }
+      // @ts-ignore
       salesByProduct[productName].totalQuantity += quantity
+      // @ts-ignore
       salesByProduct[productName].totalKubikasi += kubikasi
 
-      // 3. Agregasi Bulanan per Produk (Quantity)
       if (yearMonth) {
+        // @ts-ignore
         monthlySalesByProduct[yearMonth] = monthlySalesByProduct[yearMonth] || {}
+        // @ts-ignore
         monthlySalesByProduct[yearMonth][productName] =
+          // @ts-ignore
           (monthlySalesByProduct[yearMonth][productName] || 0) + quantity
       }
 
-      // 5. Distribusi Kayu (Quantity)
       if (woodType)
+        // @ts-ignore
         woodTypeDistribution[woodType] = (woodTypeDistribution[woodType] || 0) + quantity
 
-      // 7. Data untuk Tren Produk
       try {
+        // @ts-ignore
         salesByDateForTrend.push({ date: new Date(po.created_at), name: productName, quantity })
       } catch {}
     })
 
-    // --- Proses Agregasi per PO (Marketing & Customer) ---
     latestPoMap.forEach((po) => {
+      // @ts-ignore
       const marketingName = po.acc_marketing || 'N/A'
+      // @ts-ignore
       const customerName = po.project_name
+      // @ts-ignore
       const kubikasiTotalPO = toNum(po.kubikasi_total, 0)
       const yearMonth = getYearMonth(po.created_at)
 
-      // Agregasi Total per Marketing
+      // @ts-ignore
       salesByMarketing[marketingName] = salesByMarketing[marketingName] || {
         totalKubikasi: 0,
         poCount: 0,
         name: marketingName
       }
+      // @ts-ignore
       salesByMarketing[marketingName].totalKubikasi += kubikasiTotalPO
+      // @ts-ignore
       salesByMarketing[marketingName].poCount += 1
 
-      // Agregasi Bulanan per Marketing
       if (yearMonth) {
+        // @ts-ignore
         monthlySalesByMarketing[yearMonth] = monthlySalesByMarketing[yearMonth] || {}
+        // @ts-ignore
         monthlySalesByMarketing[yearMonth][marketingName] =
+          // @ts-ignore
           (monthlySalesByMarketing[yearMonth][marketingName] || 0) + kubikasiTotalPO
       }
 
-      // Agregasi Customer
       if (customerName)
+        // @ts-ignore
         customerByKubikasi[customerName] = (customerByKubikasi[customerName] || 0) + kubikasiTotalPO
     })
 
-    // --- Finalisasi Hasil ---
     const topSellingProducts = Object.values(salesByProduct)
+      // @ts-ignore
       .sort((a, b) => b.totalQuantity - a.totalQuantity)
       .slice(0, 10)
 
     const salesByMarketingSorted = Object.values(salesByMarketing).sort(
+      // @ts-ignore
       (a, b) => b.totalKubikasi - a.totalKubikasi
     )
 
     const woodTypeDistributionSorted = Object.entries(woodTypeDistribution)
       .map(([name, value]) => ({ name, value }))
+      // @ts-ignore
       .sort((a, b) => b.value - a.value)
 
     const topCustomers = Object.entries(customerByKubikasi)
       .map(([name, totalKubikasi]) => ({ name, totalKubikasi }))
+      // @ts-ignore
       .sort((a, b) => b.totalKubikasi - a.totalKubikasi)
       .slice(0, 10)
 
-    // Format data bulanan untuk Recharts
     const allMonths = new Set([
       ...Object.keys(monthlySalesByProduct),
       ...Object.keys(monthlySalesByMarketing)
     ])
     const sortedMonths = Array.from(allMonths).sort()
 
-    // Ambil semua nama produk dan marketing unik dari data bulanan
-    const allProductKeys = new Set() // <-- Hapus <string>
+    const allProductKeys = new Set()
     sortedMonths.forEach((month) => {
+      // @ts-ignore
       if (monthlySalesByProduct[month])
+        // @ts-ignore
         Object.keys(monthlySalesByProduct[month]).forEach((p) => allProductKeys.add(p))
     })
+    const allMarketingKeys = new Set()
     sortedMonths.forEach((month) => {
-      if (monthlySalesByProduct[month])
-        Object.keys(monthlySalesByProduct[month]).forEach((p) => allProductKeys.add(p))
-    })
-    const allMarketingKeys = new Set() // <-- Hapus <string>
-    sortedMonths.forEach((month) => {
+      // @ts-ignore
       if (monthlySalesByMarketing[month])
-        Object.keys(monthlySalesByMarketing[month]).forEach((m) => allMarketingKeys.add(m))
-    })
-    sortedMonths.forEach((month) => {
-      if (monthlySalesByMarketing[month])
+        // @ts-ignore
         Object.keys(monthlySalesByMarketing[month]).forEach((m) => allMarketingKeys.add(m))
     })
 
     const monthlyProductChartData = sortedMonths.map((month) => {
       const monthData = { month }
       allProductKeys.forEach((prodKey) => {
-        monthData[prodKey] = monthlySalesByProduct[month]?.[prodKey] || 0 // Isi 0 jika tidak ada data
+        // @ts-ignore
+        monthData[prodKey] = monthlySalesByProduct[month]?.[prodKey] || 0
       })
       return monthData
     })
@@ -1846,12 +1871,12 @@ export async function getProductSalesAnalysis() {
     const monthlyMarketingChartData = sortedMonths.map((month) => {
       const monthData = { month }
       allMarketingKeys.forEach((markKey) => {
-        monthData[markKey] = monthlySalesByMarketing[month]?.[markKey] || 0 // Isi 0 jika tidak ada data
+        // @ts-ignore
+        monthData[markKey] = monthlySalesByMarketing[month]?.[markKey] || 0
       })
       return monthData
     })
 
-    // Kalkulasi Tren
     const todayTrend = new Date(),
       thirtyDaysAgo = new Date(new Date().setDate(todayTrend.getDate() - 30)),
       sixtyDaysAgo = new Date(new Date().setDate(todayTrend.getDate() - 60))
@@ -1859,26 +1884,29 @@ export async function getProductSalesAnalysis() {
       salesPrev30 = {}
     salesByDateForTrend.forEach((sale) => {
       if (sale.date >= thirtyDaysAgo)
+        // @ts-ignore
         salesLast30[sale.name] = (salesLast30[sale.name] || 0) + sale.quantity
       else if (sale.date >= sixtyDaysAgo)
+        // @ts-ignore
         salesPrev30[sale.name] = (salesPrev30[sale.name] || 0) + sale.quantity
     })
     const trendingProducts = Object.keys(salesLast30)
       .map((name) => {
-        const last30 = salesLast30[name] || 0 // Pastikan ada nilai default 0
-        const prev30 = salesPrev30[name] || 0 // Pastikan ada nilai default 0
+        // @ts-ignore
+        const last30 = salesLast30[name] || 0
+        // @ts-ignore
+        const prev30 = salesPrev30[name] || 0
         const change =
-          prev30 === 0 && last30 > 0 ? 100 : ((last30 - prev30) / (prev30 === 0 ? 1 : prev30)) * 100 // Hindari pembagian 0
+          prev30 === 0 && last30 > 0 ? 100 : ((last30 - prev30) / (prev30 === 0 ? 1 : prev30)) * 100
         return { name, last30, prev30, change }
       })
-      .filter((p) => p.change > 10 && p.last30 > p.prev30) // Filter > 10% dan lebih besar dari sebelumnya
+      .filter((p) => p.change > 10 && p.last30 > p.prev30)
       .sort((a, b) => b.change - a.change)
 
-    // Produk Kurang Laris
+    // @ts-ignore
     const allMasterProductNames = productRows.map((p) => p.product_name).filter(Boolean)
     const slowMovingProducts = allMasterProductNames.filter((name) => !soldProductNames.has(name))
 
-    // Susun hasil akhir
     const analysisResult = {
       topSellingProducts,
       salesByMarketing: salesByMarketingSorted,
@@ -1890,11 +1918,11 @@ export async function getProductSalesAnalysis() {
       slowMovingProducts
     }
 
-    console.log('📊 Analisis Penjualan Dihasilkan:', analysisResult) // Log hasil
-    return analysisResult // Return untuk Electron
+    console.log('📊 Analisis Penjualan Dihasilkan:', analysisResult)
+    return analysisResult
   } catch (err) {
+    // @ts-ignore
     console.error('❌ Gagal melakukan analisis penjualan produk:', err.message)
-    // Return struktur kosong agar frontend tidak error
     return {
       topSellingProducts: [],
       salesByMarketing: [],
@@ -1919,7 +1947,9 @@ export async function getSalesItemData() {
     const poMap = new Map()
     poRows.forEach((r) => {
       const poId = r.get('id')
+      // @ts-ignore
       const rev = toNum(r.get('revision_number'))
+      // @ts-ignore
       if (!poMap.has(poId) || rev > poMap.get(poId).revision_number) {
         poMap.set(poId, r.toObject())
       }
@@ -1928,6 +1958,7 @@ export async function getSalesItemData() {
     const combinedData = itemRows
       .map((item) => {
         const itemObject = item.toObject()
+        // @ts-ignore
         const po = poMap.get(itemObject.purchase_order_id)
 
         if (!po) return null
@@ -1942,35 +1973,33 @@ export async function getSalesItemData() {
 
     return combinedData
   } catch (err) {
+    // @ts-ignore
     console.error('❌ Gagal mengambil data item penjualan:', err.message)
     return []
   }
 }
 export async function addNewProduct(productData) {
   try {
-    // Mengambil console.log yang deskriptif dari satu branch
     console.log('📦 Menambahkan produk baru ke master:', productData)
 
     const doc = await openDoc()
     const sheet = await getSheet(doc, 'product_master')
 
-    // Menggunakan logika yang benar untuk mendapatkan ID dan menambah baris
     const nextId = await getNextIdFromSheet(sheet)
     await sheet.addRow({ id: nextId, ...productData })
 
-    // Menggunakan return value yang lebih informatif dari branch lain
     console.log(`✅ Produk baru [ID: ${nextId}] berhasil ditambahkan.`)
     return { success: true, newId: nextId }
   } catch (err) {
+    // @ts-ignore
     console.error('❌ Gagal menambahkan produk baru:', err.message)
+    // @ts-ignore
     return { success: false, error: err.message }
   }
 }
 
 export async function handleGroqChat(prompt) {
-  // =================================================================
   // 1. AMBIL KONTEKS DATA PO
-  // =================================================================
   let allPOs
   try {
     allPOs = await listPOs() // Memanggil listPOs() yang diimpor
@@ -1993,14 +2022,12 @@ export async function handleGroqChat(prompt) {
     return 'Maaf, saya gagal mengambil data PO terbaru untuk menjawab pertanyaan Anda.'
   }
 
-  // =================================================================
   // 2. SIAPKAN SAPAAN & SYSTEM PROMPT
-  // =================================================================
   const now = new Date()
   const currentHour = now.getHours()
   let timeOfDayGreeting = 'Halo!'
   if (currentHour >= 4 && currentHour < 11) {
-    timeOfDayGreeting = 'Selamat pagii!'
+    timeOfDayGreeting = 'Selamat pagi!'
   } else if (currentHour >= 11 && currentHour < 15) {
     timeOfDayGreeting = 'Selamat siang!'
   } else if (currentHour >= 15 && currentHour < 19) {
@@ -2022,78 +2049,76 @@ Hari ini adalah ${today}.
 --- Alat (Tools) yang Tersedia ---
 
 1. "getTotalPO": (Untuk pertanyaan jumlah/total PO).
-   - Keywords: "jumlah po", "total po", "ada berapa po", "semua po aktif".
-   - JSON: {"tool": "getTotalPO"}
+    - Keywords: "jumlah po", "total po", "ada berapa po", "semua po aktif".
+    - JSON: {"tool": "getTotalPO"}
 
 2. "getTopProduct": (Untuk pertanyaan produk terlaris).
-   - Keywords: "produk terlaris", "paling laku".
-   - JSON: {"tool": "getTopProduct"}
+    - Keywords: "produk terlaris", "paling laku".
+    - JSON: {"tool": "getTopProduct"}
 
 3. "getTopCustomer": (Untuk pertanyaan customer terbesar).
-   - Keywords: "customer terbesar", "top customer".
-   - JSON: {"tool": "getTopCustomer"}
+    - Keywords: "customer terbesar", "top customer".
+    - JSON: {"tool": "getTopCustomer"}
 
 4. "getPOInfo": (SATU-SATUNYA ALAT UNTUK MENCARI PO). Mencari PO berdasarkan nomor, customer, atau revisi.
-   - PENTING: Alat ini menangani SEMUA permintaan terkait PO spesifik.
-   - AI HARUS mengekstrak parameter pencarian ("poNumber" atau "customerName").
-   - AI HARUS mengekstrak "revisionNumber" (jika disebut).
-   - AI HARUS menentukan "intent" (niat) user:
-     - "status": Jika user HANYA bertanya "status", "progress", "cek po".
-     - "details": Jika user bertanya "info", "detail", "item", "customer", atau "cari PO".
-     - "file": Jika user bertanya "link", "file", "dokumen", "JPEG", "arsip".
-   - Jika tidak spesifik, default ke "details".
-   - Keywords: "status po [nomor]", "link file [nomor]", "info po [nomor]", "arsip jpeg [nomor]", "po customer [nama]", "detail revisi [nomor]".
-   - JSON: {"tool": "getPOInfo", "param": {"poNumber": "...", "customerName": "...", "revisionNumber": "...", "intent": "status"}}
+    - PENTING: Alat ini menangani SEMUA permintaan terkait PO spesifik.
+    - AI HARUS mengekstrak parameter pencarian ("poNumber" atau "customerName").
+    - AI HARUS mengekstrak "revisionNumber" (jika disebut).
+    - AI HARUS menentukan "intent" (niat) user:
+      - "status": Jika user HANYA bertanya "status", "progress", "cek po".
+      - "details": Jika user bertanya "info", "detail", "item", "customer", atau "cari PO".
+      - "file": Jika user bertanya "link", "file", "dokumen", "JPEG", "arsip".
+    - Jika tidak spesifik, default ke "details".
+    - Keywords: "status po [nomor]", "link file [nomor]", "info po [nomor]", "arsip jpeg [nomor]", "po customer [nama]", "detail revisi [nomor]".
+    - JSON: {"tool": "getPOInfo", "param": {"poNumber": "...", "customerName": "...", "revisionNumber": "...", "intent": "status"}}
 
 5. "getUrgentPOs": (Untuk pertanyaan PO 'Urgent').
-   - Keywords: "po urgent", "urgent orders".
-   - JSON: {"tool": "getUrgentPOs"}
+    - Keywords: "po urgent", "urgent orders".
+    - JSON: {"tool": "getUrgentPOs"}
 
 6. "getNearingDeadline": (Untuk pertanyaan PO 'deadline dekat').
-   - Keywords: "deadline dekat", "nearing deadline".
-   - JSON: {"tool": "getNearingDeadline"}
+    - Keywords: "deadline dekat", "nearing deadline".
+    - JSON: {"tool": "getNearingDeadline"}
 
 7. "getNewestPOs": (Untuk pertanyaan PO 'terbaru').
-   - Keywords: "po terbaru", "newest po".
-   - JSON: {"tool": "getNewestPOs"}
+    - Keywords: "po terbaru", "newest po".
+    - JSON: {"tool": "getNewestPOs"}
 
 8. "getOldestPO": (Untuk pertanyaan PO 'terlama').
-   - Keywords: "po terlama", "oldest po".
-   - JSON: {"tool": "getOldestPO"}
+    - Keywords: "po terlama", "oldest po".
+    - JSON: {"tool": "getOldestPO"}
 
 9. "getPOsByDateRange": (Untuk pertanyaan PO berdasarkan 'tanggal').
-   - Keywords: "po bulan oktober", "po tanggal 20 okt".
-   - AI HARUS mengekstrak 'startDate' dan 'endDate'.
-   - JSON: {"tool": "getPOsByDateRange", "startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD"}
+    - Keywords: "po bulan oktober", "po tanggal 20 okt".
+    - AI HARUS mengekstrak 'startDate' dan 'endDate'.
+    - JSON: {"tool": "getPOsByDateRange", "startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD"}
 
 10. "getPOByStatusCount": (Untuk pertanyaan jumlah PO 'Open' atau 'In Progress').
-    - Keywords: "berapa po open", "jumlah po in progress".
-    - JSON: {"tool": "getPOByStatusCount", "param": "STATUS_DIMINTA"}
+     - Keywords: "berapa po open", "jumlah po in progress".
+     - JSON: {"tool": "getPOByStatusCount", "param": "STATUS_DIMINTA"}
 
 11. "getApplicationHelp": (Untuk pertanyaan 'cara pakai' aplikasi).
-    - Keywords: "cara buat po", "panduan aplikasi".
-    - JSON: {"tool": "getApplicationHelp", "topic": "NAMA_FITUR_DIMINTA"}
+     - Keywords: "cara buat po", "panduan aplikasi".
+     - JSON: {"tool": "getApplicationHelp", "topic": "NAMA_FITUR_DIMINTA"}
 
 12. "help": (Untuk pertanyaan 'bantuan' atau 'perintah').
-    - Keywords: "bantuan", "help".
-    - JSON: {"tool": "help"}
+     - Keywords: "bantuan", "help".
+     - JSON: {"tool": "help"}
 
 13. "general": (Untuk sapaan umum).
-    - Keywords: "halo", "terima kasih".
-    - JSON: {"tool": "general"}
+     - Keywords: "halo", "terima kasih".
+     - JSON: {"tool": "general"}
 
 14. "getTopSellingProductsChart": (Untuk 'grafik' penjualan).
-    - Keywords: "grafik produk", "chart penjualan".
-    - JSON: {"tool": "getTopSellingProductsChart"}
+     - Keywords: "grafik produk", "chart penjualan".
+     - JSON: {"tool": "getTopSellingProductsChart"}
 
 ATURAN KETAT:
 - JANGAN menjawab pertanyaan. HANYA KEMBALIKAN JSON.
 - Jika tidak yakin tool mana, KEMBALIKAN: {"tool": "unknown"}`
   // --- [AKHIR SYSTEM PROMPT BARU] ---
 
-  // =================================================================
   // 3. PANGGIL GROQ API
-  // =================================================================
   let aiDecisionJsonString = ''
   let aiDecision = { tool: 'unknown' }
 
@@ -2172,18 +2197,17 @@ ATURAN KETAT:
       throw new Error('Unexpected response format from Groq (manual fetch).')
     }
   } catch (err) {
+    // @ts-ignore
     console.error('💥 [Electron AI - Groq] AI call or JSON parse ERROR:', err.message)
     // @ts-ignore
     return `Maaf, terjadi kesalahan saat menghubungi Groq: ${err.message}`
   }
 
-  // =================================================================
   // 4. JALANKAN ALAT (TOOLS)
-  // =================================================================
   try {
     console.log(`[Electron AI - Groq] Executing tool: ${aiDecision?.tool || 'unknown'}`)
     // @ts-ignore
-    let responseText = '' // Pindahkan deklarasi ke sini
+    let responseText = ''
 
     // @ts-ignore
     switch (aiDecision.tool) {
@@ -2251,7 +2275,9 @@ ATURAN KETAT:
             : 'N/A'
         responseText =
           topCustomer !== 'N/A'
-            ? `Customer terbesar (m³) dari PO Selesai adalah: ${topCustomer} (${customerData[topCustomer].toFixed(3)} m³).`
+            ? `Customer terbesar (m³) dari PO Selesai adalah: ${topCustomer} (${customerData[
+                topCustomer
+              ].toFixed(3)} m³).`
             : 'Tidak dapat menemukan customer terbesar.'
         break
       }
@@ -2266,10 +2292,9 @@ ATURAN KETAT:
           break
         }
 
-        // --- 1. Logika Pencarian (Gabungan) ---
+        // 1. Logika Pencarian
         let matchingPOs = []
         if (poNumber) {
-          // Fungsi sanitasi yang sudah Anda miliki
           const sanitizePOString = (str) => {
             if (!str) return ''
             return str
@@ -2301,10 +2326,10 @@ ATURAN KETAT:
           break
         }
 
-        // --- 2. Logika Pemilihan Revisi ---
+        // 2. Logika Pemilihan Revisi
         let foundPO = null
         let revNum = -1
-        let feedback = '' // Teks tambahan untuk memberi tahu user
+        let feedback = '' // Teks tambahan
 
         if (revisionNumber !== undefined && revisionNumber !== null) {
           revNum = toNum(revisionNumber, -1)
@@ -2312,7 +2337,6 @@ ATURAN KETAT:
           foundPO = matchingPOs.find((p) => toNum(p.revision_number, -1) === revNum)
 
           if (!foundPO) {
-            // Fallback: Cari revisi terbaru jika revisi spesifik tidak ada
             // @ts-ignore
             foundPO = matchingPOs.sort(
               (a, b) => toNum(b.revision_number, -1) - toNum(a.revision_number, -1)
@@ -2321,7 +2345,6 @@ ATURAN KETAT:
             feedback = `Tidak menemukan Revisi ${revisionNumber}. Menampilkan hasil untuk revisi terbaru (Rev ${revNum}):\n`
           }
         } else {
-          // Default: Cari revisi terbaru
           // @ts-ignore
           foundPO = matchingPOs.sort(
             (a, b) => toNum(b.revision_number, -1) - toNum(a.revision_number, -1)
@@ -2334,14 +2357,11 @@ ATURAN KETAT:
           break
         }
 
-        // --- 3. Logika Merespons Berdasarkan NIAT (INTENT) ---
-
-        // @ts-ignore
-        const poIntent = intent || 'details' // Default ke 'details' jika intent tidak ada
+        // 3. Logika Merespons Berdasarkan NIAT (INTENT)
+        const poIntent = intent || 'details'
 
         switch (poIntent) {
           case 'file':
-            // NIAT: MINTA FILE
             // @ts-ignore
             if (foundPO.pdf_link && foundPO.pdf_link.startsWith('http')) {
               // @ts-ignore
@@ -2357,19 +2377,23 @@ ATURAN KETAT:
             break
 
           case 'status':
-            // NIAT: MINTA STATUS SINGKAT
             // @ts-ignore
-            responseText = `${feedback}Status PO ${foundPO.po_number} (${foundPO.project_name || 'N/A'}) adalah: ${foundPO.status || 'N/A'}. Progress: ${foundPO.progress?.toFixed(0) || 0}%.`
+            responseText = `${feedback}Status PO ${foundPO.po_number} (${
+              foundPO.project_name || 'N/A'
+            }) adalah: ${foundPO.status || 'N/A'}. Progress: ${
+              foundPO.progress?.toFixed(0) || 0
+            }%.`
             break
 
           case 'details':
           default:
-            // NIAT: MINTA DETAIL (Default)
             // @ts-ignore
             const itemsSummary = (foundPO.items || [])
               .map(
                 (item) =>
-                  `- ${item.product_name || 'Item Tanpa Nama'} (${item.quantity || 0} ${item.satuan || 'unit'})`
+                  `- ${item.product_name || 'Item Tanpa Nama'} (${item.quantity || 0} ${
+                    item.satuan || 'unit'
+                  })`
               )
               .join('\n')
 
@@ -2427,12 +2451,16 @@ ATURAN KETAT:
               return false
             }
           })
-          .sort((a, b) => new Date(a.deadline || 0).getTime() - new Date(b.deadline || 0).getTime())
+          .sort(
+            (a, b) => new Date(a.deadline || 0).getTime() - new Date(b.deadline || 0).getTime()
+          )
         if (nearingPOs.length > 0) {
           const poDetails = nearingPOs
             .map(
               (po) =>
-                `- ${po.po_number || 'N/A'} (${po.project_name || 'N/A'}): ${formatDate(po.deadline)}`
+                `- ${po.po_number || 'N/A'} (${po.project_name || 'N/A'}): ${formatDate(
+                  po.deadline
+                )}`
             )
             .join('\n')
           responseText = `Ada ${nearingPOs.length} PO aktif yang mendekati deadline (7 hari):\n${poDetails}`
@@ -2449,7 +2477,9 @@ ATURAN KETAT:
         const poDetails = newestPOs
           .map(
             (po) =>
-              `- ${po.po_number || 'N/A'} (${po.project_name || 'N/A'}), Tgl: ${formatDate(po.created_at)}`
+              `- ${po.po_number || 'N/A'} (${po.project_name || 'N/A'}), Tgl: ${formatDate(
+                po.created_at
+              )}`
           )
           .join('\n')
         responseText = `Berikut adalah 3 PO terbaru yang masuk:\n${poDetails}`
@@ -2461,7 +2491,11 @@ ATURAN KETAT:
         )
         const oldestPO = sortedPOs[0]
         if (oldestPO) {
-          responseText = `PO terlama yang tercatat adalah:\n- Nomor PO: ${oldestPO.po_number || 'N/A'}\n- Customer: ${oldestPO.project_name || 'N/A'}\n- Tanggal Masuk: ${formatDate(oldestPO.created_at)}`
+          responseText = `PO terlama yang tercatat adalah:\n- Nomor PO: ${
+            oldestPO.po_number || 'N/A'
+          }\n- Customer: ${
+            oldestPO.project_name || 'N/A'
+          }\n- Tanggal Masuk: ${formatDate(oldestPO.created_at)}`
         } else {
           responseText = 'Tidak dapat menemukan data PO.'
         }
@@ -2477,7 +2511,8 @@ ATURAN KETAT:
 
         const dateRegex = /^\d{4}-\d{2}-\d{2}$/
         if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
-          responseText = 'Maaf, format tanggal yang diterima AI tidak valid. Seharusnya YYYY-MM-DD.'
+          responseText =
+            'Maaf, format tanggal yang diterima AI tidak valid. Seharusnya YYYY-MM-DD.'
           break
         }
         let start, end
@@ -2508,7 +2543,9 @@ ATURAN KETAT:
           const poDetails = foundPOs
             .map(
               (po) =>
-                `- ${po.po_number || 'N/A'} (${po.project_name || 'N/A'}), Tgl Masuk: ${formatDate(po.created_at)}`
+                `- ${po.po_number || 'N/A'} (${po.project_name || 'N/A'}), Tgl Masuk: ${formatDate(
+                  po.created_at
+                )}`
             )
             .slice(0, 10)
             .join('\n')
@@ -2594,7 +2631,9 @@ ATURAN KETAT:
           dataKey: 'Kuantitas',
           nameKey: 'name'
         }
-        responseText = `Tentu, berikut adalah grafik 5 produk terlaris (berdasarkan kuantitas dari PO Selesai):\nCHART_JSON::${JSON.stringify(chartPayload)}`
+        responseText = `Tentu, berikut adalah grafik 5 produk terlaris (berdasarkan kuantitas dari PO Selesai):\nCHART_JSON::${JSON.stringify(
+          chartPayload
+        )}`
         break
       }
       case 'help':
@@ -2613,15 +2652,14 @@ ATURAN KETAT:
       }
       case 'unknown':
       default:
-        // @ts-ignore
         console.warn('Menerima tool tidak dikenal dari AI:', aiDecision.tool)
         responseText =
           "Maaf, saya tidak yakin bagaimana harus merespons itu. Coba tanyakan 'bantuan'."
         break
     }
-    // Kembalikan responseText di akhir try block
     return responseText
   } catch (execError) {
+    // @ts-ignore
     console.error('Error saat menjalankan alat:', execError)
     // @ts-ignore
     return `Maaf, terjadi kesalahan saat memproses jawaban: ${execError.message}`
