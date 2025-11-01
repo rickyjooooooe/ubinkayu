@@ -71,7 +71,7 @@ function App() {
   const [chatMessages, setChatMessages] = useState<Message[]>([initialChatMessage])
   const [chatInputText, setChatInputText] = useState('')
   const [isChatProcessing, setIsChatProcessing] = useState(false)
-  const [isTtsEnabled, setIsTtsEnabled] = useState(true)
+  const [isTtsEnabled, setIsTtsEnabled] = useState(false)
 
   // --- Efek: Cek Sesi Saat Aplikasi Dimuat ---
   useEffect(() => {

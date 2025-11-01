@@ -1,7 +1,7 @@
 /* eslint-disable no-irregular-whitespace */
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/explicit-function-return-type */
-/* eslint-disable @typescript-eslint/ban-ts-comment */
+
 
 // =================================================================
 // LANGKAH 1: IMPOR UTAMA
@@ -28,6 +28,68 @@ const PROGRESS_PHOTOS_FOLDER_ID = '1UfUQoqNBSsth9KzGRUmjenwegmsA6hbK'
 const USER_SPREADSHEET_ID = '1nNk-49aah-dWuEoVwMiU40BXek3slHyvzIgIXOAgE6Q'
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function fetchWithRetry(url: string, options: any, maxRetries = 3) {
+  let attempt = 0;
+  while (attempt < maxRetries) {
+    attempt++;
+    try {
+      const response = await fetch(url, options);
+
+      // 1. Sukses
+      if (response.ok) {
+        return response; // Langsung kembalikan
+      }
+
+      // 2. Gagal, baca teks error
+      const errorText = await response.text();
+      console.warn(`Fetch attempt ${attempt} failed with status ${response.status}: ${errorText.substring(0, 100)}...`);
+
+      // 3. Cek apakah ini Rate Limit (429)
+      if (response.status === 429) {
+        let delayMs = 7000; // Default 7 detik jika parsing gagal
+        try {
+          // Coba parse pesan error Groq untuk mendapatkan durasi
+          const errorJson = JSON.parse(errorText);
+          const message = errorJson?.error?.message || '';
+
+          // Gunakan Regex untuk menemukan "Please try again in 7.22s"
+          const match = message.match(/Please try again in (.*?)s/);
+          if (match && match[1]) {
+            // Ubah detik (misal 7.22) menjadi milidetik dan tambah 500ms buffer
+            delayMs = parseFloat(match[1]) * 1000 + 500;
+          }
+        } catch (parseError) {
+          console.warn('Could not parse 429 error message, using default delay.');
+        }
+
+        if (attempt >= maxRetries) {
+          throw new Error(`Rate limit exceeded after ${maxRetries} attempts. Last error: ${errorText}`);
+        }
+
+        console.warn(`[Groq Rate Limit] Hit limit. Retrying in ${delayMs / 1000}s...`);
+        // INI ADALAH LOGIKA YANG ANDA MINTA:
+        // Aplikasi akan 'berhenti' di sini selama durasi yang diminta.
+        // Frontend akan tetap menampilkan "isProcessing" (loading).
+        await sleep(delayMs);
+        continue; // Lanjutkan ke 'while' loop untuk mencoba lagi
+      }
+
+      // 4. Error lain (500, 400, dll), langsung lempar
+      throw new Error(`Groq API request failed with status ${response.status}: ${errorText}`);
+
+    } catch (error) {
+      // 5. Network error, dll.
+      console.error(`Fetch attempt ${attempt} network error:`, error);
+      if (attempt >= maxRetries) {
+        throw error; // Menyerah setelah max retries
+      }
+      await sleep(1000); // Tunggu 1 detik untuk network error
+    }
+  }
+  // Seharusnya tidak pernah sampai sini
+  throw new Error('Fetch failed after all retries.');
+}
 
 const PRODUCTION_STAGES = [
   'Cari Bahan Baku',
@@ -213,72 +275,72 @@ async function processBatch(items: any[], processor: (item: any) => Promise<any>
 }
 
 async function deleteGoogleDriveFile(fileId: string) {
-    if (!fileId) {
-      return { success: false, error: 'File ID tidak valid', fileId };
-    }
-
-    const auth = getAuth();
-    await auth.authorize(); // 1. Otorisasi dulu
-    console.log(`🔑 Otorisasi ulang untuk menghapus file ${fileId} berhasil.`);
-
-    const MAX_RETRIES = 6;
-    const RETRY_DELAY = 10000;
-
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-      try {
-        console.log(`Attempt ${attempt}/${MAX_RETRIES} to delete ${fileId}...`);
-
-        // --- [PERBAIKAN] ---
-        // Gunakan auth.request() secara langsung, sama seperti fungsi upload
-        await auth.request({
-          url: `https://www.googleapis.com/drive/v3/files/${fileId}`,
-          method: 'DELETE',
-          params: {
-            supportsAllDrives: true
-          }
-        });
-        // --- [AKHIR PERBAIKAN] ---
-
-        console.log(`✅ File berhasil dihapus dari Google Drive: ${fileId}`);
-        return { success: true, fileId }; // SUKSES! Keluar dari loop.
-
-      } catch (error: any) {
-        // Logika Catch Anda sudah bagus, kita hanya perlu menyesuaikan cara membaca status code
-        console.error(`❌ Gagal attempt ${attempt} untuk ${fileId}:`, error.message);
-
-        // Penyesuaian untuk membaca error dari auth.request
-        const apiError = error.response?.data?.error || {};
-        const statusCode = error.code || error.response?.status || apiError.code;
-
-        if (statusCode === 404 && attempt < MAX_RETRIES) {
-          console.warn(`⚠️ File ${fileId} tidak ditemukan (404). Kemungkinan Google propagation delay. Mencoba lagi dalam ${RETRY_DELAY / 1000} detik...`);
-          await sleep(RETRY_DELAY);
-          continue;
-        }
-
-        if (statusCode === 404 && attempt === MAX_RETRIES) {
-          console.warn(`⚠️ File ${fileId} tetap tidak ditemukan (404) setelah ${MAX_RETRIES} percobaan. Menganggap file 'yatim'.`);
-          return { success: false, error: 'File tidak ditemukan (404)', fileId };
-        }
-
-        if (statusCode === 401 || statusCode === 403) {
-          console.error(`🚫 Akses Ditolak/Otentikasi Gagal untuk ${fileId}. Tidak akan mencoba lagi.`);
-          const errorMessage = apiError.message || error.response?.data?.message || error.message;
-          return { success: false, error: `Akses Ditolak/Login Gagal: ${errorMessage}`, fileId };
-        }
-
-        if (attempt < MAX_RETRIES) {
-           console.warn(`Error server (${statusCode}), mencoba lagi...`);
-           await sleep(RETRY_DELAY);
-           continue;
-        }
-
-        return { success: false, error: error.message || String(error), fileId };
-      }
-    }
-
-    return { success: false, error: 'Retry loop finished unexpectedly', fileId };
+  if (!fileId) {
+    return { success: false, error: 'File ID tidak valid', fileId };
   }
+
+  const auth = getAuth();
+  await auth.authorize(); // 1. Otorisasi dulu
+  console.log(`🔑 Otorisasi ulang untuk menghapus file ${fileId} berhasil.`);
+
+  const MAX_RETRIES = 6;
+  const RETRY_DELAY = 10000;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      console.log(`Attempt ${attempt}/${MAX_RETRIES} to delete ${fileId}...`);
+
+      // --- [PERBAIKAN] ---
+      // Gunakan auth.request() secara langsung, sama seperti fungsi upload
+      await auth.request({
+        url: `https://www.googleapis.com/drive/v3/files/${fileId}`,
+        method: 'DELETE',
+        params: {
+          supportsAllDrives: true
+        }
+      });
+      // --- [AKHIR PERBAIKAN] ---
+
+      console.log(`✅ File berhasil dihapus dari Google Drive: ${fileId}`);
+      return { success: true, fileId }; // SUKSES! Keluar dari loop.
+
+    } catch (error: any) {
+      // Logika Catch Anda sudah bagus, kita hanya perlu menyesuaikan cara membaca status code
+      console.error(`❌ Gagal attempt ${attempt} untuk ${fileId}:`, error.message);
+
+      // Penyesuaian untuk membaca error dari auth.request
+      const apiError = error.response?.data?.error || {};
+      const statusCode = error.code || error.response?.status || apiError.code;
+
+      if (statusCode === 404 && attempt < MAX_RETRIES) {
+        console.warn(`⚠️ File ${fileId} tidak ditemukan (404). Kemungkinan Google propagation delay. Mencoba lagi dalam ${RETRY_DELAY / 1000} detik...`);
+        await sleep(RETRY_DELAY);
+        continue;
+      }
+
+      if (statusCode === 404 && attempt === MAX_RETRIES) {
+        console.warn(`⚠️ File ${fileId} tetap tidak ditemukan (404) setelah ${MAX_RETRIES} percobaan. Menganggap file 'yatim'.`);
+        return { success: false, error: 'File tidak ditemukan (404)', fileId };
+      }
+
+      if (statusCode === 401 || statusCode === 403) {
+        console.error(`🚫 Akses Ditolak/Otentikasi Gagal untuk ${fileId}. Tidak akan mencoba lagi.`);
+        const errorMessage = apiError.message || error.response?.data?.message || error.message;
+        return { success: false, error: `Akses Ditolak/Login Gagal: ${errorMessage}`, fileId };
+      }
+
+      if (attempt < MAX_RETRIES) {
+        console.warn(`Error server (${statusCode}), mencoba lagi...`);
+        await sleep(RETRY_DELAY);
+        continue;
+      }
+
+      return { success: false, error: error.message || String(error), fileId };
+    }
+  }
+
+  return { success: false, error: 'Retry loop finished unexpectedly', fileId };
+}
 
 async function uploadPoPhoto(photoPath: string, poNumber: string, customerName: string) {
   try {
@@ -1674,7 +1736,7 @@ async function getProductSalesAnalysis() {
 
       try {
         salesByDateForTrend.push({ date: new Date(po.created_at), name: productName, quantity })
-      } catch {}
+      } catch { }
     })
 
     latestPoMap.forEach((po: any) => {
@@ -1701,9 +1763,9 @@ async function getProductSalesAnalysis() {
         customerByKubikasi[customerName] = (customerByKubikasi[customerName] || 0) + kubikasiTotalPO
     })
 
-    const topSellingProducts = Object.values(salesByProduct)
-      .sort((a: any, b: any) => b.totalQuantity - a.totalQuantity)
-      .slice(0, 10)
+    const topSellingProductsFull = Object.values(salesByProduct).sort(
+      (a: any, b: any) => b.totalQuantity - a.totalQuantity
+    )
 
     const salesByMarketingSorted = Object.values(salesByMarketing).sort(
       (a: any, b: any) => b.totalKubikasi - a.totalKubikasi
@@ -1713,10 +1775,9 @@ async function getProductSalesAnalysis() {
       .map(([name, value]) => ({ name, value }))
       .sort((a: any, b: any) => b.value - a.value)
 
-    const topCustomers = Object.entries(customerByKubikasi)
+    const topCustomersFull = Object.entries(customerByKubikasi)
       .map(([name, totalKubikasi]) => ({ name, totalKubikasi }))
       .sort((a: any, b: any) => b.totalKubikasi - a.totalKubikasi)
-      .slice(0, 10)
 
     const allMonths = new Set([
       ...Object.keys(monthlySalesByProduct),
@@ -1778,12 +1839,15 @@ async function getProductSalesAnalysis() {
     const slowMovingProducts = allMasterProductNames.filter((name) => !soldProductNames.has(name))
 
     const analysisResult = {
-      topSellingProducts,
+      // --- PERBAIKAN ---
+      // Kirim data lengkap (full) ke 'analysisData'
+      topSellingProducts: topSellingProductsFull,
       salesByMarketing: salesByMarketingSorted,
       monthlyProductChartData,
       monthlyMarketingChartData,
       woodTypeDistribution: woodTypeDistributionSorted,
-      topCustomers,
+      topCustomers: topCustomersFull,
+      // --- AKHIR PERBAIKAN ---
       trendingProducts,
       slowMovingProducts
     }
@@ -1859,35 +1923,117 @@ async function addNewProduct(productData: any) {
   }
 }
 
-// --- [INI FUNGSI UTAMA AI] ---
+// =================================================================
+// LANGKAH 2: TAMBAHKAN FUNGSI HELPER BARU (AI CALL 2)
+// =================================================================
+// (Letakkan ini TEPAT SEBELUM 'async function handleGroqChat(...)')
+
+/**
+ * Melakukan panggilan kedua ke Groq untuk menghasilkan respons bahasa alami
+ * berdasarkan data yang sudah diambil.
+ */
+async function generateNaturalResponse(
+  dataContext: string, // Data mentah dalam format JSON string
+  userRequestDescription: string, // Deskripsi permintaan user (misal: "User bertanya soal produk terlaris")
+  originalPrompt: string // Prompt asli dari user
+): Promise<string> {
+
+  const groqToken = process.env.GROQ_API_KEY
+  const modelId = 'llama-3.1-8b-instant' // Gunakan model yang sama
+
+  if (!groqToken) {
+    throw new Error('GROQ_API_KEY tidak ditemukan.')
+  }
+
+  // System prompt BARU, khusus untuk *menghasilkan* jawaban
+  const generationSystemPrompt = `Anda adalah Asisten AI ERP Ubinkayu yang ramah, cerdas, dan profesional.
+Tugas Anda adalah menjawab pertanyaan user berdasarkan data yang saya berikan.
+JANGAN mengembalikan JSON. Jawablah dalam Bahasa Indonesia yang alami, ramah, dan bervariasi.
+Anda boleh memberikan sedikit insight (wawasan) dari data jika terlihat jelas, tapi jangan berlebihan.
+Selalu gunakan **format markdown** (seperti bold atau list) untuk membuat jawaban mudah dibaca.
+JADIKAN JUDUL UTAMA JAWABAN ANDA (jika ada) **bold** (contoh: "**Berikut adalah 5 Produk Terlaris**").
+
+DATA KONTEKS (dalam format JSON):
+${dataContext}
+
+DESKRIPSI PERMINTAAN USER:
+${userRequestDescription}
+
+PROMPT ASLI USER:
+"${originalPrompt}"
+
+Sekarang, tuliskan jawaban Anda untuk user.`
+
+  try {
+    console.log(`[Electron AI - Groq Call 2] Generating natural response for: ${userRequestDescription}`)
+    const API_URL = 'https://api.groq.com/openai/v1/chat/completions'
+
+    const payload = {
+      model: modelId,
+      messages: [
+        { role: 'system', content: generationSystemPrompt }
+        // Kita tidak menyertakan prompt asli user di sini karena sudah ada di system prompt
+      ],
+      temperature: 0.7, // <-- Naikkan temperature agar lebih bervariasi
+      max_tokens: 500 // Beri ruang lebih untuk jawaban
+    }
+
+    const response = await fetchWithRetry(API_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${groqToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Groq API Call 2 request failed: ${errorText}`)
+    }
+
+    const result = await response.json()
+    const aiResponse = result.choices[0]?.message?.content?.trim()
+
+    if (!aiResponse) {
+      throw new Error('Groq Call 2 returned an empty response.')
+    }
+
+    console.log(`[Electron AI - Groq Call 2] Generated: "${aiResponse.substring(0, 50)}..."`)
+    return aiResponse
+
+  } catch (err: any) {
+    console.error('💥 [Electron AI - Groq Call 2] ERROR:', err.message)
+    return `Maaf, terjadi kesalahan saat saya mencoba menyusun jawaban: ${err.message}`
+  }
+}
+
+
+// =================================================================
+// LANGKAH 3: GANTI FUNGSI 'handleGroqChat' LAMA ANDA DENGAN INI
+// =================================================================
+
 async function handleGroqChat(prompt: string) {
-  // 1. AMBIL KONTEKS DATA PO
+  // 1. AMBIL KONTEKS DATA PO & ANALISIS
   let allPOs: any[]
+  let analysisData: any // <-- [BARU]
+
   try {
     allPOs = await listPOs()
     if (!Array.isArray(allPOs)) {
       console.error('listPOs did not return an array.')
       allPOs = []
     }
+
+    // [BARU] Ambil data analisis yang sudah jadi
+    analysisData = await getProductSalesAnalysis()
   } catch (e: any) {
-    console.error('Gagal mengambil data PO untuk konteks AI:', e.message)
-    return 'Maaf, saya gagal mengambil data PO terbaru untuk menjawab pertanyaan Anda.'
+    console.error('Gagal mengambil data PO atau Analisis untuk konteks AI:', e.message)
+    return 'Maaf, saya gagal mengambil data PO/Analisis terbaru untuk menjawab pertanyaan Anda.'
   }
 
   // 2. SIAPKAN SAPAAN & SYSTEM PROMPT
   const now = new Date()
-  const currentHour = now.getHours()
-  let timeOfDayGreeting = 'Halo!'
-  if (currentHour >= 4 && currentHour < 11) {
-    timeOfDayGreeting = 'Selamat pagi!'
-  } else if (currentHour >= 11 && currentHour < 15) {
-    timeOfDayGreeting = 'Selamat siang!'
-  } else if (currentHour >= 15 && currentHour < 19) {
-    timeOfDayGreeting = 'Selamat sore!'
-  } else {
-    timeOfDayGreeting = 'Selamat malam, tunggu apa ga tidur!' // <--- GREETING BARU ANDA
-  }
-
   const today = new Date().toISOString().split('T')[0]
 
   const systemPrompt = `Anda adalah Asisten ERP Ubinkayu. Tugas Anda adalah mengubah pertanyaan pengguna menjadi JSON 'perintah' yang valid. HANYA KEMBALIKAN JSON.
@@ -1899,91 +2045,146 @@ Hari ini adalah ${today}.
 
 --- Alat (Tools) yang Tersedia ---
 
-1. "getTotalPO": (Untuk pertanyaan jumlah/total PO).
-   - Keywords: "jumlah po", "total po", "ada berapa po", "semua po aktif".
-   - JSON: {"tool": "getTotalPO"}
+// --- ALAT ANALISIS (SUMBER: getProductSalesAnalysis) ---
+1. "getTopSellingProducts": (Untuk produk terlaris).
+   - Keywords: "produk terlaris", "paling laku", "top produk".
+   - JSON: {"tool": "getTopSellingProducts"}
 
-2. "getTopProduct": (Untuk pertanyaan produk terlaris).
-   - Keywords: "produk terlaris", "paling laku".
-   - JSON: {"tool": "getTopProduct"}
+2. "getTopCustomers": (Untuk customer terbesar).
+   - Keywords: "customer terbesar", "top customer", "pelanggan utama".
+   - JSON: {"tool": "getTopCustomers"}
 
-3. "getTopCustomer": (Untuk pertanyaan customer terbesar).
-   - Keywords: "customer terbesar", "top customer".
-   - JSON: {"tool": "getTopCustomer"}
+3. "getTopMarketing": (Untuk performa marketing).
+   - Keywords: "top marketing", "marketing terbaik", "performa marketing".
+   - JSON: {"tool": "getTopMarketing"}
 
-4. "getPOInfo": (SATU-SATUNYA ALAT UNTUK MENCARI PO). Mencari PO berdasarkan nomor, customer, atau revisi.
-   - PENTING: Alat ini menangani SEMUA permintaan terkait PO spesifik.
-   - AI HARUS mengekstrak parameter pencarian ("poNumber" atau "customerName").
-   - AI HARUS mengekstrak "revisionNumber" (jika disebut).
-   - AI HARUS menentukan "intent" (niat) user:
-     - "status": Jika user HANYA bertanya "status", "progress", "cek po".
-     - "details": Jika user bertanya "info", "detail", "item", "customer", atau "cari PO".
-     - "file": Jika user bertanya "link", "file", "dokumen", "JPEG", "arsip".
-   - Jika tidak spesifik, default ke "details".
-   - Keywords: "status po [nomor]", "link file [nomor]", "info po [nomor]", "arsip jpeg [nomor]", "po customer [nama]", "detail revisi [nomor]".
-   - JSON: {"tool": "getPOInfo", "param": {"poNumber": "...", "customerName": "...", "revisionNumber": "...", "intent": "status"}}
+4. "getWoodDistribution": (Untuk distribusi jenis kayu).
+   - Keywords: "jenis kayu", "distribusi kayu", "kayu apa paling laku".
+   - PRIORITAS: Jika user menyebut "distribusi kayu" atau "persentase kayu", SELALU gunakan tool ini.
+   - JSON: {"tool": "getWoodDistribution"}
 
-5. "getUrgentPOs": (Untuk pertanyaan PO 'Urgent').
-   - Keywords: "po urgent", "urgent orders".
-   - JSON: {"tool": "getUrgentPOs"}
+5. "getTrendingProducts": (Untuk produk yang tren-nya naik).
+   - Keywords: "produk tren naik", "trending product", "rekomendasi stok".
+   - JSON: {"tool": "getTrendingProducts"}
 
-6. "getNearingDeadline": (Untuk pertanyaan PO 'deadline dekat').
-   - Keywords: "deadline dekat", "nearing deadline".
-   - JSON: {"tool": "getNearingDeadline"}
+6. "getSlowMovingProducts": (Untuk produk yang tidak laku).
+   - Keywords: "produk tidak laku", "produk belum terjual", "slow moving".
+   - JSON: {"tool": "getSlowMovingProducts"}
 
-7. "getNewestPOs": (Untuk pertanyaan PO 'terbaru').
-   - Keywords: "po terbaru", "newest po".
-   - JSON: {"tool": "getNewestPOs"}
+// --- ALAT PO (SUMBER: listPOs) ---
+7. "getTotalPO": (Untuk pertanyaan jumlah/total PO).
+   - Keywords: "jumlah po", "total po", "ada berapa po", "semua po aktif".
+   - JSON: {"tool": "getTotalPO"}
 
-8. "getOldestPO": (Untuk pertanyaan PO 'terlama').
-   - Keywords: "po terlama", "oldest po".
-   - JSON: {"tool": "getOldestPO"}
+8. "getPOInfo": (Mencari PO berdasarkan 'header'-nya: Nomor PO atau Customer).
+   - PENTING: JANGAN gunakan tool ini untuk mencari berdasarkan produk or kayu. Gunakan "getPOsByItem".
+   - PENTING: 'poNumber' BISA MENGANDUNG SPASI. 'revisionNumber' HANYA angka setelah kata "revisi" atau "rev".
+   - AI HARUS mengekstrak "poNumber" atau "customerName".
+   - AI HARUS mengekstrak "revisionNumber" (jika disebut).
+   - AI HARUS menentukan "intent" (niat) user: "status", "details", atau "file".
+   - Default ke "details" jika tidak spesifik.
+   - JSON: {"tool": "getPOInfo", "param": {"poNumber": "...", "customerName": "...", "revisionNumber": "...", "intent": "status"}}
 
-9. "getPOsByDateRange": (Untuk pertanyaan PO berdasarkan 'tanggal').
-   - Keywords: "po bulan oktober", "po tanggal 20 okt".
-   - AI HARUS mengekstrak 'startDate' dan 'endDate'.
-   - JSON: {"tool": "getPOsByDateRange", "startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD"}
+9. "getPOsByItem": (Mencari PO berdasarkan 'isi' item).
+   - Keywords: "po yang ada produk [nama]", "cari po pakai kayu [jenis]", "po dengan [produk]".
+   - AI HARUS mengekstrak "productName" ATAU "woodType".
+   - JSON: {"tool": "getPOsByItem", "param": {"productName": "...", "woodType": "..."}}
 
-10. "getPOByStatusCount": (Untuk pertanyaan jumlah PO 'Open' atau 'In Progress').
-    - Keywords: "berapa po open", "jumlah po in progress".
-    - JSON: {"tool": "getPOByStatusCount", "param": "STATUS_DIMINTA"}
+10. "getUrgentPOs": (Untuk pertanyaan PO 'Urgent').
+   - Keywords: "po urgent", "urgent orders".
+   - JSON: {"tool": "getUrgentPOs"}
 
-11. "getApplicationHelp": (Untuk pertanyaan 'cara pakai' aplikasi).
-    - Keywords: "cara buat po", "panduan aplikasi".
-    - JSON: {"tool": "getApplicationHelp", "topic": "NAMA_FITUR_DIMINTA"}
+11. "getNearingDeadline": (Untuk pertanyaan PO 'deadline dekat').
+   - Keywords: "deadline dekat", "nearing deadline".
+   - JSON: {"tool": "getNearingDeadline"}
 
-12. "help": (Untuk pertanyaan 'bantuan' atau 'perintah').
-    - Keywords: "bantuan", "help".
-    - JSON: {"tool": "help"}
+12. "getNewestPOs": (Untuk pertanyaan PO 'terbaru').
+   - Keywords: "po terbaru", "newest po".
+   - PENGECUALIAN: Jika user bertanya "po hari ini", gunakan "getPOsByDateRange".
+   - JSON: {"tool": "getNewestPOs"}
 
-13. "general": (Untuk sapaan umum).
-    - Keywords: "halo", "terima kasih".
-    - JSON: {"tool": "general"}
+13. "getOldestPO": (Untuk pertanyaan PO 'terlama').
+   - Keywords: "po terlama", "oldest po".
+   - JSON: {"tool": "getOldestPO"}
 
-14. "getTopSellingProductsChart": (Untuk 'grafik' penjualan).
-    - Keywords: "grafik produk", "chart penjualan".
-    - JSON: {"tool": "getTopSellingProductsChart"}
+14. "getPOsByDateRange": (Untuk pertanyaan PO berdasarkan 'tanggal').
+   - Keywords: "po bulan oktober", "po tanggal 20 okt", "po 1-10 nov", "po hari ini".
+   - PRIORITAS: Jika user menyebut "hari ini", SELALU gunakan tool ini.
+   - AI HARUS mengekstrak 'startDate' dan 'endDate' ("YYYY-MM-DD").
+   - Jika 1 tanggal (misal: "po 1 nov 2025"), 'startDate' DAN 'endDate' HARUS sama: "2025-11-01".
+   - Jika "hari ini", 'startDate' DAN 'endDate' HARUS sama dengan tanggal hari ini (${today}).
+   - JSON: {"tool": "getPOsByDateRange", "param": {"startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD"}}
+
+15. "getPOByStatusCount": (Untuk pertanyaan jumlah PO 'Open' atau 'In Progress').
+    - Keywords: "berapa po open", "jumlah po in progress".
+    - JSON: {"tool": "getPOByStatusCount", "param": "STATUS_DIMINTA"}
+
+// --- ALAT BANTUAN & GRAFIK ---
+16. "getApplicationHelp": (Untuk pertanyaan 'cara pakai' aplikasi).
+    - Keywords: "cara buat po", "panduan aplikasi", "cara update progress", "cara revisi po", "cara tambah produk", "menambah produk master".
+    - AI HARUS mengekstrak 'topic' dari kata kunci.
+    - Contoh 1: "gimana cara input po baru?" -> "topic": "buat po".
+    - Contoh 2: "panduan untuk revisi" -> "topic": "revisi po".
+    - Contoh 3: "cara menambah produk master" -> "topic": "tambah produk".
+    - JSON: {"tool": "getApplicationHelp", "param": {"topic": "NAMA_FITUR_DIMINTA"}}
+
+17. "help": (Untuk pertanyaan 'bantuan' atau 'perintah').
+    - Keywords: "bantuan", "help".
+    - JSON: {"tool": "help"}
+
+18. "general": (Untuk sapaan umum).
+    - Keywords: "halo", "terima kasih".
+    - JSON: {"tool": "general"}
+
+19. "createCustomChart": (Untuk SEMUA permintaan 'grafik' atau 'chart').
+    - Keywords: "grafik", "chart", "diagram batang", "pie chart", "bandingkan [A] dan [B]".
+    - AI HARUS mengidentifikasi 5 parameter dari 'analysisData':
+      1.  'dataSource': Kunci dari 'analysisData'. Nilai yang valid: 'topSellingProducts', 'topCustomers', 'salesByMarketing', 'woodTypeDistribution', 'trendingProducts'.
+      2.  'chartType': Tipe chart. Nilai yang valid: 'bar' (default), 'pie', 'line'.
+          - Gunakan 'pie' jika user meminta "distribusi" atau "persentase" (misal: 'woodTypeDistribution').
+          - Gunakan 'bar' untuk perbandingan (top 5, dll).
+      3.  'nameKey': Kunci string di 'dataSource' untuk label (sumbu X). (Contoh: 'name', 'product_name').
+      4.  'dataKey': Kunci string di 'dataSource' untuk nilai (sumbu Y). (Contoh: 'totalQuantity', 'totalKubikasi', 'poCount', 'value', 'change').
+      5.  'filters' (Opsional): Array string jika user ingin memfilter data. (Contoh: ["kisi kisi", "pintu"]).
+
+    - --- CONTOH ---
+    - User: "grafik produk terlaris"
+    - JSON: {"tool": "createCustomChart", "param": {"dataSource": "topSellingProducts", "chartType": "bar", "nameKey": "name", "dataKey": "totalQuantity", "filters": null}}
+
+    - User: "grafik top 5 customer berdasarkan m³"
+    - JSON: {"tool": "createCustomChart", "param": {"dataSource": "topCustomers", "chartType": "bar", "nameKey": "name", "dataKey": "totalKubikasi", "filters": null}}
+
+    - User: "pie chart distribusi kayu" ATAU "persentase kayu"
+    - JSON: {"tool": "createCustomChart", "param": {"dataSource": "woodTypeDistribution", "chartType": "pie", "nameKey": "name", "dataKey": "value", "filters": null}}
+
+    - User: "grafik perbandingan penjualan kisi kisi dan pintu"
+    - JSON: {"tool": "createCustomChart", "param": {"dataSource": "topSellingProducts", "chartType": "bar", "nameKey": "name", "dataKey": "totalQuantity", "filters": ["Kisi kisi", "Pintu"]}}
+
+    - User: "grafik marketing berdasarkan jumlah PO"
+    - JSON: {"tool": "createCustomChart", "param": {"dataSource": "salesByMarketing", "chartType": "bar", "nameKey": "name", "dataKey": "poCount", "filters": null}}
 
 ATURAN KETAT:
 - JANGAN menjawab pertanyaan. HANYA KEMBALIKAN JSON.
 - Jika tidak yakin tool mana, KEMBALIKAN: {"tool": "unknown"}`
 
-  // 3. PANGGIL GROQ API
+  // (systemPrompt didefinisikan di atas)
+
+  // 3. PANGGIL GROQ API (CALL 1 - MEMILIH TOOL)
   let aiDecisionJsonString = ''
   let aiDecision: any = { tool: 'unknown' }
 
   const groqToken = process.env.GROQ_API_KEY
   const modelId = 'llama-3.1-8b-instant'
 
-  console.log(`[Electron AI - Groq] Using Model ID: ${modelId}`)
+  console.log(`[Electron AI - Groq Call 1] Using Model ID: ${modelId}`)
 
   if (!groqToken) {
-    console.error('💥 [Electron AI - Groq] GROQ_API_KEY tidak ditemukan di process.env')
+    console.error('💥 [Electron AI - Groq Call 1] GROQ_API_KEY tidak ditemukan di process.env')
     return 'Maaf, GROQ_API_KEY tidak ditemukan. Pastikan Anda sudah membuat file .env dan me-restart Electron.'
   }
 
   try {
-    console.log('⏳ [Electron AI - Groq] Calling Groq API via MANUAL FETCH...')
+    console.log('⏳ [Electron AI - Groq Call 1] Calling Groq API via MANUAL FETCH...')
 
     const API_URL = 'https://api.groq.com/openai/v1/chat/completions'
 
@@ -1994,10 +2195,10 @@ ATURAN KETAT:
         { role: 'user', content: prompt }
       ],
       temperature: 0.1,
-      max_tokens: 150
+      max_tokens: 250 // Dinaikkan sedikit untuk param filter yang panjang
     }
 
-    const response = await fetch(API_URL, {
+    const response = await fetchWithRetry(API_URL, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${groqToken}`,
@@ -2008,12 +2209,12 @@ ATURAN KETAT:
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('❌ [Electron AI - Groq] Manual Fetch Error Response:', errorText)
+      console.error('❌ [Electron AI - Groq Call 1] Manual Fetch Error Response:', errorText)
       throw new Error(`Groq API request failed with status ${response.status}: ${errorText}`)
     }
 
     const result = await response.json()
-    console.log('✅ [Electron AI - Groq] Groq raw response (manual):', JSON.stringify(result))
+    console.log('✅ [Electron AI - Groq Call 1] Groq raw response (manual):', JSON.stringify(result))
 
     if (
       result &&
@@ -2040,22 +2241,100 @@ ATURAN KETAT:
 
       console.log(` -> Cleaned JSON string: ${aiDecisionJsonString}`)
       aiDecision = JSON.parse(aiDecisionJsonString)
-      console.log('✅ [Electron AI - Groq] Parsed JSON decision:', aiDecision)
+      console.log('✅ [Electron AI - Groq Call 1] Parsed JSON decision:', aiDecision)
     } else {
-      console.error('❌ [Electron AI - Groq] Unexpected response format (manual):', result)
+      console.error('❌ [Electron AI - Groq Call 1] Unexpected response format (manual):', result)
       throw new Error('Unexpected response format from Groq (manual fetch).')
     }
   } catch (err: any) {
-    console.error('💥 [Electron AI - Groq] AI call or JSON parse ERROR:', err.message)
+    console.error('💥 [Electron AI - Groq Call 1] AI call or JSON parse ERROR:', err.message)
     return `Maaf, terjadi kesalahan saat menghubungi Groq: ${err.message}`
   }
 
   // 4. JALANKAN ALAT (TOOLS)
   try {
-    console.log(`[Electron AI - Groq] Executing tool: ${aiDecision?.tool || 'unknown'}`)
-    let responseText = ''
+    console.log(`[Electron AI] Executing tool: ${aiDecision?.tool || 'unknown'}`)
 
+    // PERHATIKAN: 'switch' ini sekarang 'return' sebuah 'Promise<string>'
+    // atau 'string' (untuk 'help' dan 'createCustomChart')
     switch (aiDecision.tool) {
+
+      // --- ALAT ANALISIS (PANGGILAN AI KE-2) ---
+
+      case 'getTopSellingProducts': {
+        const data = (analysisData?.topSellingProducts || []).slice(0, 5)
+        if (data.length === 0) {
+          return 'Saat ini data produk terlaris belum tersedia.'
+        }
+        return await generateNaturalResponse(
+          JSON.stringify(data),
+          'User bertanya tentang 5 produk terlaris.',
+          prompt
+        )
+      }
+
+      case 'getTopCustomers': {
+        const data = (analysisData?.topCustomers || []).slice(0, 5)
+        if (data.length === 0) {
+          return 'Saat ini data customer teratas belum tersedia.'
+        }
+        return await generateNaturalResponse(
+          JSON.stringify(data),
+          'User bertanya tentang 5 customer teratas berdasarkan volume.',
+          prompt
+        )
+      }
+
+      case 'getTopMarketing': {
+        const data = (analysisData?.salesByMarketing || []).slice(0, 5)
+        if (data.length === 0) {
+          return 'Saat ini data performa marketing belum tersedia.'
+        }
+        return await generateNaturalResponse(
+          JSON.stringify(data),
+          'User bertanya tentang 5 performa marketing teratas.',
+          prompt
+        )
+      }
+
+      case 'getWoodDistribution': {
+        const data = (analysisData?.woodTypeDistribution || []).slice(0, 5)
+        if (data.length === 0) {
+          return 'Saat ini data distribusi jenis kayu belum tersedia.'
+        }
+        return await generateNaturalResponse(
+          JSON.stringify(data),
+          'User bertanya tentang 5 distribusi jenis kayu teratas.',
+          prompt
+        )
+      }
+
+      case 'getTrendingProducts': {
+        const data = (analysisData?.trendingProducts || []).slice(0, 5)
+        if (data.length === 0) {
+          return 'Saat ini tidak ada produk yang sedang tren naik signifikan.'
+        }
+        return await generateNaturalResponse(
+          JSON.stringify(data),
+          'User bertanya tentang produk yang sedang tren naik dan meminta rekomendasi stok.',
+          prompt
+        )
+      }
+
+      case 'getSlowMovingProducts': {
+        const data = (analysisData?.slowMovingProducts || []).slice(0, 10) // Tampilkan 10
+        if (data.length === 0) {
+          return 'Kabar baik! Semua produk di master data sudah pernah terjual.'
+        }
+        return await generateNaturalResponse(
+          JSON.stringify(data),
+          'User bertanya tentang produk yang tidak laku (slow moving).',
+          prompt
+        )
+      }
+
+      // --- ALAT PO (PANGGILAN AI KE-2) ---
+
       case 'getTotalPO': {
         const totalPOs = allPOs.length
         const activePOsList = allPOs.filter(
@@ -2064,75 +2343,31 @@ ATURAN KETAT:
         const activePOsCount = activePOsList.length
         const completedPOs = allPOs.filter((po: any) => po.status === 'Completed').length
         const openCount = activePOsList.filter((po: any) => po.status === 'Open').length
-        const inProgressCount = activePOsList.filter((po: any) => po.status === 'In Progress').length
+        const inProgressCount = activePOsList.filter(
+          (po: any) => po.status === 'In Progress'
+        ).length
 
-        responseText =
-          `Saat ini ada ${totalPOs} total PO di database.\n\n` +
-          `- ${activePOsCount} PO sedang aktif (${openCount} Open, ${inProgressCount} In Progress).\n` +
-          `- ${completedPOs} PO sudah selesai.`
-        break
-      }
-      case 'getTopProduct': {
-        const completedPOs = allPOs.filter((po: any) => po.status === 'Completed')
-        if (completedPOs.length === 0) {
-          responseText = 'Belum ada data PO Selesai untuk dianalisis.'
-          break
+        const data = {
+          totalPOs,
+          activePOsCount,
+          completedPOs,
+          openCount,
+          inProgressCount
         }
-        const salesData: { [key: string]: number } = {}
-        completedPOs
-          .flatMap((po: any) => po.items || [])
-          .forEach((item: any) => {
-            if (item.product_name)
-              salesData[item.product_name] =
-                (salesData[item.product_name] || 0) + Number(item.quantity || 0)
-          })
-        const topProduct =
-          Object.keys(salesData).length > 0
-            ? Object.keys(salesData).reduce((a, b) => (salesData[a] > salesData[b] ? a : b))
-            : 'N/A'
-        responseText =
-          topProduct !== 'N/A'
-            ? `Produk terlaris dari PO Selesai adalah: ${topProduct} (${salesData[topProduct]} unit).`
-            : 'Tidak dapat menemukan produk terlaris.'
-        break
-      }
-      case 'getTopCustomer': {
-        const completedPOs = allPOs.filter((po: any) => po.status === 'Completed')
-        if (completedPOs.length === 0) {
-          responseText = 'Belum ada data PO Selesai untuk dianalisis.'
-          break
-        }
-        const customerData: { [key: string]: number } = {}
-        completedPOs.forEach((po: any) => {
-          if (po.project_name)
-            customerData[po.project_name] =
-              (customerData[po.project_name] || 0) + Number(po.kubikasi_total || 0)
-        })
-        const topCustomer =
-          Object.keys(customerData).length > 0
-            ? Object.keys(customerData).reduce((a, b) =>
-                customerData[a] > customerData[b] ? a : b
-              )
-            : 'N/A'
-        responseText =
-          topCustomer !== 'N/A'
-            ? `Customer terbesar (m³) dari PO Selesai adalah: ${topCustomer} (${customerData[
-                topCustomer
-              ].toFixed(3)} m³).`
-            : 'Tidak dapat menemukan customer terbesar.'
-        break
+
+        return await generateNaturalResponse(
+          JSON.stringify(data),
+          'User bertanya tentang jumlah total PO dan rincian statusnya.',
+          prompt
+        )
       }
 
-      // --- [CASE BARU] ---
       case 'getPOInfo': {
         const { poNumber, customerName, revisionNumber, intent } = aiDecision.param
-
         if (!poNumber && !customerName) {
-          responseText = 'Mohon sebutkan nomor PO atau nama customer yang ingin dicari.'
-          break
+          return 'Mohon sebutkan nomor PO atau nama customer yang ingin dicari.'
         }
 
-        // 1. Logika Pencarian
         let matchingPOs: any[] = []
         if (poNumber) {
           const sanitizePOString = (str: string) => {
@@ -2161,14 +2396,12 @@ ATURAN KETAT:
         }
 
         if (matchingPOs.length === 0) {
-          responseText = `Maaf, PO yang cocok dengan '${poNumber || customerName}' tidak ditemukan.`
-          break
+          return `Maaf, PO yang cocok dengan '${poNumber || customerName}' tidak ditemukan.`
         }
 
-        // 2. Logika Pemilihan Revisi
         let foundPO: any = null
         let revNum = -1
-        let feedback = '' // Teks tambahan
+        let feedback = ''
 
         if (revisionNumber !== undefined && revisionNumber !== null) {
           revNum = toNum(revisionNumber, -1)
@@ -2179,7 +2412,7 @@ ATURAN KETAT:
               (a: any, b: any) => toNum(b.revision_number, -1) - toNum(a.revision_number, -1)
             )[0]
             revNum = toNum(foundPO.revision_number, -1)
-            feedback = `Tidak menemukan Revisi ${revisionNumber}. Menampilkan hasil untuk revisi terbaru (Rev ${revNum}):\n`
+            feedback = `(Catatan: Tidak menemukan Revisi ${revisionNumber}, jadi saya tampilkan revisi terbaru, Rev ${revNum})`
           }
         } else {
           foundPO = matchingPOs.sort(
@@ -2189,71 +2422,83 @@ ATURAN KETAT:
         }
 
         if (!foundPO) {
-          responseText = `Maaf, PO ${poNumber || customerName} tidak ditemukan.`
-          break
+          return `Maaf, PO ${poNumber || customerName} tidak ditemukan.`
         }
 
-        // 3. Logika Merespons Berdasarkan NIAT (INTENT)
-        const poIntent = intent || 'details'
+        // Format tanggal agar lebih ramah AI
+        foundPO.created_at = formatDate(foundPO.created_at);
+        foundPO.deadline = formatDate(foundPO.deadline);
 
-        switch (poIntent) {
-          case 'file':
-            if (foundPO.pdf_link && foundPO.pdf_link.startsWith('http')) {
-              responseText = `${feedback}Berikut link file untuk PO ${foundPO.po_number} (Rev ${revNum}):\n${foundPO.pdf_link}`
-            } else if (foundPO.pdf_link) {
-              responseText = `${feedback}Saya menemukan PO ${foundPO.po_number} (Rev ${revNum}), tapi link filenya bermasalah: ${foundPO.pdf_link}`
-            } else {
-              responseText = `${feedback}Maaf, PO ${foundPO.po_number} (Rev ${revNum}) tidak memiliki link file.`
-            }
-            break
+        const data = { foundPO, intent, feedback }
 
-          case 'status':
-            responseText = `${feedback}Status PO ${foundPO.po_number} (${
-              foundPO.project_name || 'N/A'
-            }) adalah: ${foundPO.status || 'N/A'}. Progress: ${
-              foundPO.progress?.toFixed(0) || 0
-            }%.`
-            break
-
-          case 'details':
-          default:
-            const itemsSummary = (foundPO.items || [])
-              .map(
-                (item: any) =>
-                  `- ${item.product_name || 'Item Tanpa Nama'} (${item.quantity || 0} ${item.satuan || 'unit'})`
-              )
-              .join('\n')
-
-            responseText =
-              `${feedback}✅ PO ditemukan:\n` +
-              `Nomor PO: ${foundPO.po_number || 'N/A'}\n` +
-              `Customer: ${foundPO.project_name || 'N/A'}\n` +
-              `Tgl Masuk: ${formatDate(foundPO.created_at)}\n` +
-              `Target Kirim: ${formatDate(foundPO.deadline)}\n` +
-              `Status: ${foundPO.status || 'N/A'}\n` +
-              `Progress: ${foundPO.progress?.toFixed(0) || 0}%\n` +
-              `Prioritas: ${foundPO.priority || 'Normal'}\n` +
-              `Item:\n${itemsSummary || '(Tidak ada item)'}`
-            break
-        }
-        break
+        return await generateNaturalResponse(
+          JSON.stringify(data),
+          `User bertanya tentang PO ${poNumber || customerName} (Rev ${revNum}) dengan niat "${intent}". ${feedback}`,
+          prompt
+        )
       }
-      // --- [AKHIR CASE BARU] ---
+
+      case 'getPOsByItem': {
+        const { productName, woodType } = aiDecision.param || {}
+        if (!productName && !woodType) {
+          return 'Mohon sebutkan nama produk atau jenis kayu yang ingin dicari.'
+        }
+
+        const queryLower = (productName || woodType).toLowerCase()
+        const searchType = productName ? 'produk' : 'jenis kayu'
+        const poMap = new Map()
+        const activePOs = allPOs.filter((p: any) => p.status !== 'Cancelled')
+
+        for (const po of activePOs) {
+          if (!po.items || po.items.length === 0) continue
+
+          let matchItem = null
+          if (productName) {
+            matchItem = po.items.find((item: any) =>
+              item.product_name?.toLowerCase().includes(queryLower)
+            )
+          } else if (woodType) {
+            matchItem = po.items.find((item: any) =>
+              item.wood_type?.toLowerCase().includes(queryLower)
+            )
+          }
+
+          if (matchItem) {
+            if (!poMap.has(po.id)) {
+              poMap.set(po.id, { po, matchItem })
+            }
+          }
+        }
+
+        const results = Array.from(poMap.values())
+
+        if (results.length === 0) {
+          return `Tidak ditemukan PO (aktif/selesai) yang menggunakan ${searchType} "${queryLower}".`
+        }
+
+        const data = results.slice(0, 10) // Batasi 10 hasil
+
+        return await generateNaturalResponse(
+          JSON.stringify({ results: data, totalFound: results.length, query: queryLower, searchType }),
+          `User mencari PO berdasarkan ${searchType} "${queryLower}".`,
+          prompt
+        )
+      }
 
       case 'getUrgentPOs': {
         const urgentPOs = allPOs.filter(
           (po: any) => po.priority === 'Urgent' && po.status !== 'Completed' && po.status !== 'Cancelled'
         )
-        if (urgentPOs.length > 0) {
-          const poNumbers = urgentPOs
-            .map((po: any) => `- ${po.po_number || 'N/A'} (${po.project_name || 'N/A'})`)
-            .join('\n')
-          responseText = `Ada ${urgentPOs.length} PO aktif dengan prioritas Urgent:\n${poNumbers}`
-        } else {
-          responseText = 'Saat ini tidak ada PO aktif dengan prioritas Urgent.'
+        if (urgentPOs.length === 0) {
+          return 'Saat ini tidak ada PO aktif dengan prioritas Urgent.'
         }
-        break
+        return await generateNaturalResponse(
+          JSON.stringify(urgentPOs),
+          'User bertanya tentang PO yang statusnya "Urgent".',
+          prompt
+        )
       }
+
       case 'getNearingDeadline': {
         const todayDate = new Date()
         const nextWeek = new Date(todayDate.getTime() + 7 * 24 * 60 * 60 * 1000)
@@ -2274,59 +2519,65 @@ ATURAN KETAT:
           .sort(
             (a: any, b: any) => new Date(a.deadline || 0).getTime() - new Date(b.deadline || 0).getTime()
           )
-        if (nearingPOs.length > 0) {
-          const poDetails = nearingPOs
-            .map(
-              (po: any) =>
-                `- ${po.po_number || 'N/A'} (${po.project_name || 'N/A'}): ${formatDate(po.deadline)}`
-            )
-            .join('\n')
-          responseText = `Ada ${nearingPOs.length} PO aktif yang mendekati deadline (7 hari):\n${poDetails}`
-        } else {
-          responseText = 'Tidak ada PO aktif yang mendekati deadline dalam 7 hari ke depan.'
+
+        if (nearingPOs.length === 0) {
+          return 'Tidak ada PO aktif yang mendekati deadline dalam 7 hari ke depan.'
         }
-        break
+
+        // Format tanggal
+        const data = nearingPOs.map(po => ({ ...po, deadline: formatDate(po.deadline) }));
+
+        return await generateNaturalResponse(
+          JSON.stringify(data),
+          'User bertanya tentang PO yang mendekati deadline (7 hari ke depan).',
+          prompt
+        )
       }
+
       case 'getNewestPOs': {
         const sortedPOs = [...allPOs].sort(
           (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         )
         const newestPOs = sortedPOs.slice(0, 3)
-        const poDetails = newestPOs
-          .map(
-            (po: any) =>
-              `- ${po.po_number || 'N/A'} (${po.project_name || 'N/A'}), Tgl: ${formatDate(po.created_at)}`
-          )
-          .join('\n')
-        responseText = `Berikut adalah 3 PO terbaru yang masuk:\n${poDetails}`
-        break
+        // Format tanggal
+        const data = newestPOs.map(po => ({ ...po, created_at: formatDate(po.created_at) }));
+
+        return await generateNaturalResponse(
+          JSON.stringify(data),
+          'User bertanya tentang 3 PO terbaru.',
+          prompt
+        )
       }
+
       case 'getOldestPO': {
         const sortedPOs = [...allPOs].sort(
           (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         )
         const oldestPO = sortedPOs[0]
-        if (oldestPO) {
-          responseText = `PO terlama yang tercatat adalah:\n- Nomor PO: ${oldestPO.po_number || 'N/A'}\n- Customer: ${
-            oldestPO.project_name || 'N/A'
-          }\n- Tanggal Masuk: ${formatDate(oldestPO.created_at)}`
-        } else {
-          responseText = 'Tidak dapat menemukan data PO.'
+        if (!oldestPO) {
+          return 'Tidak dapat menemukan data PO.'
         }
-        break
+        // Format tanggal
+        const data = { ...oldestPO, created_at: formatDate(oldestPO.created_at) };
+
+        return await generateNaturalResponse(
+          JSON.stringify(data),
+          'User bertanya tentang PO terlama.',
+          prompt
+        )
       }
+
       case 'getPOsByDateRange': {
-        const { startDate, endDate } = aiDecision.param
-        if (!startDate || !endDate) {
-          responseText = 'Maaf, tidak mengerti rentang tanggal.'
-          break
+        if (!aiDecision.param || !aiDecision.param.startDate || !aiDecision.param.endDate) {
+          return 'Maaf, saya tidak mengerti rentang tanggal yang Anda maksud. Coba sebutkan tanggalnya dengan lebih jelas (contoh: "po tanggal 1 nov 2025" atau "po dari 1-10 nov 2025").'
         }
+        const { startDate, endDate } = aiDecision.param
 
         const dateRegex = /^\d{4}-\d{2}-\d{2}$/
         if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
-          responseText = 'Maaf, format tanggal yang diterima AI tidak valid. Seharusnya YYYY-MM-DD.'
-          break
+          return 'Maaf, format tanggal yang diterima AI tidak valid. Seharusnya YYYY-MM-DD.'
         }
+
         let start, end
         try {
           start = new Date(startDate).getTime()
@@ -2335,8 +2586,7 @@ ATURAN KETAT:
           end = end.getTime()
           if (isNaN(start) || isNaN(end)) throw new Error('Invalid date conversion')
         } catch (e) {
-          responseText = 'Maaf, terjadi kesalahan saat memproses rentang tanggal.'
-          break
+          return 'Maaf, terjadi kesalahan saat memproses rentang tanggal.'
         }
 
         const foundPOs = allPOs.filter((po: any) => {
@@ -2347,26 +2597,26 @@ ATURAN KETAT:
             return false
           }
         })
+
         const dateRangeStr =
           startDate === endDate
             ? formatDate(startDate)
             : `${formatDate(startDate)} s/d ${formatDate(endDate)}`
-        if (foundPOs.length > 0) {
-          const poDetails = foundPOs
-            .map(
-              (po: any) =>
-                `- ${po.po_number || 'N/A'} (${po.project_name || 'N/A'}), Tgl Masuk: ${formatDate(po.created_at)}`
-            )
-            .slice(0, 10)
-            .join('\n')
-          let response = `Saya menemukan ${foundPOs.length} PO untuk ${dateRangeStr}:\n${poDetails}`
-          if (foundPOs.length > 10) response += `\n...dan ${foundPOs.length - 10} lainnya.`
-          responseText = response
-        } else {
-          responseText = `Tidak ada PO ditemukan untuk ${dateRangeStr}.`
+
+        if (foundPOs.length === 0) {
+          return `Tidak ada PO ditemukan untuk ${dateRangeStr}.`
         }
-        break
+
+        // Format tanggal & batasi data
+        const data = foundPOs.slice(0, 10).map(po => ({ ...po, created_at: formatDate(po.created_at) }));
+
+        return await generateNaturalResponse(
+          JSON.stringify({ results: data, totalFound: foundPOs.length, dateRange: dateRangeStr }),
+          `User mencari PO dari ${dateRangeStr}.`,
+          prompt
+        )
       }
+
       case 'getPOByStatusCount': {
         const requestedStatus = aiDecision.param
         if (
@@ -2374,8 +2624,7 @@ ATURAN KETAT:
           (requestedStatus.toLowerCase() !== 'open' &&
             requestedStatus.toLowerCase() !== 'in progress')
         ) {
-          responseText = 'Mohon sebutkan status (Open atau In Progress).'
-          break
+          return 'Mohon sebutkan status (Open atau In Progress).'
         }
         const requestedStatusLower = requestedStatus.toLowerCase()
         const displayStatus = requestedStatusLower === 'open' ? 'Open' : 'In Progress'
@@ -2385,84 +2634,143 @@ ATURAN KETAT:
             po.status !== 'Completed' &&
             po.status !== 'Cancelled'
         ).length
-        responseText = `Ada ${count} PO dengan status "${displayStatus}".`
-        break
+
+        const data = { requestedStatus: displayStatus, count }
+
+        return await generateNaturalResponse(
+          JSON.stringify(data),
+          `User bertanya berapa jumlah PO dengan status "${displayStatus}".`,
+          prompt
+        )
       }
+
+      // --- ALAT STATIS (TIDAK PERLU PANGGILAN AI KE-2) ---
+
       case 'getApplicationHelp': {
         const topic = aiDecision.param?.topic?.toLowerCase() || ''
         if (topic.includes('buat po') || topic.includes('input po')) {
-          responseText =
+          return (
             "Untuk membuat PO baru:\n1. Klik tombol '+ Tambah PO Baru' di halaman 'Purchase Orders'.\n2. Isi detail PO seperti Nomor PO, Nama Customer, Tanggal Kirim.\n3. Tambahkan minimal satu item di tabel bawah (isi Produk, Ukuran, Qty, dll.).\n4. Klik 'Simpan PO Baru'."
-        } else if (topic.includes('update progress')) {
-          responseText =
+          )
+        } else if (topic.includes('update progress') || topic.includes('progress tracking')) {
+          return (
             "Untuk update progress PO:\n1. Buka halaman 'Progress'.\n2. Cari PO yang ingin diupdate.\n3. Klik tombol 'Update Progress' pada kartu PO tersebut.\n4. Pilih item yang ingin diupdate.\n5. Pilih 'Tahap Berikutnya', tambahkan catatan (opsional), dan unggah foto (opsional).\n6. Klik tombol 'Simpan Progress ke [Nama Tahap]'."
+          )
         } else if (topic.includes('revisi po')) {
-          responseText =
+          return (
             "Untuk merevisi PO yang sudah ada:\n1. Buka halaman 'Purchase Orders'.\n2. Cari PO yang ingin direvisi.\n3. Klik tombol 'Revisi' pada baris tabel PO tersebut.\n4. Form akan terisi data PO terakhir, ubah data header atau item sesuai kebutuhan.\n5. Jika ada foto referensi baru, unggah fotonya.\n6. Klik 'Simpan Revisi'. Anda akan diminta memasukkan nama perevisi."
+          )
         } else if (topic.includes('tambah produk')) {
-          responseText =
+          return (
             "Untuk menambah produk baru ke daftar master:\n1. Saat berada di form Input/Revisi PO, klik tombol '+ Tambah Master Produk' di atas tabel item.\n2. Akan muncul jendela pop-up.\n3. Isi detail produk baru (Nama Produk wajib diisi).\n4. Klik 'Simpan Produk'. Produk baru akan tersedia di daftar dropdown."
+          )
         } else {
-          responseText =
-            'Saya bisa membantu menjelaskan cara:\n- Membuat PO baru\n- Update progress PO\n- Revisi PO\n- Menambah produk master.\n\nFitur mana yang ingin Anda ketahui?'
+          return (
+            'Saya bisa membantu menjelaskan cara:\n' +
+            '- Membuat PO baru\n' +
+            '- Update progress (Progress Tracking)\n' +
+            '- Revisi PO\n' +
+            '- Menambah produk master.\n\n' +
+            'Fitur mana yang ingin Anda ketahui?'
+          )
         }
-        break
       }
-      case 'getTopSellingProductsChart': {
-        const completedPOs = allPOs.filter((p: any) => p.status === 'Completed')
-        if (completedPOs.length === 0) {
-          responseText = 'Belum ada data PO Selesai untuk membuat grafik.'
-          break
-        }
-        const salesData: { [key: string]: number } = {}
-        completedPOs
-          .flatMap((p: any) => p.items || [])
-          .forEach((item: any) => {
-            if (item.product_name)
-              salesData[item.product_name] =
-                (salesData[item.product_name] || 0) + Number(item.quantity || 0)
-          })
-        const chartData = Object.entries(salesData)
-          .map(([name, quantity]) => ({ name, Kuantitas: Number(quantity) }))
-          .sort((a: any, b: any) => b.Kuantitas - a.Kuantitas)
-          .slice(0, 5)
-        if (chartData.length === 0) {
-          responseText = 'Tidak dapat menemukan data penjualan produk untuk membuat grafik.'
-          break
-        }
-        const chartPayload = {
-          type: 'bar',
-          data: chartData,
-          dataKey: 'Kuantitas',
-          nameKey: 'name'
-        }
-        responseText = `Tentu, berikut adalah grafik 5 produk terlaris (berdasarkan kuantitas dari PO Selesai):\nCHART_JSON::${JSON.stringify(
-          chartPayload
-        )}`
-        break
-      }
+
       case 'help':
-        responseText =
-          'Anda bisa bertanya tentang:\n- Jumlah total PO (detail status aktif)\n- Produk terlaris/Customer terbesar (dari PO Selesai)\n- Status PO [nomor]\n- Detail PO [nomor/nama customer]\n- PO Urgent/Deadline Dekat\n- PO terbaru / terlama\n- PO per tanggal\n- Jumlah PO Open / In Progress\n- Cara pakai fitur'
-        break
-      case 'general': {
-        if (prompt.toLowerCase().includes('siapa')) {
-          responseText = 'Saya adalah Asisten AI Ubinkayu.'
-        } else if (prompt.toLowerCase().includes('terima kasih')) {
-          responseText = 'Sama-sama! Senang bisa membantu.'
-        } else {
-          responseText = `${timeOfDayGreeting} Ada yang bisa saya bantu?`
+        return (
+          'Anda bisa bertanya tentang:\n' +
+          '- Jumlah total PO (detail status aktif)\n' +
+          '- Produk terlaris / Customer terbesar / Marketing terbaik\n' +
+          '- Produk tren naik / Produk tidak laku / Distribusi jenis kayu\n' +
+          '- Status PO [nomor]\n' +
+          '- Detail PO [nomor/nama customer]\n' +
+          '- Cari PO berdasarkan produk atau jenis kayu\n' +
+          '- PO Urgent/Deadline Dekat\n' +
+          '- PO terbaru / terlama / PO per tanggal\n' +
+          '- Jumlah PO Open / In Progress\n' +
+          '- Cara pakai fitur (misal: "cara update progress")\n' +
+          '- Buat grafik (misal: "grafik top customer" atau "grafik bandingkan flooring dan papan")'
+        )
+
+      case 'createCustomChart': {
+        const param = aiDecision.param
+        console.log('[Electron AI - Groq Call 1] createCustomChart param:', param)
+
+        if (!param || !param.dataSource || !param.nameKey || !param.dataKey) {
+          return 'Maaf, saya tidak mengerti data apa yang harus dibuatkan grafik. (Missing dataSource/nameKey/dataKey).'
         }
-        break
+
+        const { dataSource, chartType, nameKey, dataKey, filters } = param
+        const rawData = analysisData[dataSource]
+
+        if (!rawData || !Array.isArray(rawData)) {
+          return `Maaf, sumber data '${dataSource}' tidak ditemukan atau bukan array.`
+        }
+
+        let processedData: any[] = []
+        let title = 'Grafik Kustom' // Ini hanya untuk log, tidak dikirim ke user
+
+        if (filters && Array.isArray(filters) && filters.length > 0) {
+          // 1. Mode Filter: Ambil hanya yang diminta user
+          const filterSet = new Set(filters.map((f: string) => f.toLowerCase()))
+          processedData = rawData.filter((item: any) =>
+            filterSet.has(String(item[nameKey]).toLowerCase())
+          )
+          title = `Grafik Perbandingan ${dataKey} untuk ${filters.join(' vs ')}`
+        } else {
+          // 2. Mode Default: Ambil Top 5 (atau 10 untuk pie)
+          const sliceCount = chartType === 'pie' ? 10 : 5
+          processedData = rawData.slice(0, sliceCount)
+          title = `Grafik Top ${sliceCount} ${dataSource} berdasarkan ${dataKey}`
+        }
+
+        if (processedData.length === 0) {
+          return `Tidak ada data yang cocok ditemukan di '${dataSource}' untuk dibuatkan grafik.`
+        }
+
+        // Format data agar konsisten untuk komponen Recharts
+        const chartData = processedData.map((item: any) => ({
+          name: item[nameKey] || 'N/A', // Sumbu X / Label
+          value: toNum(item[dataKey], 0) // Sumbu Y / Nilai
+        }))
+
+        const chartPayload = {
+          type: chartType || 'bar',
+          data: chartData,
+          dataKey: 'value', // <-- Standarisasi key
+          nameKey: 'name' // <-- Standarisasi key
+        }
+
+        console.log(`[Electron AI] ${title}`);
+
+        // Panggil AI Call 2 untuk memberikan teks pengantar yang bervariasi
+        return await generateNaturalResponse(
+          `CHART_JSON::${JSON.stringify(chartPayload)}`, // Kita "sembunyikan" JSON di dalam data
+          `User meminta untuk membuat '${chartType}' kustom. Judulnya adalah: ${title}.`,
+          prompt
+        )
       }
+
+      // --- ALAT UMUM (PANGGILAN AI KE-2) ---
+
+      case 'general': {
+        return await generateNaturalResponse(
+          JSON.stringify({ currentHour: new Date().getHours() }),
+          'User hanya menyapa (misal: "halo", "terima kasih", "siapa kamu?").',
+          prompt
+        )
+      }
+
       case 'unknown':
       default:
         console.warn('Menerima tool tidak dikenal dari AI:', aiDecision.tool)
-        responseText =
-          "Maaf, saya tidak yakin bagaimana harus merespons itu. Coba tanyakan 'bantuan'."
-        break
+        return await generateNaturalResponse(
+          JSON.stringify({}),
+          'Permintaan user tidak dapat dipahami atau tool tidak dikenal.',
+          prompt
+        )
     }
-    return responseText
+
   } catch (execError: any) {
     console.error('Error saat menjalankan alat:', execError)
     return `Maaf, terjadi kesalahan saat memproses jawaban: ${execError.message}`

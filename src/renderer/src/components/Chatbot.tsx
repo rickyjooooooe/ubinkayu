@@ -16,6 +16,13 @@ import {
 } from 'react-icons/lu'
 
 import {
+  HiOutlineSpeakerWave, // Ikon suara aktif
+  HiOutlineSpeakerXMark, // Ikon suara mati
+  HiOutlineArrowPath, // Ikon Reset
+  HiOutlineArrowLeft // Ikon Kembali
+} from 'react-icons/hi2' // Menggunakan Heroicons 2 (modern)
+
+import {
   BarChart,
   Bar,
   XAxis,
@@ -29,6 +36,8 @@ import {
 import { Card } from './Card'
 import { Button } from './Button'
 import './Chatbot.css'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 // BARU: Helper function untuk memformat waktu menjadi HH:MM
 const formatTime = (date: Date) => {
@@ -149,7 +158,7 @@ const Chatbot: React.FC<ChatbotProps> = ({
         {messages.map((msg, index) => {
           // --- Logika Baru Dimulai ---
           let messageText = msg.text
-          let chartPayload: any = null;
+          let chartPayload: any = null
 
           // Cek apakah ini pesan bot dan berisi payload chart
           if (msg.sender === 'bot' && msg.text.includes('CHART_JSON::')) {
@@ -166,13 +175,23 @@ const Chatbot: React.FC<ChatbotProps> = ({
 
           return (
             <div key={index} className={`message ${msg.sender}`}>
-              {/* Render Teks Pesan (teks pengantar atau teks utuh) */}
-              {messageText.split('\n').map((line, i) => (
-                <React.Fragment key={i}>
-                  {line}
-                  <br />
-                </React.Fragment>
-              ))}
+              {/* --- [PERBAIKAN RENDER MARKDOWN] --- */}
+              {/* Kita cek: Jika pengirimnya 'bot', render teksnya menggunakan
+                ReactMarkdown agar **bold** dan list berfungsi.
+                Jika pengirimnya 'user', render sebagai teks biasa.
+              */}
+              {msg.sender === 'bot' ? (
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{messageText}</ReactMarkdown>
+              ) : (
+                // Ini adalah logika lama Anda untuk pesan user (sudah benar)
+                messageText.split('\n').map((line, i) => (
+                  <React.Fragment key={i}>
+                    {line}
+                    <br />
+                  </React.Fragment>
+                ))
+              )}
+              {/* --- [AKHIR PERBAIKAN] --- */}
 
               {/* Render Timestamp (tetap ada) */}
               <div className="message-timestamp">{formatTime(msg.timestamp)}</div>
@@ -248,7 +267,7 @@ const Chatbot: React.FC<ChatbotProps> = ({
     </>
   )
 
-  // --- RENDER LOGIC BASED ON MODE PROP (Tidak ada perubahan di bawah ini) ---
+  // --- RENDER LOGIC BASED ON MODE PROP ---
   if (mode === 'page') {
     return (
       <div className="page-container ai-chat-page-container">
@@ -259,39 +278,51 @@ const Chatbot: React.FC<ChatbotProps> = ({
             </h1>
             <p>Tanyakan apapun tentang data Purchase Order Anda.</p>
           </div>
-          <div className="ai-chat-page-header-actions">
+
+          {/* --- [BLOK INI TELAH DIPERBAIKI] ---
+            Tombol-tombol ini sekarang terhubung ke 'props' yang benar:
+            - onClick={toggleSuara} -> onClick={onToggleTts}
+            - isSuaraAktif -> isTtsEnabled
+            - onClick={handleReset} -> onClick={onChatReset}
+            - onClick={handleKembali} -> onClick={onMinimize}
+          */}
+          <div className="flex items-center gap-2">
+            {' '}
+            {/* Anda mungkin perlu 'gap-2' atau 'gap-3' */}
+            {/* Tombol Suara */}
             <Button
-              variant="secondary"
               onClick={onToggleTts}
-              aria-label={isTtsEnabled ? 'Matikan Suara' : 'Nyalakan Suara'}
-              className="ai-chat-tts-btn" // Anda bisa tambahkan style khusus jika perlu
+              variant="secondary" // Asumsi 'secondary' adalah style abu-abu/netral
+              className="flex items-center gap-1.5" // Kita tetap perlu 'flex' untuk ikon
             >
-              {isTtsEnabled ? <LuVolume2 /> : <LuVolumeX />}
-              {/* Tampilkan teks berbeda berdasarkan state */}
-              <span>{isTtsEnabled ? 'Suara Aktif' : 'Suara Mati'}</span>
+              {isTtsEnabled ? (
+                <HiOutlineSpeakerWave className="h-4 w-4" />
+              ) : (
+                <HiOutlineSpeakerXMark className="h-4 w-4" />
+              )}
+              {/* Sembunyikan teks di HP jika perlu, atau biarkan saja */}
+              <span className="hidden sm:inline">
+                {isTtsEnabled ? 'Suara Aktif' : 'Suara Mati'}
+              </span>
             </Button>
-            <Button
-              variant="secondary"
-              onClick={onChatReset}
-              disabled={isProcessing}
-              aria-label="Reset Chat"
-              className="ai-chat-reset-btn"
-            >
-              <LuEraser />
-              <span>Reset</span>
+            {/* Tombol Reset */}
+            <Button onClick={onChatReset} variant="secondary" className="flex items-center gap-1.5">
+              <HiOutlineArrowPath className="h-4 w-4" />
+              <span className="hidden sm:inline">Reset</span>
             </Button>
+            {/* Tombol Kembali (diasumsikan sebagai 'minimize') */}
             {onMinimize && (
               <Button
-                variant="secondary"
                 onClick={onMinimize}
-                aria-label="Minimalkan Chat"
-                className="ai-chat-minimize-btn"
+                variant="secondary"
+                className="flex items-center gap-1.5"
               >
-                <LuChevronDown />
-                <span>Kembali</span>
+                <HiOutlineArrowLeft className="h-4 w-4" />
+                <span className="hidden sm:inline">Kembali</span>
               </Button>
             )}
           </div>
+          {/* --- [AKHIR BLOK PERBAIKAN] --- */}
         </div>
         <Card className="ai-chat-card">{ChatInterface}</Card>
       </div>
