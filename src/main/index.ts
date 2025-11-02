@@ -2148,6 +2148,10 @@ Hari ini adalah ${today}.
       5.  'filters' (Opsional): Array string jika user ingin memfilter data. (Contoh: ["kisi kisi", "pintu"]).
 
     - --- CONTOH ---
+
+    - User: "grafik" (jika tidak spesifik)
+    - JSON: {"tool": "createCustomChart", "param": {"dataSource": "topSellingProducts", "chartType": "bar", "nameKey": "name", "dataKey": "totalQuantity", "filters": null}}
+
     - User: "grafik produk terlaris"
     - JSON: {"tool": "createCustomChart", "param": {"dataSource": "topSellingProducts", "chartType": "bar", "nameKey": "name", "dataKey": "totalQuantity", "filters": null}}
 
@@ -2708,17 +2712,17 @@ ATURAN KETAT:
         }
 
         let processedData: any[] = []
-        let title = 'Grafik Kustom' // Ini hanya untuk log, tidak dikirim ke user
+        let title = 'Grafik Kustom' // (Hanya untuk log)
 
         if (filters && Array.isArray(filters) && filters.length > 0) {
-          // 1. Mode Filter: Ambil hanya yang diminta user
+          // 1. Mode Filter
           const filterSet = new Set(filters.map((f: string) => f.toLowerCase()))
           processedData = rawData.filter((item: any) =>
             filterSet.has(String(item[nameKey]).toLowerCase())
           )
           title = `Grafik Perbandingan ${dataKey} untuk ${filters.join(' vs ')}`
         } else {
-          // 2. Mode Default: Ambil Top 5 (atau 10 untuk pie)
+          // 2. Mode Default
           const sliceCount = chartType === 'pie' ? 10 : 5
           processedData = rawData.slice(0, sliceCount)
           title = `Grafik Top ${sliceCount} ${dataSource} berdasarkan ${dataKey}`
@@ -2728,27 +2732,25 @@ ATURAN KETAT:
           return `Tidak ada data yang cocok ditemukan di '${dataSource}' untuk dibuatkan grafik.`
         }
 
-        // Format data agar konsisten untuk komponen Recharts
+        // Format data
         const chartData = processedData.map((item: any) => ({
-          name: item[nameKey] || 'N/A', // Sumbu X / Label
-          value: toNum(item[dataKey], 0) // Sumbu Y / Nilai
+          name: item[nameKey] || 'N/A',
+          value: toNum(item[dataKey], 0)
         }))
 
         const chartPayload = {
           type: chartType || 'bar',
           data: chartData,
-          dataKey: 'value', // <-- Standarisasi key
-          nameKey: 'name' // <-- Standarisasi key
+          dataKey: 'value',
+          nameKey: 'name'
         }
 
         console.log(`[Electron AI] ${title}`);
 
-        // Panggil AI Call 2 untuk memberikan teks pengantar yang bervariasi
-        return await generateNaturalResponse(
-          `CHART_JSON::${JSON.stringify(chartPayload)}`, // Kita "sembunyikan" JSON di dalam data
-          `User meminta untuk membuat '${chartType}' kustom. Judulnya adalah: ${title}.`,
-          prompt
-        )
+        // --- [PERBAIKAN] ---
+        // Kirim CHART_JSON secara langsung. Jangan panggil AI Call 2.
+        const chartIntroText = `Tentu, berikut adalah grafik yang Anda minta:\n`;
+        return `${chartIntroText}CHART_JSON::${JSON.stringify(chartPayload)}`;
       }
 
       // --- ALAT UMUM (PANGGILAN AI KE-2) ---
