@@ -7,7 +7,6 @@ import {
   LuBot,
   LuX,
   LuMaximize2,
-  LuChevronDown,
   LuEraser,
   LuMic,
   LuMicOff,

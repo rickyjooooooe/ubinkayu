@@ -66,13 +66,13 @@ const AiChartComponent: React.FC<AiChartComponentProps> = ({ payload }) => {
               cy="50%"
               labelLine={false}
               // Tampilkan label nama dan persentase
-              label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+              label={({ name, percent }: any) => `${name} (${(percent * 100).toFixed(0)}%)`}
               outerRadius={80} // Sesuaikan ukuran
               fill="#8884d8"
               dataKey={dataKey}
               nameKey={nameKey}
             >
-              {data.map((entry, index) => (
+              {data.map((_, index) => (
                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
               ))}
             </Pie>

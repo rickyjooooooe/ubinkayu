@@ -18,6 +18,38 @@ import stream from 'node:stream'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require('dotenv').config()
 
+interface User {
+  name: string
+  role?: string
+}
+
+function filterPOsByMarketing<T>( // Hapus batasan <T>
+  poList: T[],
+  user: User | null
+): T[] {
+  if (!user || user.role !== 'marketing') {
+    return poList;
+  }
+
+  const marketingName = user.name.toLowerCase();
+  console.log(`[Filter] Menerapkan filter Marketing untuk: ${user.name}`);
+
+  return poList.filter(po => {
+    // --- [PERBAIKAN] ---
+    // Cek apakah 'po' adalah object GoogleSpreadsheetRow (punya .get())
+    // atau object biasa (punya .acc_marketing)
+    let poMarketing = '';
+    if (typeof (po as any).get === 'function') {
+      poMarketing = (po as any).get('acc_marketing');
+    } else {
+      poMarketing = (po as any).acc_marketing;
+    }
+    // --- [AKHIR PERBAIKAN] ---
+
+    return poMarketing?.toLowerCase() === marketingName;
+  });
+}
+
 // =================================================================
 // LANGKAH 2: KONSTANTA & HELPER DARI (sheet.js)
 // =================================================================
@@ -564,7 +596,7 @@ async function handleLoginUser(loginData: any) {
   }
 }
 
-async function listPOs() {
+async function listPOs(user: User | null) {
   try {
     const doc = await openDoc()
     const poSheet = await getSheet(doc, 'purchase_orders')
@@ -672,7 +704,8 @@ async function listPOs() {
       }
     })
 
-    return result
+    const filteredResult = filterPOsByMarketing(result, user);
+    return filteredResult;
   } catch (err: any) {
     console.error('❌ listPOs error:', err.message)
     return []
@@ -1293,7 +1326,7 @@ async function updateItemProgress(data: any) {
   }
 }
 
-async function getActivePOsWithProgress() {
+async function getActivePOsWithProgress(user: User | null) {
   try {
     const doc = await openDoc()
     const [poSheet, itemSheet, progressSheet] = await Promise.all([
@@ -1372,11 +1405,12 @@ async function getActivePOsWithProgress() {
       return { ...poObject, progress: Math.round(poProgress), status: finalStatus }
     })
 
-    const activePOs = allPOsWithCalculatedStatus.filter(
+    const allActivePOs = allPOsWithCalculatedStatus.filter(
       (po: any) => po.status !== 'Completed' && po.status !== 'Cancelled'
     )
 
-    return activePOs
+    const filteredActivePOs = filterPOsByMarketing(allActivePOs, user);
+    return filteredActivePOs;
   } catch (err: any) {
     console.error('❌ Gagal get active POs with progress:', err.message)
     return []
@@ -1491,7 +1525,7 @@ async function updateStageDeadline(data: any) {
   }
 }
 
-async function getRecentProgressUpdates(limit = 10) {
+async function getRecentProgressUpdates(user: User | null, limit = 10) {
   try {
     const doc = await openDoc()
     const progressSheet = await getSheet(doc, 'progress_tracking')
@@ -1504,9 +1538,11 @@ async function getRecentProgressUpdates(limit = 10) {
       poSheet.getRows()
     ])
 
+    const filteredPoRows = filterPOsByMarketing(poRows, user);
+
     const itemMap = new Map(itemRows.map((r: any) => [r.get('id'), r.toObject()]))
     const poMap = new Map()
-    poRows.forEach((r: any) => {
+    filteredPoRows.forEach((r: any) => {
       const poId = r.get('id')
       const rev = toNum(r.get('revision_number'))
       if (!poMap.has(poId) || rev > (poMap.get(poId) as any).revision_number) {
@@ -1543,7 +1579,7 @@ async function getRecentProgressUpdates(limit = 10) {
   }
 }
 
-async function getAttentionData() {
+async function getAttentionData(user: User | null) {
   try {
     const doc = await openDoc()
     const poSheet = await getSheet(doc, 'purchase_orders')
@@ -1556,8 +1592,10 @@ async function getAttentionData() {
       progressSheet.getRows()
     ])
 
+    const filteredPoRows = filterPOsByMarketing(poRows, user);
+
     const byId = new Map()
-    poRows.forEach((r: any) => {
+    filteredPoRows.forEach((r: any) => {
       const id = r.get('id')
       const rev = toNum(r.get('revision_number'))
       if (!byId.has(id) || rev > (byId.get(id) as any).rev) {
@@ -1663,7 +1701,7 @@ const getYearMonth = (dateString: any) => {
   return date ? date.substring(0, 7) : null // Ambil YYYY-MM
 }
 
-async function getProductSalesAnalysis() {
+async function getProductSalesAnalysis(user: User | null) {
   try {
     const doc = await openDoc()
     const [itemSheet, poSheet, productSheet] = await Promise.all([
@@ -1678,8 +1716,10 @@ async function getProductSalesAnalysis() {
     ])
 
     const itemRows = rawItemRows.map((r: any) => r.toObject())
-    const poRows = rawPoRows.map((r: any) => r.toObject())
+    const poRowsRaw = rawPoRows.map((r: any) => r.toObject())
     const productRows = rawProductRows.map((r: any) => r.toObject())
+
+    const poRows = filterPOsByMarketing(poRowsRaw, user)
 
     const latestPoMap = poRows.reduce((map: any, po: any) => {
       const poId = po.id
@@ -1869,7 +1909,7 @@ async function getProductSalesAnalysis() {
   }
 }
 
-async function getSalesItemData() {
+async function getSalesItemData(user: User | null) {
   try {
     const doc = await openDoc()
     const itemSheet = await getSheet(doc, 'purchase_order_items')
@@ -1877,8 +1917,10 @@ async function getSalesItemData() {
 
     const [itemRows, poRows] = await Promise.all([itemSheet.getRows(), poSheet.getRows()])
 
+    const filteredPoRows = filterPOsByMarketing(poRows, user);
+
     const poMap = new Map()
-    poRows.forEach((r: any) => {
+    filteredPoRows.forEach((r: any) => {
       const poId = r.get('id')
       const rev = toNum(r.get('revision_number'))
       if (!poMap.has(poId) || rev > (poMap.get(poId) as any).revision_number) {
@@ -1933,9 +1975,10 @@ async function addNewProduct(productData: any) {
  * berdasarkan data yang sudah diambil.
  */
 async function generateNaturalResponse(
-  dataContext: string, // Data mentah dalam format JSON string
-  userRequestDescription: string, // Deskripsi permintaan user (misal: "User bertanya soal produk terlaris")
-  originalPrompt: string // Prompt asli dari user
+  dataContext: string,
+  userRequestDescription: string,
+  originalPrompt: string,
+  user: User | null
 ): Promise<string> {
 
   const groqToken = process.env.GROQ_API_KEY
@@ -1951,7 +1994,8 @@ Tugas Anda adalah menjawab pertanyaan user berdasarkan data yang saya berikan.
 JANGAN mengembalikan JSON. Jawablah dalam Bahasa Indonesia yang alami, ramah, dan bervariasi.
 Anda boleh memberikan sedikit insight (wawasan) dari data jika terlihat jelas, tapi jangan berlebihan.
 Selalu gunakan **format markdown** (seperti bold atau list) untuk membuat jawaban mudah dibaca.
-JADIKAN JUDUL UTAMA JAWABAN ANDA (jika ada) **bold** (contoh: "**Berikut adalah 5 Produk Terlaris**").
+
+PENTING: Pengguna yang sedang berbicara dengan Anda bernama ${user?.name?.split(' ')[0] || 'Tamu'} (Role: ${user?.role || 'N/A'}). Sapa mereka dengan nama depannya jika relevan, terutama saat menyapa.
 
 DATA KONTEKS (dalam format JSON):
 ${dataContext}
@@ -2013,31 +2057,36 @@ Sekarang, tuliskan jawaban Anda untuk user.`
 // LANGKAH 3: GANTI FUNGSI 'handleGroqChat' LAMA ANDA DENGAN INI
 // =================================================================
 
-async function handleGroqChat(prompt: string) {
+async function handleGroqChat(prompt: string, user: User | null) {
   // 1. AMBIL KONTEKS DATA PO & ANALISIS
   let allPOs: any[]
   let analysisData: any // <-- [BARU]
 
   try {
-    allPOs = await listPOs()
+    allPOs = await listPOs(user)
     if (!Array.isArray(allPOs)) {
       console.error('listPOs did not return an array.')
       allPOs = []
     }
 
     // [BARU] Ambil data analisis yang sudah jadi
-    analysisData = await getProductSalesAnalysis()
+    analysisData = await getProductSalesAnalysis(user)
   } catch (e: any) {
     console.error('Gagal mengambil data PO atau Analisis untuk konteks AI:', e.message)
     return 'Maaf, saya gagal mengambil data PO/Analisis terbaru untuk menjawab pertanyaan Anda.'
   }
 
   // 2. SIAPKAN SAPAAN & SYSTEM PROMPT
-  const now = new Date()
   const today = new Date().toISOString().split('T')[0]
 
   const systemPrompt = `Anda adalah Asisten ERP Ubinkayu. Tugas Anda adalah mengubah pertanyaan pengguna menjadi JSON 'perintah' yang valid. HANYA KEMBALIKAN JSON.
 Hari ini adalah ${today}.
+
+--- INFORMASI PENGGUNA SAAT INI ---
+Nama: ${user?.name || 'Tamu'}
+Role: ${user?.role || 'Tidak Dikenal'}
+Panggil user dengan nama depannya (${user?.name?.split(' ')[0] || 'Tamu'}).
+---
 
 --- ATURAN PRIORITAS ---
 1. Jika user menyebut nomor PO, nama customer, atau revisi, Anda HARUS menggunakan "getPOInfo".
@@ -2120,13 +2169,13 @@ Hari ini adalah ${today}.
     - JSON: {"tool": "getPOByStatusCount", "param": "STATUS_DIMINTA"}
 
 // --- ALAT BANTUAN & GRAFIK ---
-16. "getApplicationHelp": (Untuk pertanyaan 'cara pakai' aplikasi).
-    - Keywords: "cara buat po", "panduan aplikasi", "cara update progress", "cara revisi po", "cara tambah produk", "menambah produk master".
-    - AI HARUS mengekstrak 'topic' dari kata kunci.
+16. "getApplicationHelp": (Untuk pertanyaan 'cara pakai' atau 'hak akses').
+    - Keywords: "cara buat po", "panduan aplikasi", "apa yang bisa dilakukan admin", "role manager", "hak akses marketing", "peran orang pabrik".
+    - AI HARUS mengekstrak 'topic' dari kata kunci (misal: "buat po", "admin", "manager", "marketing", "orang pabrik").
     - Contoh 1: "gimana cara input po baru?" -> "topic": "buat po".
-    - Contoh 2: "panduan untuk revisi" -> "topic": "revisi po".
-    - Contoh 3: "cara menambah produk master" -> "topic": "tambah produk".
-    - JSON: {"tool": "getApplicationHelp", "param": {"topic": "NAMA_FITUR_DIMINTA"}}
+    - Contoh 2: "role manager bisa apa?" -> "topic": "manager".
+    - Contoh 3: "apa hak akses orang pabrik" -> "topic": "orang pabrik".
+    - JSON: {"tool": "getApplicationHelp", "param": {"topic": "NAMA_FITUR_ATAU_ROLE"}}
 
 17. "help": (Untuk pertanyaan 'bantuan' atau 'perintah').
     - Keywords: "bantuan", "help".
@@ -2166,6 +2215,10 @@ Hari ini adalah ${today}.
 
     - User: "grafik marketing berdasarkan jumlah PO"
     - JSON: {"tool": "createCustomChart", "param": {"dataSource": "salesByMarketing", "chartType": "bar", "nameKey": "name", "dataKey": "poCount", "filters": null}}
+
+20. "getUserInfo": (Untuk pertanyaan 'siapa saya').
+    - Keywords: "siapa saya", "role saya apa", "info akun saya", "kamu tahu nama saya?".
+    - JSON: {"tool": "getUserInfo"}
 
 ATURAN KETAT:
 - JANGAN menjawab pertanyaan. HANYA KEMBALIKAN JSON.
@@ -2289,7 +2342,8 @@ ATURAN KETAT:
         return await generateNaturalResponse(
           JSON.stringify(data),
           'User bertanya tentang 5 produk terlaris.',
-          prompt
+          prompt,
+          user
         )
       }
 
@@ -2301,7 +2355,8 @@ ATURAN KETAT:
         return await generateNaturalResponse(
           JSON.stringify(data),
           'User bertanya tentang 5 customer teratas berdasarkan volume.',
-          prompt
+          prompt,
+          user
         )
       }
 
@@ -2313,7 +2368,8 @@ ATURAN KETAT:
         return await generateNaturalResponse(
           JSON.stringify(data),
           'User bertanya tentang 5 performa marketing teratas.',
-          prompt
+          prompt,
+          user
         )
       }
 
@@ -2325,7 +2381,8 @@ ATURAN KETAT:
         return await generateNaturalResponse(
           JSON.stringify(data),
           'User bertanya tentang 5 distribusi jenis kayu teratas.',
-          prompt
+          prompt,
+          user
         )
       }
 
@@ -2337,7 +2394,8 @@ ATURAN KETAT:
         return await generateNaturalResponse(
           JSON.stringify(data),
           'User bertanya tentang produk yang sedang tren naik dan meminta rekomendasi stok.',
-          prompt
+          prompt,
+          user
         )
       }
 
@@ -2349,7 +2407,8 @@ ATURAN KETAT:
         return await generateNaturalResponse(
           JSON.stringify(data),
           'User bertanya tentang produk yang tidak laku (slow moving).',
-          prompt
+          prompt,
+          user
         )
       }
 
@@ -2378,7 +2437,8 @@ ATURAN KETAT:
         return await generateNaturalResponse(
           JSON.stringify(data),
           'User bertanya tentang jumlah total PO dan rincian statusnya.',
-          prompt
+          prompt,
+          user
         )
       }
 
@@ -2454,7 +2514,8 @@ ATURAN KETAT:
         return await generateNaturalResponse(
           JSON.stringify(data),
           `User bertanya tentang PO ${poNumber || customerName} (Rev ${revNum}) dengan niat "${intent}". ${feedback}`,
-          prompt
+          prompt,
+          user
         )
       }
 
@@ -2501,7 +2562,8 @@ ATURAN KETAT:
         return await generateNaturalResponse(
           JSON.stringify({ results: data, totalFound: results.length, query: queryLower, searchType }),
           `User mencari PO berdasarkan ${searchType} "${queryLower}".`,
-          prompt
+          prompt,
+          user
         )
       }
 
@@ -2515,7 +2577,8 @@ ATURAN KETAT:
         return await generateNaturalResponse(
           JSON.stringify(urgentPOs),
           'User bertanya tentang PO yang statusnya "Urgent".',
-          prompt
+          prompt,
+          user
         )
       }
 
@@ -2550,7 +2613,8 @@ ATURAN KETAT:
         return await generateNaturalResponse(
           JSON.stringify(data),
           'User bertanya tentang PO yang mendekati deadline (7 hari ke depan).',
-          prompt
+          prompt,
+          user
         )
       }
 
@@ -2565,7 +2629,8 @@ ATURAN KETAT:
         return await generateNaturalResponse(
           JSON.stringify(data),
           'User bertanya tentang 3 PO terbaru.',
-          prompt
+          prompt,
+          user
         )
       }
 
@@ -2583,7 +2648,8 @@ ATURAN KETAT:
         return await generateNaturalResponse(
           JSON.stringify(data),
           'User bertanya tentang PO terlama.',
-          prompt
+          prompt,
+          user
         )
       }
 
@@ -2633,7 +2699,8 @@ ATURAN KETAT:
         return await generateNaturalResponse(
           JSON.stringify({ results: data, totalFound: foundPOs.length, dateRange: dateRangeStr }),
           `User mencari PO dari ${dateRangeStr}.`,
-          prompt
+          prompt,
+          user
         )
       }
 
@@ -2660,37 +2727,158 @@ ATURAN KETAT:
         return await generateNaturalResponse(
           JSON.stringify(data),
           `User bertanya berapa jumlah PO dengan status "${displayStatus}".`,
-          prompt
+          prompt,
+          user
         )
       }
 
       // --- ALAT STATIS (TIDAK PERLU PANGGILAN AI KE-2) ---
+      case 'getUserInfo': {
+        if (!user) {
+          return 'Maaf, saya tidak tahu siapa Anda karena Anda tidak login.';
+        }
+        const dataContext = {
+          nama: user.name,
+          role: user.role,
+          info: `Anda login sebagai ${user.name} dengan peran ${user.role}.`
+        };
+        return await generateNaturalResponse(
+          JSON.stringify(dataContext),
+          'User bertanya tentang info akun dan role mereka saat ini.',
+          prompt,
+          user // <-- Tambahkan user
+        );
+      }
 
       case 'getApplicationHelp': {
         const topic = aiDecision.param?.topic?.toLowerCase() || ''
-        if (topic.includes('buat po') || topic.includes('input po')) {
-          return (
-            "Untuk membuat PO baru:\n1. Klik tombol '+ Tambah PO Baru' di halaman 'Purchase Orders'.\n2. Isi detail PO seperti Nomor PO, Nama Customer, Tanggal Kirim.\n3. Tambahkan minimal satu item di tabel bawah (isi Produk, Ukuran, Qty, dll.).\n4. Klik 'Simpan PO Baru'."
-          )
-        } else if (topic.includes('update progress') || topic.includes('progress tracking')) {
-          return (
-            "Untuk update progress PO:\n1. Buka halaman 'Progress'.\n2. Cari PO yang ingin diupdate.\n3. Klik tombol 'Update Progress' pada kartu PO tersebut.\n4. Pilih item yang ingin diupdate.\n5. Pilih 'Tahap Berikutnya', tambahkan catatan (opsional), dan unggah foto (opsional).\n6. Klik tombol 'Simpan Progress ke [Nama Tahap]'."
-          )
-        } else if (topic.includes('revisi po')) {
-          return (
-            "Untuk merevisi PO yang sudah ada:\n1. Buka halaman 'Purchase Orders'.\n2. Cari PO yang ingin direvisi.\n3. Klik tombol 'Revisi' pada baris tabel PO tersebut.\n4. Form akan terisi data PO terakhir, ubah data header atau item sesuai kebutuhan.\n5. Jika ada foto referensi baru, unggah fotonya.\n6. Klik 'Simpan Revisi'. Anda akan diminta memasukkan nama perevisi."
-          )
-        } else if (topic.includes('tambah produk')) {
+        const userRole = user?.role?.toLowerCase() || 'tidak dikenal' // Ambil role user
+        const userName = user?.name?.split(' ')[0] || 'Tamu' // Ambil nama depan user
+
+        let dataContext = {} // Data untuk AI Call 2
+        let userRequest = '' // Deskripsi untuk AI Call 2
+
+        // --- [LOGIKA BARU] Cek Fitur DULU, LALU Cek Role di DALAMNYA ---
+
+        if (topic.includes('buat po') || topic.includes('input po') || topic.includes('revisi po')) {
+          // Cek apakah user boleh melakukan ini (manager/admin)
+          if (userRole === 'manager' || userRole === 'admin') {
+            // Ya, mereka boleh. Berikan instruksinya.
+            return (
+              `Tentu, ${userName}! Sebagai **${userRole}**, Anda bisa membuat atau merevisi PO:\n` +
+              "1. Buka halaman 'Purchase Orders'.\n" +
+              "2. Klik tombol '+ Tambah PO Baru' (untuk PO baru) atau 'Revisi' (untuk PO lama).\n" +
+              "3. Isi semua detail dan tambahkan item.\n" +
+              "4. Klik 'Simpan'."
+            )
+          } else {
+            // Tidak, mereka tidak boleh. Beri tahu mereka.
+            return (
+              `Maaf, ${userName}, peran Anda sebagai **${userRole}** tidak memiliki hak akses untuk membuat atau merevisi PO. ` +
+              "Fitur ini hanya untuk 'manager' dan 'admin'."
+            )
+          }
+        }
+
+        else if (topic.includes('update progress') || topic.includes('progress tracking')) {
+          // Cek apakah user boleh melakukan ini (manager/orang pabrik)
+          if (userRole === 'manager' || userRole === 'orang pabrik') {
+            // Ya, mereka boleh.
+            return (
+              `Ya, ${userName}! Sebagai **${userRole}**, Anda bisa mengupdate progress:\n` +
+              "1. Buka halaman 'Progress'.\n" +
+              "2. Cari PO yang ingin diupdate dan klik 'Update Progress'.\n" +
+              "3. Pilih item, tahap, dan isi catatan/foto.\n" +
+              "4. Klik 'Simpan Progress'."
+            )
+          } else {
+            // Tidak, mereka tidak boleh.
+            return (
+              `Maaf, ${userName}, peran Anda sebagai **${userRole}** tidak memiliki hak akses untuk mengupdate progress. ` +
+              "Fitur ini hanya untuk 'manager' dan 'orang pabrik'."
+            )
+          }
+        }
+
+        // --- [LOGIKA LAMA] Cek Pertanyaan Spesifik Role ---
+        // (Ini masih diperlukan jika user bertanya "apa hak akses admin?")
+
+        else if (topic.includes('manager')) {
+          dataContext = {
+            role: "Manager",
+            izin: "Akses Penuh (Bisa Semuanya)",
+            navigasi: ["Dashboard", "PO", "Progress", "Analisis", "AI Chat"],
+            aksi_po: ["Membuat PO Baru", "Revisi PO", "Hapus PO", "Update Progress", "Lihat Detail"]
+          }
+          userRequest = "User bertanya tentang hak akses (role) Manager."
+        }
+        else if (topic.includes('admin')) {
+          dataContext = {
+            role: "Admin",
+            izin: "Input & Manajemen Data PO",
+            navigasi: ["Dashboard", "PO", "Analisis", "AI Chat"],
+            aksi_po: ["Membuat PO Baru", "Revisi PO", "Hapus PO", "Lihat Detail"],
+            larangan: ["Tidak bisa mengakses halaman 'Progress'", "Tidak bisa 'Update Progress'"]
+          }
+          userRequest = "User bertanya tentang hak akses (role) Admin."
+        }
+        else if (topic.includes('orang pabrik') || topic.includes('pabrik')) {
+          dataContext = {
+            role: "Orang Pabrik",
+            izin: "Hanya Update Progress Produksi",
+            navigasi: ["Dashboard", "PO", "Progress", "Analisis", "AI Chat"],
+            aksi_po: ["Update Progress", "Lihat Detail"],
+            larangan: ["Tidak bisa 'Membuat PO Baru'", "Tidak bisa 'Revisi PO'", "Tidak bisa 'Hapus PO'"]
+          }
+          userRequest = "User bertanya tentang hak akses (role) Orang Pabrik."
+        }
+        else if (topic.includes('marketing')) {
+          dataContext = {
+            role: "Marketing",
+            izin: "Melihat Data PO (Hanya Milik Sendiri)", // <-- Diperbarui
+            navigasi: ["Dashboard", "PO", "Analisis", "AI Chat"],
+            aksi_po: ["Lihat Detail"],
+            larangan: [
+              "Tidak bisa mengakses halaman 'Progress'",
+              "Tidak bisa 'Membuat PO Baru'",
+              "Tidak bisa 'Revisi PO'",
+              "Tidak bisa 'Hapus PO'",
+              "Tidak bisa 'Update Progress'"
+            ],
+            // --- [INI PENGETAHUAN BARUNYA] ---
+            fitur_kunci: "Keamanan Data: Data PO, Analisis, dan AI Chat secara otomatis difilter untuk HANYA menampilkan data di mana nama Anda (diambil dari kolom 'name' di sheet user) terdaftar sebagai 'acc_marketing' pada PO tersebut. Anda tidak bisa melihat PO milik marketing lain."
+          };
+          // --- [AKHIR PENGETAHUAN BARU] ---
+          userRequest = "User bertanya tentang hak akses (role) Marketing, termasuk batasan data yang bisa mereka lihat."; // <-- Diperbarui
+        }
+
+        // --- Bantuan Fitur Generik (yang tidak butuh role) ---
+        else if (topic.includes('tambah produk')) {
           return (
             "Untuk menambah produk baru ke daftar master:\n1. Saat berada di form Input/Revisi PO, klik tombol '+ Tambah Master Produk' di atas tabel item.\n2. Akan muncul jendela pop-up.\n3. Isi detail produk baru (Nama Produk wajib diisi).\n4. Klik 'Simpan Produk'. Produk baru akan tersedia di daftar dropdown."
           )
-        } else {
+        }
+
+        // --- [BARU] Logika Panggilan AI ke-2 ---
+        // Jika userRequest terisi (berarti ini pertanyaan role), panggil AI ke-2
+        if (userRequest) {
+          return await generateNaturalResponse(
+            JSON.stringify(dataContext),
+            userRequest,
+            prompt,
+            user // <-- Jangan lupa 'user'
+          )
+        }
+
+        // --- Fallback (Jika 'topic' tidak dikenal) ---
+        else {
           return (
             'Saya bisa membantu menjelaskan cara:\n' +
             '- Membuat PO baru\n' +
             '- Update progress (Progress Tracking)\n' +
             '- Revisi PO\n' +
-            '- Menambah produk master.\n\n' +
+            '- Menambah produk master\n' +
+            '- Hak akses (misal: "role manager" atau "apa yang bisa dilakukan admin")\n\n' + // <-- Tambahkan petunjuk baru
             'Fitur mana yang ingin Anda ketahui?'
           )
         }
@@ -2775,7 +2963,8 @@ ATURAN KETAT:
         return await generateNaturalResponse(
           JSON.stringify({ currentHour: new Date().getHours() }),
           'User hanya menyapa (misal: "halo", "terima kasih", "siapa kamu?").',
-          prompt
+          prompt,
+          user
         )
       }
 
@@ -2785,7 +2974,8 @@ ATURAN KETAT:
         return await generateNaturalResponse(
           JSON.stringify({}),
           'Permintaan user tidak dapat dipahami atau tool tidak dikenal.',
-          prompt
+          prompt,
+          user
         )
     }
 
@@ -2807,7 +2997,7 @@ if (process.platform === 'win32') {
 let win: BrowserWindow
 
 async function createWindow() {
-  const win = new BrowserWindow({
+  win = new BrowserWindow({
     width: 1200,
     height: 800,
     show: false, // <-- [PERBAIKAN 1] Sembunyikan jendela saat dibuat
@@ -2830,35 +3020,17 @@ async function createWindow() {
   }
 }
 
-async function loadMainWindow() {
-  // 1. Lakukan tugas berat (koneksi sheet, dll)
-  try {
-    await testSheetConnection()
-    console.log('Koneksi dan setup awal selesai.')
-  } catch (e) {
-    console.error('Gagal setup awal:', e)
-  }
-
-  // 2. Ganti jendela ke aplikasi React utama
-  if (process.env.VITE_DEV_SERVER_URL) {
-    await win.loadURL(process.env.VITE_DEV_SERVER_URL)
-    win.webContents.openDevTools()
-  } else {
-    await win.loadFile(path.join(__dirname, '../renderer/index.html'))
-  }
-}
-
 app.whenReady().then(async () => {
   testSheetConnection()
 
   // --- IPC Handlers ---
   ipcMain.handle('ping', () => 'pong')
-  ipcMain.handle('po:list', async () => {
-    const data = await listPOs()
-    return JSON.parse(JSON.stringify(data))
+  ipcMain.handle('po:list', async (_event, user) => {
+    const data = await listPOs(user); // Kirim 'user'
+    return JSON.parse(JSON.stringify(data));
   })
   ipcMain.handle('login-user', async (_event, loginData) => {
-    return await handleLoginUser(loginData)
+    return await handleLoginUser(loginData);
   })
   ipcMain.handle('po:save', async (_event, data) => saveNewPO(data))
   ipcMain.handle('po:delete', async (_event, poId) => deletePO(poId))
@@ -2891,13 +3063,13 @@ app.whenReady().then(async () => {
     return result.filePaths[0]
   })
 
-  ipcMain.handle('progress:getActivePOsWithProgress', () => getActivePOsWithProgress())
+  ipcMain.handle('progress:getActivePOsWithProgress', (_event, user) => getActivePOsWithProgress(user))
   ipcMain.handle('progress:getPOItemsWithDetails', (_event, poId) => getPOItemsWithDetails(poId))
   ipcMain.handle('progress:updateItem', (_event, data) => updateItemProgress(data))
-  ipcMain.handle('progress:getRecentProgressUpdates', () => getRecentProgressUpdates())
-  ipcMain.handle('progress:getAttentionData', () => getAttentionData())
-  ipcMain.handle('analysis:getProductSales', () => getProductSalesAnalysis())
-  ipcMain.handle('analysis:getSalesItemData', () => getSalesItemData())
+  ipcMain.handle('progress:getRecentProgressUpdates', (_event, user) => getRecentProgressUpdates(user))
+  ipcMain.handle('progress:getAttentionData', (_event, user) => getAttentionData(user))
+  ipcMain.handle('analysis:getProductSales', (_event, user) => getProductSalesAnalysis(user))
+  ipcMain.handle('analysis:getSalesItemData', (_event, user) => getSalesItemData(user))
   ipcMain.handle('app:read-file-base64', async (_event, filePath) => {
     try {
       const buffer = await fs.promises.readFile(filePath)
@@ -2911,8 +3083,8 @@ app.whenReady().then(async () => {
   ipcMain.handle('product:add', (_event, productData) => addNewProduct(productData))
   ipcMain.handle('progress:updateDeadline', (_event, data) => updateStageDeadline(data))
 
-  ipcMain.handle('ai:ollamaChat', async (_event, prompt) => {
-    return await handleGroqChat(prompt)
+  ipcMain.handle('ai:ollamaChat', async (_event, prompt, user) => {
+    return await handleGroqChat(prompt, user)
   })
 
   createWindow()

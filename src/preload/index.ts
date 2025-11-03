@@ -15,7 +15,7 @@ const api = {
 
   // --- Fungsi CRUD untuk Purchase Order (PO) ---
   saveNewPO: (data) => ipcRenderer.invoke('po:save', data),
-  listPOs: () => ipcRenderer.invoke('po:list'),
+  listPOs: (user) => ipcRenderer.invoke('po:list', user),
   updatePO: (data) => ipcRenderer.invoke('po:update', data),
   deletePO: (poId) => ipcRenderer.invoke('po:delete', poId),
   listPOItems: (poId) => ipcRenderer.invoke('po:listItems', poId),
@@ -30,19 +30,19 @@ const api = {
   openExternalLink: (url) => ipcRenderer.invoke('app:open-external-link', url),
 
   // --- Fungsi untuk Progress, Analisis & Lainnya ---
-  getActivePOsWithProgress: () => ipcRenderer.invoke('progress:getActivePOsWithProgress'), // <-- PERBAIKAN 1
+  getActivePOsWithProgress: (user) => ipcRenderer.invoke('progress:getActivePOsWithProgress', user), // <-- PERBAIKAN 1
   getPOItemsWithDetails: (poId) => ipcRenderer.invoke('progress:getPOItemsWithDetails', poId), // <-- PERBAIKAN 2
   updateItemProgress: (data) => ipcRenderer.invoke('progress:updateItem', data),
-  getRecentProgressUpdates: () => ipcRenderer.invoke('progress:getRecentProgressUpdates'), // <-- PERBAIKAN 3
-  getAttentionData: () => ipcRenderer.invoke('progress:getAttentionData'),
+  getRecentProgressUpdates: (user) => ipcRenderer.invoke('progress:getRecentProgressUpdates', user), // <-- PERBAIKAN 3
+  getAttentionData: (user) => ipcRenderer.invoke('progress:getAttentionData', user),
   updateStageDeadline: (data) => ipcRenderer.invoke('progress:updateDeadline', data),
-  getProductSalesAnalysis: () => ipcRenderer.invoke('analysis:getProductSales'),
-  getSalesItemData: () => ipcRenderer.invoke('analysis:getSalesItemData'),
+  getProductSalesAnalysis: (user) => ipcRenderer.invoke('analysis:getProductSales', user),
+  getSalesItemData: (user) => ipcRenderer.invoke('analysis:getSalesItemData', user),
 
   // --- Fungsi untuk File ---
   openFileDialog: () => ipcRenderer.invoke('app:open-file-dialog'),
   readFileAsBase64: (filePath) => ipcRenderer.invoke('app:read-file-base64', filePath),
-  ollamaChat: (prompt) => ipcRenderer.invoke('ai:ollamaChat', prompt)
+  ollamaChat: (prompt, user) => ipcRenderer.invoke('ai:ollamaChat', prompt, user)
 }
 
 try {

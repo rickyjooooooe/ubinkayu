@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 import { ProgressBar } from '../components/ProgressBar'
-import { POHeader } from '../types' // Pastikan tipe ini ada di types.ts
+import { POHeader, User } from '../types'
 import { formatDistanceToNow } from 'date-fns'
 import { id } from 'date-fns/locale'
 import * as apiService from '../apiService'
@@ -119,13 +119,15 @@ const UpdateEntry = ({ update }) => (
 interface ProgressTrackingPageProps {
   onSelectPO: (po: POHeader) => void
   poList: POHeader[] // Terima poList dari App.tsx
-  isLoadingPOs: boolean // Terima status loading PO dari App.tsx
+  isLoadingPOs: boolean
+  currentUser: User | null
 }
 
 const ProgressTrackingPage: React.FC<ProgressTrackingPageProps> = ({
   onSelectPO,
-  poList, // Gunakan prop ini
-  isLoadingPOs // Gunakan prop ini
+  poList,
+  isLoadingPOs,
+  currentUser
 }) => {
   // State HANYA untuk data panel kanan (Perhatian & Update Terbaru) dan search
   const [attentionData, setAttentionData] = useState({
@@ -145,8 +147,8 @@ const ProgressTrackingPage: React.FC<ProgressTrackingPageProps> = ({
         // Panggil API untuk attention dan updates
         // @ts-ignore - Asumsi tipe data attention & updates dari API service
         const [attention, updates] = await Promise.all([
-          apiService.getAttentionData(),
-          apiService.getRecentProgressUpdates() // Fetch update terbaru
+          apiService.getAttentionData(currentUser),
+          apiService.getRecentProgressUpdates(currentUser)
         ])
         setAttentionData(attention || { nearingDeadline: [], stuckItems: [], urgentItems: [] }) // Default jika null
         setRecentUpdates(updates || []) // Default jika null
@@ -158,7 +160,7 @@ const ProgressTrackingPage: React.FC<ProgressTrackingPageProps> = ({
       }
     }
     fetchSidePanelData()
-  }, []) // Hanya berjalan sekali saat komponen mount
+  }, [currentUser])
 
   // useMemo untuk memisahkan dan memfilter PO Aktif dan Selesai
   const { activePOs, completedPOs } = useMemo(() => {

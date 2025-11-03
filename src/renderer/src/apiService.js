@@ -67,7 +67,6 @@ export async function loginUser(username, password) {
 
     // Jika sukses (status 200), 'result' adalah { success: true, ... }
     return result
-
   } catch (err) {
     // Jika fetchAPI melempar error (status 401, 500, atau network fail)
     // 'err.message' akan berisi pesan error dari JSON server,
@@ -87,16 +86,20 @@ export async function loginUser(username, password) {
 
 // --- Fungsi CRUD untuk Purchase Order (PO) ---
 
-export function listPOs() {
+export function listPOs(user) {
   if (window.api) {
     console.log(
       '%cELECTRON MODE: Using window.api (IPC) for listPOs',
       'color: green; font-weight: bold;'
     ) // <-- TAMBAHKAN INI
-    return window.api.listPOs()
+    return window.api.listPOs(user)
   }
   console.log('%cWEB MODE: Using fetch() for listPOs', 'color: orange; font-weight: bold;') // <-- TAMBAHKAN INI
-  return fetchAPI(createApiEndpoint('listPOs'))
+  return fetchAPI(createApiEndpoint('listPOs'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user }) // <-- Kirim user di body
+  })
 }
 
 export function saveNewPO(data) {
@@ -175,9 +178,15 @@ export function updateItemProgress(data) {
   })
 }
 
-export function getActivePOsWithProgress() {
-  if (window.api) return window.api.getActivePOsWithProgress() // <-- ✅ PERBAIKAN DI SINI
-  return fetchAPI(createApiEndpoint('getActivePOsWithProgress'))
+export function getActivePOsWithProgress(user) {
+  // <-- [UBAH]
+  if (window.api) return window.api.getActivePOsWithProgress(user) // <-- [UBAH]
+  return fetchAPI(createApiEndpoint('getActivePOsWithProgress'), {
+    // <-- [UBAH]
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user })
+  })
 }
 
 export function getPOItemsWithDetails(poId) {
@@ -186,26 +195,50 @@ export function getPOItemsWithDetails(poId) {
   return fetchAPI(createApiEndpoint('getPOItemsWithDetails', { poId }))
 }
 
-export function getRecentProgressUpdates() {
-  if (window.api) return window.api.getRecentProgressUpdates() // <-- ✅ PERBAIKI SEPERTI INI
-  return fetchAPI(createApiEndpoint('getRecentProgressUpdates'))
+export function getRecentProgressUpdates(user) {
+  // <-- [UBAH]
+  if (window.api) return window.api.getRecentProgressUpdates(user) // <-- [UBAH]
+  return fetchAPI(createApiEndpoint('getRecentProgressUpdates'), {
+    // <-- [UBAH]
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user })
+  })
 }
 
 // --- Fungsi Analisis & Dashboard ---
 
-export function getAttentionData() {
-  if (window.api) return window.api.getAttentionData()
-  return fetchAPI(createApiEndpoint('getAttentionData'))
+export function getAttentionData(user) {
+  // <-- [UBAH]
+  if (window.api) return window.api.getAttentionData(user) // <-- [UBAH]
+  return fetchAPI(createApiEndpoint('getAttentionData'), {
+    // <-- [UBAH]
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user })
+  })
 }
 
-export function getProductSalesAnalysis() {
-  if (window.api) return window.api.getProductSalesAnalysis()
-  return fetchAPI(createApiEndpoint('getProductSalesAnalysis'))
+export function getProductSalesAnalysis(user) {
+  // <-- [UBAH]
+  if (window.api) return window.api.getProductSalesAnalysis(user) // <-- [UBAH]
+  return fetchAPI(createApiEndpoint('getProductSalesAnalysis'), {
+    // <-- [UBAH]
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user })
+  })
 }
 
-export function getSalesItemData() {
-  if (window.api) return window.api.getSalesItemData()
-  return fetchAPI(createApiEndpoint('getSalesItemData'))
+export function getSalesItemData(user) {
+  // <-- [UBAH]
+  if (window.api) return window.api.getSalesItemData(user) // <-- [UBAH]
+  return fetchAPI(createApiEndpoint('getSalesItemData'), {
+    // <-- [UBAH]
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user })
+  })
 }
 
 export function openExternalLink(url) {
@@ -252,12 +285,12 @@ export function updateStageDeadline(data) {
   })
 }
 
-export async function ollamaChat(prompt) {
+export async function ollamaChat(prompt, user) {
   if (window.api && window.api.ollamaChat) {
     // Tambahkan cek window.api.ollamaChat
     console.log('%cELECTRON MODE: Calling Ollama via IPC', 'color: cyan; font-weight: bold;')
     // Panggil fungsi IPC yang ada di preload.js -> main.js -> sheet.js
-    return window.api.ollamaChat(prompt)
+    return window.api.ollamaChat(prompt, user)
   }
 
   // SELALU PANGGIL VERCEL API untuk chat
@@ -270,7 +303,7 @@ export async function ollamaChat(prompt) {
       // Panggil endpoint Vercel
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt })
+      body: JSON.stringify({ prompt, user })
     })
     // Vercel mengembalikan objek { response: "..." }, ambil teksnya
     if (result && typeof result.response === 'string') {

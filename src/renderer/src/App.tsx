@@ -138,7 +138,7 @@ function App() {
     }
 
     try {
-      const pos: POHeader[] = await apiService.listPOs()
+      const pos: POHeader[] = await apiService.listPOs(currentUser)
       if (Array.isArray(pos)) {
         setAllPOs(pos)
         console.log(`Fetched ${pos.length} POs successfully.`)
@@ -170,8 +170,12 @@ function App() {
     console.log('Login berhasil, menyimpan sesi:', sessionData)
     sessionStorage.setItem('erpUser', JSON.stringify(sessionData))
     setCurrentUser(sessionData.user)
-    setView('dashboard') // Langsung ke dashboard
-    // Fetch PO akan otomatis dipanggil oleh useEffect [currentUser, isAuthLoading]
+    setView('dashboard')
+
+    console.log('Resetting chat history for new user.')
+    setChatMessages([initialChatMessage])
+    setChatInputText('')
+    setIsChatProcessing(false)
   }
 
   const handleLogout = (message?: any) => {
@@ -182,6 +186,10 @@ function App() {
     setIsLoadingPOs(false) // Reset loading PO juga
     setIsRefreshing(false)
     setView('dashboard') // Kembali ke view awal (yang akan jadi Login)
+
+    setChatMessages([initialChatMessage])
+    setChatInputText('')
+    setIsChatProcessing(false)
 
     // Logika alert yang aman
     if (message && typeof message === 'string') {
@@ -293,7 +301,7 @@ function App() {
     setIsChatProcessing(true)
 
     try {
-      const botText = await apiService.ollamaChat(currentInput) // Ini memanggil Groq
+      const botText = await apiService.ollamaChat(currentInput, currentUser)
 
       const botMessage: Message = {
         sender: 'bot',
@@ -375,6 +383,7 @@ function App() {
             onShowDetail={handleShowDetail}
             onShowProgress={handleSelectPOForTracking} // Gunakan handler yang sama
             isLoading={isLoadingPOs} // Gunakan isLoadingPOs
+            currentUser={currentUser}
           />
         )
       case 'input':
@@ -396,8 +405,9 @@ function App() {
         return (
           <ProgressTrackingPage
             onSelectPO={handleSelectPOForTracking}
-            poList={allPOs} // Kirim PO list yang sudah ada
-            isLoadingPOs={isLoadingPOs} // Kirim status loading PO
+            poList={allPOs}
+            isLoadingPOs={isLoadingPOs}
+            currentUser={currentUser}
           />
         )
       case 'updateProgress':
@@ -410,7 +420,7 @@ function App() {
           />
         )
       case 'analysis':
-        return <AnalysisPage />
+        return <AnalysisPage currentUser={currentUser} />
       case 'aiChat':
         return (
           <Chatbot
@@ -445,6 +455,7 @@ function App() {
           isRefreshing={isRefreshing}
           onLogout={() => handleLogout()} // Pakai arrow function
           userName={currentUser.name}
+          currentUser={currentUser}
         />
       )}
 

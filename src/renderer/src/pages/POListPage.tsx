@@ -6,7 +6,7 @@ import React, { useState, useMemo } from 'react';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import FilterPanel from '../components/FilterPanel';
-import { POHeader } from '../types'; // Import POItem juga (jika belum)
+import { POHeader, User } from '../types'
 import POTable from '../components/POTable';
 
 interface POListPageProps {
@@ -17,6 +17,7 @@ interface POListPageProps {
   onShowDetail: (po: POHeader) => void;
   onShowProgress: (po: POHeader) => void;
   isLoading: boolean;
+  currentUser: User | null
 }
 
 const POListPage: React.FC<POListPageProps> = ({
@@ -26,7 +27,8 @@ const POListPage: React.FC<POListPageProps> = ({
   onDeletePO,
   onEditPO,
   onShowDetail,
-  onShowProgress
+  onShowProgress,
+  currentUser
 }) => {
   const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
 
@@ -265,6 +267,7 @@ const POListPage: React.FC<POListPageProps> = ({
      } catch { return '-'; }
   };
 
+  const userRole = currentUser?.role
 
   // Fungsi render konten (logika ini sudah benar)
   const renderContent = () => {
@@ -362,6 +365,7 @@ const POListPage: React.FC<POListPageProps> = ({
               return onDeletePO(poId, infoString);
           }}
           onShowProgress={onShowProgress}
+          currentUserRole={userRole}
         />
       );
     }
@@ -374,7 +378,9 @@ const POListPage: React.FC<POListPageProps> = ({
           <h1>Kelola Purchase Order</h1>
           <p>Pantau dan kelola semua pesanan produksi dengan fitur sort dan filter</p>
         </div>
-        <Button onClick={onAddPO}>+ Tambah PO Baru</Button>
+        {(userRole === 'manager' || userRole === 'admin') && (
+          <Button onClick={onAddPO}>+ Tambah PO Baru</Button>
+        )}
       </div>
 
       <FilterPanel

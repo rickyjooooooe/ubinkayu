@@ -15,7 +15,7 @@ interface ICustomAPI {
   // Fungsi PO & Produk
   getProducts: () => Promise<any[]>;
   saveNewPO: (data: any) => Promise<{ success: boolean; poId?: string; error?: string }>;
-  listPOs: () => Promise<any[]>;
+  listPOs: (user: any) => Promise<any[]>;
   deletePO: (poId: string) => Promise<any>;
   updatePO: (data: any) => Promise<{ success: boolean; error?: string }>;
   listPOItems: (poId: string) => Promise<any[]>;
@@ -28,13 +28,13 @@ interface ICustomAPI {
   getRevisionHistory: (poId: string) => Promise<any[]>;
 
   // Fungsi Progress & Analisis
-  getActivePOsWithProgress: () => Promise<any[]>;
+  getActivePOsWithProgress: (user: any) => Promise<any[]>;
   getPOItemsWithDetails: (poId: string) => Promise<any[]>;
   updateItemProgress: (data: any) => Promise<{ success: boolean; error?: string }>;
-  getRecentProgressUpdates: () => Promise<any[]>;
-  getAttentionData: () => Promise<any>;
-  getProductSalesAnalysis: () => Promise<any>;
-  getSalesItemData: () => Promise<any[]>;
+  getRecentProgressUpdates: (user: any) => Promise<any[]>;
+  getAttentionData: (user: any) => Promise<any>;
+  getProductSalesAnalysis: (user: any) => Promise<any>;
+  getSalesItemData: (user: any) => Promise<any[]>;
   updateStageDeadline: (data: any) => Promise<{ success: boolean; error?: string }>;
 
   // Fungsi Utilitas & File (Electron)
@@ -44,7 +44,7 @@ interface ICustomAPI {
   readFileAsBase64: (filePath: string) => Promise<string | null>;
 
   // --- [TAMBAHKAN INI] Fungsi AI Chat ---
-  ollamaChat: (prompt: string) => Promise<string>;
+  ollamaChat: (prompt: string, user: any) => Promise<string>;
 }
 
 declare global {

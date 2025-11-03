@@ -21,6 +21,7 @@ import {
 import * as apiService from '../apiService'
 import { useWindowWidth } from '../hooks/useWindowWidth' // Hook ukuran window
 import { LuLightbulb } from 'react-icons/lu'
+import { User } from '../types'
 
 // --- Definisikan tipe data yang diterima dari backend ---
 interface SalesByMarketing {
@@ -58,7 +59,11 @@ const COLORS = [
   '#03A9F4'
 ]
 
-const AnalysisPage: React.FC = () => {
+interface AnalysisPageProps {
+  currentUser: User | null;
+}
+
+const AnalysisPage: React.FC<AnalysisPageProps> = ({ currentUser }) => {
   const windowWidth = useWindowWidth()
   const isMobile = windowWidth < 768 // Adjust breakpoint if needed
 
@@ -71,7 +76,7 @@ const AnalysisPage: React.FC = () => {
     const fetchData = async () => {
       setIsLoading(true)
       try {
-        const data: AnalysisResultData = await apiService.getProductSalesAnalysis()
+        const data: AnalysisResultData = await apiService.getProductSalesAnalysis(currentUser)
         setAnalysisData(data)
       } catch (err) {
         console.error('Gagal mengambil data analisis:', err)
@@ -81,7 +86,7 @@ const AnalysisPage: React.FC = () => {
       }
     }
     fetchData()
-  }, [])
+  }, [currentUser])
 
   // --- Memo untuk mendapatkan daftar nama produk & marketing untuk chart bulanan ---
   const { productKeysForChart, marketingKeysForChart } = useMemo(() => {

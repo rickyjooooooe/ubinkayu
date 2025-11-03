@@ -17,6 +17,7 @@ import type { IconType } from 'react-icons'
 import { Button } from './Button' // <-- [FIX] Pastikan Button diimpor
 import { useWindowWidth } from '../hooks/useWindowWidth'
 import './Navbar.css' // Pastikan path CSS benar
+import type { User } from '../types'
 
 // Definisikan tipe view yang valid untuk navigasi
 type AppView = 'dashboard' | 'list' | 'tracking' | 'analysis' | 'aiChat'
@@ -37,6 +38,7 @@ interface NavbarProps {
   isRefreshing: boolean
   onLogout: () => void
   userName?: string
+  currentUser: User | null
 }
 
 const Navbar: React.FC<NavbarProps> = ({
@@ -45,7 +47,8 @@ const Navbar: React.FC<NavbarProps> = ({
   onRefresh,
   isRefreshing,
   onLogout,
-  userName
+  userName,
+  currentUser
 }) => {
   const windowWidth = useWindowWidth()
   const isMobile = windowWidth <= 768
@@ -93,9 +96,22 @@ const Navbar: React.FC<NavbarProps> = ({
 
   // Filter link berdasarkan ukuran layar
   // Di desktop, tampilkan 4 item utama. Di mobile, tampilkan 5 item (termasuk 'more')
-  const linksToRender = isMobile
-    ? navLinksDefinition
-    : navLinksDefinition.filter((link) => link.id !== 'more')
+  const linksToRender = (
+    isMobile ? navLinksDefinition : navLinksDefinition.filter((link) => link.id !== 'more')
+  ).filter((link) => {
+    if (!currentUser?.role) return true
+
+    // Sembunyikan 'Progress' jika role adalah 'marketing' ATAU 'admin'
+    if (
+      link.id === 'tracking' &&
+      (currentUser.role === 'marketing' || currentUser.role === 'admin')
+    ) {
+      return false
+    }
+
+    // Tampilkan semua link lainnya
+    return true
+  })
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {

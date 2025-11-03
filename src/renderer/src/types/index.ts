@@ -1,5 +1,15 @@
 // src/renderer/src/types/index.ts
 
+export interface User {
+  name: string;
+  role?: string;
+}
+
+export interface SessionData {
+  user: User;
+  expiry: number;
+}
+
 export type ProductionStage =
   | 'Cari Bahan Baku'
   | 'Sawmill'
