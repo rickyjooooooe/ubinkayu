@@ -1,8 +1,16 @@
+# Folder dependensi
 node_modules
+
+# Folder build
 dist
 out
+
+# File sistem & cache
 .DS_Store
 .eslintcache
 *.log*
+
+# Kredensial & Kunci Rahasia
 credentials-oauth.json
 credentials.json
+.env  
