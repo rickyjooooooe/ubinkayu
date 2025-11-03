@@ -176,16 +176,13 @@ export async function deleteGoogleDriveFile(fileId) {
 
 export async function generatePOJpeg(poData, revisionNumber = 0) {
   try {
-    // --- 1. DYNAMIC IMPORT AGAR CANVAS BISA DIPAKAI DI SERVERLESS ---
-    // Baris ini harus selalu menjadi baris pertama yang memanggil fungsi atau properti dari 'canvas'
+    // --- 1. DYNAMIC IMPORT ---
     const { createCanvas, loadImage, registerFont } = await import('canvas')
     const fontPath = path.join(process.cwd(), 'api/fonts/Roboto-Regular.ttf')
-    registerFont(fontPath, { family: 'Roboto' }) // Daftarkan dengan nama 'Roboto'
+    registerFont(fontPath, { family: 'Roboto' })
 
-    // --- 2. FUNGSI HELPER SINKRON (DIPINDAHKAN KE SINI) ---
-    // Fungsi-fungsi ini harus berada di dalam scope generatePOJpeg karena menggunakan
-    // fungsi di dalamnya, atau untuk mempermudah pemindahan.
-
+    // --- 2. FUNGSI HELPER SINKRON (WRAPTEXT, DLL) ---
+    // (Fungsi wrapText dan calculateLineCount tetap sama persis, tidak perlu disalin ulang)
     function wrapText(context, text, x, y, maxWidth, lineHeight) {
       if (!text) return
       const paragraphs = text.split('\n')
@@ -236,9 +233,13 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
     }
     // --- AKHIR FUNGSI HELPER ---
 
-    // --- 3. LOGIKA UTAMA DIMULAI SETELAH IMPORT ---
+    // --- 3. LOGIKA UTAMA ---
 
-    const width = 1200
+    // --- [BARU] Tambahkan Skala ---
+    const scaleFactor = 2 // Render 2x lebih besar untuk ketajaman
+    const baseWidth = 1200 // Lebar dasar
+    const width = baseWidth * scaleFactor // Lebar canvas baru (2400px)
+
     const redColor = '#D92121'
     const blueColor = '#0000FF'
     const blackColor = '#333333'
@@ -247,85 +248,103 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
     const totalBgColor = '#FFE6E6'
     const borderColor = '#AAAAAA'
 
-    const baseFont = 'Roboto'
-    const tableLeft = 30
-    const tableWidth = width - 60
-    const rowPadding = 8
-    const itemLineHeight = 14
+    const baseFont = 'Roboto' // Vercel menggunakan Roboto
 
-    // PERBAIKAN: tempCanvas dan ctx sekarang dideklarasikan di sini.
-    const tempCanvas = createCanvas(width, 100)
+    // --- [DIUBAH] Kalikan semua nilai statis dengan scaleFactor ---
+    const tableLeft = 30 * scaleFactor
+    const tableWidth = width - 60 * scaleFactor
+    const rowPadding = 8 * scaleFactor
+    const itemLineHeight = 14 * scaleFactor
+
+    const tempCanvas = createCanvas(width, 100 * scaleFactor) // Kalikan tinggi juga
     const ctx = tempCanvas.getContext('2d')
 
     let totalHeight = 0
-
-    totalHeight += 70
-    totalHeight += 60
+    totalHeight += 70 * scaleFactor
+    totalHeight += 60 * scaleFactor
 
     const items = poData.items || []
     items.forEach((item) => {
-      ctx.font = `10px ${baseFont}`
+      ctx.font = `${10 * scaleFactor}px ${baseFont}` // [DIUBAH]
       const poLines = calculateLineCount(
         ctx,
         `${poData.po_number || 'N/A'}\n${poData.project_name || 'N/A'}`,
-        130 - rowPadding * 2
+        130 * scaleFactor - rowPadding * 2 // [DIUBAH]
       )
       const produkText = `${item.product_name || ''}\n${item.wood_type || ''} ${item.profile || ''}`
-      const produkLines = calculateLineCount(ctx, produkText, 180 - rowPadding * 2)
+      const produkLines = calculateLineCount(
+        ctx,
+        produkText,
+        180 * scaleFactor - rowPadding * 2 // [DIUBAH]
+      )
       const finishingText = `${item.finishing || ''}\n${item.sample || ''}`
-      const finishingLines = calculateLineCount(ctx, finishingText, 170 - rowPadding * 2)
-
+      const finishingLines = calculateLineCount(
+        ctx,
+        finishingText,
+        170 * scaleFactor - rowPadding * 2 // [DIUBAH]
+      )
       const lokasiAndNotesText = [item.location, item.notes].filter(Boolean).join('\n') || '-'
-      const lokasiLines = calculateLineCount(ctx, lokasiAndNotesText, 140 - rowPadding * 2)
+      const lokasiLines = calculateLineCount(
+        ctx,
+        lokasiAndNotesText,
+        140 * scaleFactor - rowPadding * 2 // [DIUBAH]
+      )
 
       const maxLines = Math.max(poLines, produkLines, finishingLines, lokasiLines, 2)
       const rowHeight = maxLines * itemLineHeight + rowPadding * 2
       totalHeight += rowHeight
     })
 
-    totalHeight += 30
+    totalHeight += 30 * scaleFactor // [DIUBAH]
 
-    ctx.font = `10px ${baseFont}`
+    ctx.font = `${10 * scaleFactor}px ${baseFont}` // [DIUBAH]
     const notesText = poData.notes || '-'
-    const noteLineCount = calculateLineCount(ctx, notesText, tableWidth - 20)
-    const notesSectionHeight = noteLineCount * 15 + 15 * 2 + 20 + 10
+    const noteLineCount = calculateLineCount(ctx, notesText, tableWidth - 20 * scaleFactor) // [DIUBAH]
+    // [DIUBAH]
+    const notesSectionHeight =
+      noteLineCount * (15 * scaleFactor) + 15 * scaleFactor * 2 + 20 * scaleFactor + 10 * scaleFactor
     totalHeight += notesSectionHeight
 
-    totalHeight += 80
+    totalHeight += 80 * scaleFactor // [DIUBAH]
 
     let photoDrawHeight = 0
     if (poData.poPhotoBase64) {
-      // Cek apakah data Base64 ada
       try {
-        // Buat buffer dari string Base64 dan muat sebagai gambar
         const imageBuffer = Buffer.from(poData.poPhotoBase64, 'base64')
         const userImage = await loadImage(imageBuffer)
         const aspectRatio = userImage.height / userImage.width
-        photoDrawHeight = tableWidth * aspectRatio
-        totalHeight += 20 + 30 + photoDrawHeight
+        photoDrawHeight = tableWidth * aspectRatio // tableWidth sudah di-scale
+        totalHeight += 20 * scaleFactor + 30 * scaleFactor + photoDrawHeight // [DIUBAH]
       } catch (imgError) {
         console.error('Gagal memuat gambar dari Base64:', imgError)
-        totalHeight += 60 // Fallback height
+        totalHeight += 60 * scaleFactor // [DIUBAH]
       }
     } else {
-      totalHeight += 60 // Fallback height jika tidak ada gambar
+      totalHeight += 60 * scaleFactor // [DIUBAH]
     }
-    totalHeight += 30
+    totalHeight += 30 * scaleFactor // [DIUBAH]
 
     const canvas = createCanvas(width, totalHeight)
     const finalCtx = canvas.getContext('2d')
 
+    // --- [BARU] Atur Kualitas Teks dan Anti-Aliasing ---
+    finalCtx.patternQuality = 'best' // Kualitas pola (jika ada)
+    finalCtx.quality = 'best' // Kualitas render keseluruhan
+    finalCtx.imageSmoothingEnabled = true // Tetap aktifkan anti-aliasing
+    finalCtx.textDrawingMode = 'path' // Render teks sebagai vektor (LEBIH TAJAM)
+    // --- [AKHIR BARU] ---
+
     finalCtx.fillStyle = '#FFFFFF'
     finalCtx.fillRect(0, 0, width, totalHeight)
 
-    let currentY = 40
-    finalCtx.font = `bold 24px ${baseFont}`
+    let currentY = 40 * scaleFactor // [DIUBAH]
+    finalCtx.font = `bold ${24 * scaleFactor}px ${baseFont}` // [DIUBAH]
     finalCtx.fillStyle = redColor
     const headerText = `${poData.po_number || 'N/A'} ${poData.project_name || 'N/A'}`
     finalCtx.textAlign = 'center'
     finalCtx.fillText(headerText, width / 2, currentY)
 
-    finalCtx.font = `bold 16px ${baseFont}`
+    finalCtx.font = `bold ${16 * scaleFactor}px ${baseFont}` // [DIUBAH]
     finalCtx.fillStyle = blackColor
     const date = poData.created_at ? new Date(poData.created_at) : new Date()
     const year = date.getFullYear()
@@ -334,37 +353,46 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
     const dateText = `AD${year}年${month}月${day}日`
     const sbyText = `SBY R: ${revisionNumber}`
     finalCtx.textAlign = 'right'
-    finalCtx.fillText(sbyText, width - 30, currentY - 15)
-    finalCtx.fillText(dateText, width - 30, currentY + 10)
+    finalCtx.fillText(sbyText, width - 30 * scaleFactor, currentY - 15 * scaleFactor) // [DIUBAH]
+    finalCtx.fillText(dateText, width - 30 * scaleFactor, currentY + 10 * scaleFactor) // [DIUBAH]
     finalCtx.textAlign = 'left'
 
-    currentY += 30
+    currentY += 30 * scaleFactor // [DIUBAH]
 
+    // --- [DIUBAH] Kalikan semua nilai 'cols' ---
     const cols = {
-      rencKirim: { x: 0, width: 90 },
-      noPo: { x: 90, width: 130 },
-      produk: { x: 220, width: 180 },
-      finishing: { x: 400, width: 170 },
-      ukuran: { x: 570, width: 200 },
-      kuantiti: { x: 770, width: 120 },
-      kubikasi: { x: 890, width: 110 },
-      lokasi: { x: 1000, width: 140 }
+      rencKirim: { x: 0, width: 90 * scaleFactor },
+      noPo: { x: 90 * scaleFactor, width: 130 * scaleFactor },
+      produk: { x: 220 * scaleFactor, width: 180 * scaleFactor },
+      finishing: { x: 400 * scaleFactor, width: 170 * scaleFactor },
+      ukuran: { x: 570 * scaleFactor, width: 200 * scaleFactor },
+      kuantiti: { x: 770 * scaleFactor, width: 120 * scaleFactor },
+      kubikasi: { x: 890 * scaleFactor, width: 110 * scaleFactor },
+      lokasi: { x: 1000 * scaleFactor, width: 140 * scaleFactor }
     }
 
     finalCtx.fillStyle = headerBgColor
-    finalCtx.fillRect(tableLeft, currentY, tableWidth, 60)
+    finalCtx.fillRect(tableLeft, currentY, tableWidth, 60 * scaleFactor) // [DIUBAH]
     finalCtx.strokeStyle = borderColor
-    finalCtx.lineWidth = 1
+    finalCtx.lineWidth = 1 * scaleFactor // [DIUBAH]
 
     finalCtx.fillStyle = greenColor
-    finalCtx.font = `bold 10px ${baseFont}`
+    finalCtx.font = `bold ${10 * scaleFactor}px ${baseFont}` // [DIUBAH]
     finalCtx.textAlign = 'center'
 
     const drawHeader = (text, col, yOffset1, yOffset2) => {
       const lines = text.split('\n')
-      finalCtx.fillText(lines[0], tableLeft + col.x + col.width / 2, currentY + yOffset1)
+      finalCtx.fillText(
+        lines[0],
+        tableLeft + col.x + col.width / 2,
+        currentY + yOffset1 * scaleFactor // [DIUBAH]
+      )
       if (lines[1]) {
-        finalCtx.fillText(lines[1], tableLeft + col.x + col.width / 2, currentY + yOffset2)
+        finalCtx.fillText(
+          lines[1],
+          tableLeft + col.x + col.width / 2,
+          currentY + yOffset2 * scaleFactor // [DIUBAH]
+        )
       }
     }
 
@@ -377,39 +405,59 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
     drawHeader('Lokasi & Keterangan lain', cols.lokasi, 35, 0)
 
     const ukuranStartX = tableLeft + cols.ukuran.x
-    const ukuranSubWidth = cols.ukuran.width / 4
-    finalCtx.fillText('UKURAN', ukuranStartX + cols.ukuran.width / 2, currentY + 20)
+    const ukuranSubWidth = cols.ukuran.width / 4 // Ini sudah di-scale
+    finalCtx.fillText('UKURAN', ukuranStartX + cols.ukuran.width / 2, currentY + 20 * scaleFactor) // [DIUBAH]
     finalCtx.beginPath()
-    finalCtx.moveTo(ukuranStartX, currentY + 30)
-    finalCtx.lineTo(ukuranStartX + cols.ukuran.width, currentY + 30)
+    finalCtx.moveTo(ukuranStartX, currentY + 30 * scaleFactor) // [DIUBAH]
+    finalCtx.lineTo(ukuranStartX + cols.ukuran.width, currentY + 30 * scaleFactor) // [DIUBAH]
     finalCtx.stroke()
 
-    finalCtx.font = `bold 9px ${baseFont}`
+    finalCtx.font = `bold ${9 * scaleFactor}px ${baseFont}` // [DIUBAH]
     finalCtx.fillStyle = blackColor
-    finalCtx.fillText('tbl', ukuranStartX + ukuranSubWidth / 2, currentY + 48)
-    finalCtx.fillText('lebar', ukuranStartX + ukuranSubWidth + ukuranSubWidth / 2, currentY + 48)
+    finalCtx.fillText('tbl', ukuranStartX + ukuranSubWidth / 2, currentY + 48 * scaleFactor) // [DIUBAH]
+    finalCtx.fillText(
+      'lebar',
+      ukuranStartX + ukuranSubWidth + ukuranSubWidth / 2,
+      currentY + 48 * scaleFactor // [DIUBAH]
+    )
     finalCtx.fillText(
       'panjang',
       ukuranStartX + ukuranSubWidth * 2 + ukuranSubWidth / 2,
-      currentY + 48
+      currentY + 48 * scaleFactor // [DIUBAH]
     )
     finalCtx.fillText(
       'Tipe Pjg',
       ukuranStartX + ukuranSubWidth * 3 + ukuranSubWidth / 2,
-      currentY + 48
+      currentY + 48 * scaleFactor // [DIUBAH]
     )
 
     Object.values(cols).forEach((col) =>
-      finalCtx.strokeRect(tableLeft + col.x, currentY, col.width, 60)
+      finalCtx.strokeRect(tableLeft + col.x, currentY, col.width, 60 * scaleFactor) // [DIUBAH]
     )
-    finalCtx.strokeRect(ukuranStartX + ukuranSubWidth, currentY + 30, 0, 30)
-    finalCtx.strokeRect(ukuranStartX + ukuranSubWidth * 2, currentY + 30, 0, 30)
-    finalCtx.strokeRect(ukuranStartX + ukuranSubWidth * 3, currentY + 30, 0, 30)
+    finalCtx.strokeRect(
+      ukuranStartX + ukuranSubWidth,
+      currentY + 30 * scaleFactor,
+      0,
+      30 * scaleFactor // [DIUBAH]
+    )
+    finalCtx.strokeRect(
+      ukuranStartX + ukuranSubWidth * 2,
+      currentY + 30 * scaleFactor,
+      0,
+      30 * scaleFactor // [DIUBAH]
+    )
+    finalCtx.strokeRect(
+      ukuranStartX + ukuranSubWidth * 3,
+      currentY + 30 * scaleFactor,
+      0,
+      30 * scaleFactor // [DIUBAH]
+    )
 
-    currentY += 60
+    currentY += 60 * scaleFactor // [DIUBAH]
 
     items.forEach((item) => {
-      finalCtx.font = `10px ${baseFont}`
+      finalCtx.font = `${10 * scaleFactor}px ${baseFont}` // [DIUBAH]
+      // (calculateLineCount widths sudah di-scale)
       const poLines = calculateLineCount(
         finalCtx,
         `${poData.po_number || 'N/A'}\n${poData.project_name || 'N/A'}`,
@@ -428,7 +476,7 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
         cols.finishing.width - rowPadding * 2
       )
 
-      const lokasiAndNotesForDraw = [item.location, item.notes].filter(Boolean).join('\n') || '-'
+      const lokasiAndNotesForDraw = [item.location, item.notes].filter(Boolean).join('\n') || '-' // [DIUBAH] Pakai \n
       const lokasiLines = calculateLineCount(
         finalCtx,
         lokasiAndNotesForDraw,
@@ -449,13 +497,13 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
       finalCtx.fillText(
         deadline,
         tableLeft + cols.rencKirim.x + cols.rencKirim.width / 2,
-        currentY + rowPadding + 10
+        currentY + rowPadding + 10 * scaleFactor // [DIUBAH]
       )
       finalCtx.fillStyle = blackColor
       finalCtx.fillText(
         poDate,
         tableLeft + cols.rencKirim.x + cols.rencKirim.width / 2,
-        currentY + rowPadding + 10 + itemLineHeight * 1.5
+        currentY + rowPadding + 10 * scaleFactor + itemLineHeight * 1.5 // [DIUBAH]
       )
 
       finalCtx.textAlign = 'left'
@@ -463,7 +511,7 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
         finalCtx,
         `${poData.po_number || 'N/A'}\n${poData.project_name || 'N/A'}`,
         tableLeft + cols.noPo.x + rowPadding,
-        currentY + rowPadding + 10,
+        currentY + rowPadding + 10 * scaleFactor, // [DIUBAH]
         cols.noPo.width - rowPadding * 2,
         itemLineHeight
       )
@@ -471,7 +519,7 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
         finalCtx,
         produkText,
         tableLeft + cols.produk.x + rowPadding,
-        currentY + rowPadding + 10,
+        currentY + rowPadding + 10 * scaleFactor, // [DIUBAH]
         cols.produk.width - rowPadding * 2,
         itemLineHeight
       )
@@ -479,7 +527,7 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
         finalCtx,
         finishingText,
         tableLeft + cols.finishing.x + rowPadding,
-        currentY + rowPadding + 10,
+        currentY + rowPadding + 10 * scaleFactor, // [DIUBAH]
         cols.finishing.width - rowPadding * 2,
         itemLineHeight
       )
@@ -488,7 +536,7 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
         finalCtx,
         lokasiAndNotesForDraw,
         tableLeft + cols.lokasi.x + rowPadding,
-        currentY + rowPadding + 10,
+        currentY + rowPadding + 10 * scaleFactor, // [DIUBAH]
         cols.lokasi.width - rowPadding * 2,
         itemLineHeight
       )
@@ -558,52 +606,52 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
     })
 
     finalCtx.fillStyle = totalBgColor
-    finalCtx.fillRect(tableLeft, currentY, tableWidth, 30)
-    finalCtx.strokeRect(tableLeft, currentY, tableWidth, 30)
+    finalCtx.fillRect(tableLeft, currentY, tableWidth, 30 * scaleFactor) // [DIUBAH]
+    finalCtx.strokeRect(tableLeft, currentY, tableWidth, 30 * scaleFactor) // [DIUBAH]
     finalCtx.fillStyle = redColor
-    finalCtx.font = `bold 12px ${baseFont}`
+    finalCtx.font = `bold ${12 * scaleFactor}px ${baseFont}` // [DIUBAH]
     finalCtx.textAlign = 'right'
     finalCtx.fillText(
       'TOTAL',
       tableLeft + cols.kuantiti.x + cols.kuantiti.width - rowPadding,
-      currentY + 20
+      currentY + 20 * scaleFactor // [DIUBAH]
     )
     finalCtx.textAlign = 'center'
     const totalKubikasi = toNum(poData.kubikasi_total, 0).toFixed(4) + ' m³'
     finalCtx.fillText(
       totalKubikasi,
       tableLeft + cols.kubikasi.x + cols.kubikasi.width / 2,
-      currentY + 20
+      currentY + 20 * scaleFactor // [DIUBAH]
     )
-    currentY += 30
+    currentY += 30 * scaleFactor // [DIUBAH]
 
     const notesBoxY = currentY
-    const notesLineHeight = 15
+    const notesLineHeight = 15 * scaleFactor // [DIUBAH]
     const notesPadding = notesLineHeight * 2
     finalCtx.fillStyle = greenColor
-    finalCtx.font = `bold 10px ${baseFont}`
+    finalCtx.font = `bold ${10 * scaleFactor}px ${baseFont}` // [DIUBAH]
     finalCtx.textAlign = 'left'
     finalCtx.fillText(
       'Cara kerja / request klien / detail lainnya:',
-      tableLeft + 10,
+      tableLeft + 10 * scaleFactor, // [DIUBAH]
       notesBoxY + notesPadding
     )
     finalCtx.fillStyle = blackColor
-    finalCtx.font = `10px ${baseFont}`
+    finalCtx.font = `${10 * scaleFactor}px ${baseFont}` // [DIUBAH]
 
-    const notesBoxHeight = noteLineCount * notesLineHeight + notesPadding + 20
+    const notesBoxHeight = noteLineCount * notesLineHeight + notesPadding + 20 * scaleFactor // [DIUBAH]
     wrapText(
       finalCtx,
       notesText,
-      tableLeft + 10,
-      notesBoxY + notesPadding + 20,
-      tableWidth - 20,
+      tableLeft + 10 * scaleFactor, // [DIUBAH]
+      notesBoxY + notesPadding + 20 * scaleFactor, // [DIUBAH]
+      tableWidth - 20 * scaleFactor, // [DIUBAH]
       notesLineHeight
     )
     finalCtx.strokeRect(tableLeft, notesBoxY, tableWidth, notesBoxHeight)
-    currentY += notesBoxHeight + 10
+    currentY += notesBoxHeight + 10 * scaleFactor // [DIUBAH]
 
-    const approvalTableHeight = 80
+    const approvalTableHeight = 80 * scaleFactor // [DIUBAH]
     const approvalCols = [
       'Gambar MKT',
       'Gambar Pengawas',
@@ -615,7 +663,7 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
     ]
     const approvalTableWidth = tableWidth * 0.8
     const approvalColWidth = approvalTableWidth / approvalCols.length
-    finalCtx.font = `bold 9px ${baseFont}`
+    finalCtx.font = `bold ${9 * scaleFactor}px ${baseFont}` // [DIUBAH]
     finalCtx.textAlign = 'center'
 
     approvalCols.forEach((title, index) => {
@@ -623,48 +671,63 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
       finalCtx.strokeStyle = borderColor
       finalCtx.strokeRect(colX, currentY, approvalColWidth, approvalTableHeight)
       finalCtx.fillStyle = greenColor
-      finalCtx.fillText(title, colX + approvalColWidth / 2, currentY + 15)
+      finalCtx.fillText(title, colX + approvalColWidth / 2, currentY + 15 * scaleFactor) // [DIUBAH]
       finalCtx.beginPath()
-      finalCtx.moveTo(colX, currentY + 25)
-      finalCtx.lineTo(colX + approvalColWidth, currentY + 25)
+      finalCtx.moveTo(colX, currentY + 25 * scaleFactor) // [DIUBAH]
+      finalCtx.lineTo(colX + approvalColWidth, currentY + 25 * scaleFactor) // [DIUBAH]
       finalCtx.stroke()
-      finalCtx.fillText('tgl:', colX + approvalColWidth / 2, currentY + approvalTableHeight - 10)
+      finalCtx.fillText(
+        'tgl:',
+        colX + approvalColWidth / 2,
+        currentY + approvalTableHeight - 10 * scaleFactor // [DIUBAH]
+      )
     })
 
     finalCtx.fillStyle = greenColor
-    finalCtx.font = `10px ${baseFont}`
+    finalCtx.font = `${10 * scaleFactor}px ${baseFont}` // [DIUBAH]
     finalCtx.textAlign = 'right'
-    finalCtx.fillText('Tanggal cetak:', width - 30, currentY + 30)
-    finalCtx.fillText(new Date().toLocaleDateString('id-ID'), width - 30, currentY + 45)
+    finalCtx.fillText('Tanggal cetak:', width - 30 * scaleFactor, currentY + 30 * scaleFactor) // [DIUBAH]
+    finalCtx.fillText(
+      new Date().toLocaleDateString('id-ID'),
+      width - 30 * scaleFactor,
+      currentY + 45 * scaleFactor // [DIUBAH]
+    )
     currentY += approvalTableHeight
 
-    currentY += 20
+    currentY += 20 * scaleFactor // [DIUBAH]
     finalCtx.fillStyle = blackColor
-    finalCtx.font = `bold 14px ${baseFont}`
+    finalCtx.font = `bold ${14 * scaleFactor}px ${baseFont}` // [DIUBAH]
     finalCtx.textAlign = 'left'
     finalCtx.fillText('Lampiran: Foto Referensi', tableLeft, currentY)
-    currentY += 30
+    currentY += 30 * scaleFactor // [DIUBAH]
 
     if (poData.poPhotoBase64) {
       try {
         const imageBuffer = Buffer.from(poData.poPhotoBase64, 'base64')
         const userImage = await loadImage(imageBuffer)
-        finalCtx.drawImage(userImage, 30, currentY, width - 60, photoDrawHeight)
+        finalCtx.drawImage(
+          userImage,
+          30 * scaleFactor,
+          currentY,
+          width - 60 * scaleFactor,
+          photoDrawHeight
+        ) // [DIUBAH]
       } catch (imgError) {
         console.error('Gagal menggambar gambar referensi:', imgError)
         finalCtx.fillStyle = redColor
-        finalCtx.font = `12px ${baseFont}`
+        finalCtx.font = `${12 * scaleFactor}px ${baseFont}` // [DIUBAH]
         finalCtx.textAlign = 'left'
         finalCtx.fillText(`Gagal memuat file gambar: ${poData.poPhotoPath}`, tableLeft, currentY)
       }
     } else {
-      finalCtx.font = `12px ${baseFont}`
+      finalCtx.font = `${12 * scaleFactor}px ${baseFont}` // [DIUBAH]
       finalCtx.fillStyle = '#888'
       finalCtx.textAlign = 'left'
       finalCtx.fillText(`Gagal memuat data gambar referensi.`, tableLeft, currentY)
     }
 
-    const buffer = canvas.toBuffer('image/jpeg', { quality: 0.95 })
+    // --- [DIUBAH] Kualitas Output ---
+    const buffer = canvas.toBuffer('image/jpeg', { quality: 1, progressive: true }) // Kualitas 100%
     const fileName = `PO-${String(poData.po_number).replace(/[/\\?%*:|"<>]/g, '-')}-Rev${revisionNumber}.jpeg`
 
     return { success: true, buffer: buffer, fileName: fileName }

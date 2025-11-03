@@ -2251,8 +2251,24 @@ ATURAN KETAT:
       throw new Error('Unexpected response format from Groq (manual fetch).')
     }
   } catch (err: any) {
-    console.error('💥 [Electron AI - Groq Call 1] AI call or JSON parse ERROR:', err.message)
-    return `Maaf, terjadi kesalahan saat menghubungi Groq: ${err.message}`
+    // Kita periksa APAKAH ini error parsing JSON
+    if (err.message.includes('JSON') || err.message.includes('Unexpected token')) {
+
+      // --- INI ADALAH LOGIKA BARU ---
+      console.warn(`[Electron AI - Groq Call 1] JSON parse FAILED. Error: ${err.message}`)
+      console.warn(` -> String yang Gagal di-parse: ${aiDecisionJsonString}`)
+      console.warn(" -> AI mengembalikan teks biasa. Memaksa 'general' tool.")
+
+      // Paksa ke tool 'general'
+      aiDecision = { tool: 'general' }
+      // JANGAN 'return error', biarkan kode berlanjut ke 'switch'
+      // --- AKHIR LOGIKA BARU ---
+
+    } else {
+      // Jika ini error lain (misal: fetch gagal, Groq 500, dll), baru kembalikan error
+      console.error('💥 [Electron AI - Groq Call 1] AI call ERROR:', err.message)
+      return `Maaf, terjadi kesalahan saat menghubungi Groq: ${err.message}`
+    }
   }
 
   // 4. JALANKAN ALAT (TOOLS)
@@ -2791,9 +2807,10 @@ if (process.platform === 'win32') {
 let win: BrowserWindow
 
 async function createWindow() {
-  win = new BrowserWindow({
+  const win = new BrowserWindow({
     width: 1200,
     height: 800,
+    show: false, // <-- [PERBAIKAN 1] Sembunyikan jendela saat dibuat
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -2801,11 +2818,16 @@ async function createWindow() {
     }
   })
 
-  const loadingPath = app.isPackaged
-    ? path.join(__dirname, '../../resources/loading.html')
-    : path.join(process.cwd(), 'resources/loading.html')
+  win.on('ready-to-show', () => {
+    win.show() // Tampilkan jendela sekarang (tidak ada layar putih)
+  })
 
-  await win.loadFile(loadingPath)
+  if (process.env.VITE_DEV_SERVER_URL) {
+    await win.loadURL(process.env.VITE_DEV_SERVER_URL)
+    win.webContents.openDevTools()
+  } else {
+    await win.loadFile(path.join(__dirname, '../renderer/index.html'))
+  }
 }
 
 async function loadMainWindow() {
@@ -2893,18 +2915,10 @@ app.whenReady().then(async () => {
     return await handleGroqChat(prompt)
   })
 
-  await createWindow()
+  createWindow()
 
-  // 2. Muat aplikasi utama
-  await loadMainWindow()
-
-  app.on('activate', async () => { // <-- Jadikan async
-    // Ini terpicu saat ikon Dock diklik (hanya macOS)
-    if (BrowserWindow.getAllWindows().length === 0) {
-      // [PERBAIKAN] Jalankan urutan yang sama persis
-      await createWindow()   // 1. Tampilkan loading spinner lagi
-      await loadMainWindow() // 2. Muat aplikasi utama lagi
-    }
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
 
