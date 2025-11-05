@@ -1,11 +1,10 @@
 import React, { useState } from 'react'
 import { Card } from '../components/Card'
-import { Input } from '../components/Input' // Kita masih pakai ini untuk username
+import { Input } from '../components/Input'
 import { Button } from '../components/Button'
 import * as apiService from '../apiService'
 
-// --- [BARU] Definisikan Ikon SVG sebagai konstanta ---
-// Kita letakkan di luar komponen agar tidak dibuat ulang setiap render
+// --- Ikon SVG (Tetap) ---
 const EyeIcon = (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -44,25 +43,20 @@ const EyeSlashIcon = (
 
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000
 
-// Tipe data sukses
+// Tipe data (Tetap)
 interface LoginSuccessResponse {
   success: true
   name: string
   role?: string
 }
-// Tipe data gagal
 interface LoginErrorResponse {
   success: false
   error: string
 }
-// Tipe gabungan
 type LoginResponse = LoginSuccessResponse | LoginErrorResponse
 
 interface LoginPageProps {
-  onLoginSuccess: (sessionData: {
-    user: { name: string; role?: string }
-    expiry: number // expiry akan berupa angka (timestamp)
-  }) => void
+  onLoginSuccess: (sessionData: { user: { name: string; role?: string }; expiry: number }) => void
 }
 
 const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
@@ -70,15 +64,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-
-  // State untuk menampilkan/menyembunyikan password
   const [showPassword, setShowPassword] = useState(false)
-
-  // --- Definisikan Akun Dummy ---
-  const DUMMY_USERNAME = 'test'
-  const DUMMY_PASSWORD = 'test'
-  const DUMMY_USER_DATA = { name: 'Test User (Dummy)', role: 'tester' }
-  // --- Akhir Akun Dummy ---
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -91,49 +77,15 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       return
     }
 
-    // --- Pengecekan Akun Dummy ---
-    if (username === DUMMY_USERNAME && password === DUMMY_PASSWORD) {
-      console.log('Dummy user login successful!')
-
-      // [UBAH DI SINI]
-      const now = new Date().getTime() // Waktu sekarang
-      const expiry = now + SESSION_DURATION_MS // Waktu kedaluwarsa
-
-      // Kirim object sesi lengkap ke App.tsx
-      onLoginSuccess({ user: DUMMY_USER_DATA, expiry: expiry })
-
-      setIsLoading(false)
-      return
-    }
-    // --- Akhir Pengecekan Dummy ---
-
-    if (username === DUMMY_USERNAME && password === DUMMY_PASSWORD) {
-      console.log('Dummy user login successful!')
-
-      // [UBAH DI SINI]
-      const now = new Date().getTime() // Waktu sekarang
-      const expiry = now + SESSION_DURATION_MS // Waktu kedaluwarsa
-
-      // Kirim object sesi lengkap ke App.tsx
-      onLoginSuccess({ user: DUMMY_USER_DATA, expiry: expiry })
-
-      setIsLoading(false)
-      return
-    }
-
-    // --- Logika Login via API (Jika bukan dummy) ---
+    // --- Logika Login via API (Sekarang menjadi satu-satunya logika) ---
     try {
       console.log('Attempting API login for:', username)
       const result: LoginResponse = await apiService.loginUser(username, password)
 
       if (result && result.success === true) {
-        // [UBAH DI SINI JUGA]
-        const now = new Date().getTime() // Waktu sekarang
-        const expiry = now + SESSION_DURATION_MS // Waktu kedaluwarsa
-
+        const now = new Date().getTime()
+        const expiry = now + SESSION_DURATION_MS
         const userData = { name: result.name, role: result.role }
-
-        // Kirim object sesi lengkap ke App.tsx
         onLoginSuccess({ user: userData, expiry: expiry })
       } else if (result && result.success === false) {
         setError(result.error || 'Username atau password salah.')
@@ -166,7 +118,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             disabled={isLoading}
           />
 
-          {/* --- [MODIFIKASI] Ganti <Input> dengan <input> manual + ikon --- */}
+          {/* --- Input Password dengan Ikon (Tetap) --- */}
           <div style={{ marginTop: '1rem' }}>
             <label
               htmlFor="password"
@@ -175,7 +127,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 marginBottom: '0.5rem',
                 fontSize: '0.9em',
                 fontWeight: '500',
-                color: '#333' // Samakan warna label
+                color: '#333'
               }}
             >
               Password
@@ -183,7 +135,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             <div style={{ position: 'relative' }}>
               <input
                 id="password"
-                // Tipe input diatur oleh state
                 type={showPassword ? 'text' : 'password'}
                 name="password"
                 value={password}
@@ -192,17 +143,16 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 required
                 disabled={isLoading}
                 style={{
-                  // Styling agar mirip dengan komponen <Input> Anda
                   width: '100%',
-                  padding: '10px 40px 10px 12px', // padding kanan 40px untuk ikon
+                  padding: '10px 40px 10px 12px',
                   border: '1px solid #ddd',
                   borderRadius: '4px',
                   fontSize: '1em',
-                  boxSizing: 'border-box' // Penting agar padding tidak merusak lebar
+                  boxSizing: 'border-box'
                 }}
               />
               <button
-                type="button" // PENTING: agar tidak men-submit form
+                type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 disabled={isLoading}
                 style={{
@@ -218,12 +168,11 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   alignItems: 'center'
                 }}
               >
-                {/* Ganti ikon berdasarkan state */}
                 {showPassword ? EyeSlashIcon : EyeIcon}
               </button>
             </div>
           </div>
-          {/* --- Akhir Modifikasi --- */}
+          {/* --- Akhir Input Password --- */}
 
           {error && (
             <p style={{ color: 'red', marginTop: '1rem', textAlign: 'center', fontSize: '0.9em' }}>

@@ -1696,8 +1696,18 @@ ATURAN KETAT:
         return res.status(200).json({ response: text })
       }
       case 'general': {
+        // --- [PERBAIKAN JAM] ---
+        // Ambil waktu saat ini di zona waktu Asia/Jakarta (WIB)
+        const wibTimeString = new Date().toLocaleString('en-US', {
+          timeZone: 'Asia/Jakarta',
+          hour: 'numeric',
+          hour12: false
+        })
+        const currentHourWIB = parseInt(wibTimeString)
+        // -----------------------
+
         const text = await generateNaturalResponse(
-          JSON.stringify({ jam: new Date().getHours() }),
+          JSON.stringify({ jam: currentHourWIB }), // Kirim jam yang sudah dikoreksi
           'User menyapa atau mengobrol santai',
           prompt,
           user
