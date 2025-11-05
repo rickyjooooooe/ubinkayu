@@ -49,99 +49,95 @@ const getYearMonth = (dateString) => {
   return date ? date.substring(0, 7) : null // Ambil YYYY-MM
 }
 
+// --- [BARU] Helper untuk filter PO berdasarkan marketing ---
+function filterPOsByMarketing(poList, user) {
+  if (!user || user.role !== 'marketing') {
+    return poList
+  }
+  const marketingName = user.name.toLowerCase()
+  console.log(`[Vercel Filter] Menerapkan filter Marketing untuk: ${user.name}`)
+  return poList.filter((po) => {
+    let poMarketing = ''
+    // Handle jika 'po' adalah GoogleSpreadsheetRow atau plain object
+    if (typeof po.get === 'function') {
+      poMarketing = po.get('acc_marketing')
+    } else {
+      poMarketing = po.acc_marketing
+    }
+    return poMarketing?.toLowerCase() === marketingName
+  })
+}
+// --- [AKHIR HELPER BARU] ---
+
 export async function handleLoginUser(req, res) {
   console.log('✅ [Vercel Controller] Entered handleLoginUser function.')
   console.log('🏁 [Vercel] handleLoginUser started!')
-  // Ambil username dan password dari body request
   const { username, password } = req.body
   console.log(
     `  -> Received username: ${username ? '***' : 'MISSING'}, password: ${password ? '***' : 'MISSING'}`
   )
 
-  // Validasi input dasar
   if (!username || !password) {
     console.warn('⚠️ [Vercel Login] Missing username or password in request body.')
-    // Jangan kirim detail error spesifik ke frontend demi keamanan
     return res.status(400).json({ success: false, error: 'Username dan password harus diisi.' })
   }
 
   try {
-    // --- TAMBAHKAN LOG INI ---
     console.log('  -> Attempting to call openUserDoc()...')
-    // --- AKHIR TAMBAHAN ---
     const doc = await openUserDoc()
-    // --- TAMBAHKAN LOG INI ---
     console.log('  -> openUserDoc() successful. Attempting getSheet("users")...')
-    // --- AKHIR TAMBAHAN ---
     const userSheet = await getSheet(doc, 'users')
     console.log(`✅ [Vercel Login] Accessed sheet: ${userSheet.title}`)
 
-    // Muat header untuk memastikan nama kolom benar
     await userSheet.loadHeaderRow()
     const headers = userSheet.headerValues
     console.log('✅ [Vercel Login] Sheet headers:', headers)
 
-    // --- SESUAIKAN NAMA KOLOM DI SINI ---
-    const usernameHeader = 'login_username' // Nama kolom username di sheet Anda
-    const passwordHeader = 'login_pwd' // Nama kolom password di sheet Anda
-    const nameHeader = 'name' // Nama kolom untuk nama lengkap (OPSIONAL)
-    const roleHeader = 'role' // Nama kolom untuk peran (OPSIONAL)
-    // --- AKHIR PENYESUAIAN NAMA KOLOM ---
+    const usernameHeader = 'login_username'
+    const passwordHeader = 'login_pwd'
+    const nameHeader = 'name'
+    const roleHeader = 'role'
 
     if (!headers.includes(usernameHeader) || !headers.includes(passwordHeader)) {
       console.error(
         `❌ [Vercel Login] Missing required columns (${usernameHeader} or ${passwordHeader}) in sheet "${userSheet.title}"`
       )
-      // Jangan kirim detail error internal ke frontend
       return res.status(500).json({ success: false, error: 'Kesalahan konfigurasi server.' })
     }
 
-    // Ambil semua baris data user
     const rows = await userSheet.getRows()
     console.log(`ℹ️ [Vercel Login] Found ${rows.length} user rows.`)
 
-    // Cari user berdasarkan username (case-insensitive trim)
     const trimmedUsernameLower = username.trim().toLowerCase()
     const userRow = rows.find(
       (row) => row.get(usernameHeader)?.trim().toLowerCase() === trimmedUsernameLower
     )
 
     if (userRow) {
-      const foundUsername = userRow.get(usernameHeader) // Dapatkan username asli dari sheet
+      const foundUsername = userRow.get(usernameHeader)
       console.log(`👤 [Vercel Login] User found: ${foundUsername}`)
 
-      // --- PERINGATAN KEAMANAN ---
-      // Perbandingan password plain text sangat tidak aman untuk produksi!
-      // Seharusnya password di-hash saat disimpan dan dibandingkan hash-nya saat login.
-      // --- AKHIR PERINGATAN ---
       const storedPassword = userRow.get(passwordHeader)
 
       if (storedPassword === password) {
         console.log(`✅ [Vercel Login] Password match for user: ${foundUsername}`)
-        // Login berhasil
-        // Ambil nama dari kolom 'name', fallback ke username jika tidak ada kolom 'name' atau kosong
         const userName =
           headers.includes(nameHeader) && userRow.get(nameHeader)
             ? userRow.get(nameHeader)
             : foundUsername
-        const userRole = headers.includes(roleHeader) ? userRow.get(roleHeader) : undefined // Ambil role jika ada
+        const userRole = headers.includes(roleHeader) ? userRow.get(roleHeader) : undefined
 
-        // Kirim respons sukses ke frontend
         return res.status(200).json({ success: true, name: userName, role: userRole })
       } else {
         console.warn(`🔑 [Vercel Login] Password mismatch for user: ${foundUsername}`)
-        // Jangan beri tahu penyerang apakah username atau password yang salah
         return res.status(401).json({ success: false, error: 'Username atau password salah.' })
       }
     } else {
       console.warn(`❓ [Vercel Login] User not found: ${username}`)
-      // Jangan beri tahu penyerang apakah username atau password yang salah
       return res.status(401).json({ success: false, error: 'Username atau password salah.' })
     }
   } catch (err) {
     console.error('💥 [Vercel Login] CRITICAL ERROR in try block:', err.message, err.stack)
-    // Jangan kirim detail error internal ke frontend
-    // @ts-ignore
     return res.status(500).json({
       success: false,
       error: 'Terjadi kesalahan pada server saat login.',
@@ -150,7 +146,6 @@ export async function handleLoginUser(req, res) {
   }
 }
 
-// --- HELPERS KHUSUS UNTUK FUNGSI TERTENTU ---
 async function latestRevisionNumberForPO(poId, doc) {
   const sh = await getSheet(doc, 'purchase_orders')
   const rows = await sh.getRows()
@@ -186,41 +181,33 @@ async function getItemsByRevision(poId, rev, doc) {
 // KUMPULAN SEMUA LOGIKA API
 // =================================================================
 
-// --- LOGIC FOR: listPOs ---
 export async function handleListPOs(req, res) {
-  // Log paling awal untuk menandakan fungsi dimulai
   console.log('🏁 [Vercel] handleListPOs function started!')
+  const { user } = req.body // [TERIMA USER]
 
-  // Bungkus seluruh logika asli dalam try...catch
   try {
     const doc = await openDoc()
     const poSheet = getSheet(doc, 'purchase_orders')
     const itemSheet = getSheet(doc, 'purchase_order_items')
     const progressSheet = getSheet(doc, 'progress_tracking')
 
-    // Ambil data dari sheet
     const [poRows, itemRows, progressRows] = await Promise.all([
       poSheet.getRows(),
       itemSheet.getRows(),
       progressSheet.getRows()
     ])
 
-    // --- Proses Data PO untuk mendapatkan revisi terbaru ---
     const byId = new Map()
     for (const r of poRows) {
       const id = String(r.get('id')).trim()
       const rev = toNum(r.get('revision_number'), -1)
-      // @ts-ignore - Abaikan potensi error TS jika 'rev' tidak ada di tipe 'keep'
       const keep = byId.get(id)
       if (!keep || rev > keep.rev) {
-        // Simpan baris GoogleSpreadsheetRow, bukan objek biasa
         byId.set(id, { rev, row: r })
       }
     }
-    // Dapatkan array baris GoogleSpreadsheetRow revisi terbaru
     const latestPoRows = Array.from(byId.values()).map(({ row }) => row)
 
-    // --- Siapkan data helper untuk progress dan item ---
     const progressByCompositeKey = progressRows.reduce((acc, row) => {
       const poId = row.get('purchase_order_id')
       const itemId = row.get('purchase_order_item_id')
@@ -230,11 +217,10 @@ export async function handleListPOs(req, res) {
       return acc
     }, {})
 
-    // Ubah itemRows menjadi objek biasa untuk Map dan filter
     const itemObjects = itemRows.map((item) => item.toObject())
 
     const itemsByPoId = itemObjects.reduce((acc, item) => {
-      const poId = item.purchase_order_id // Akses properti objek
+      const poId = item.purchase_order_id
       if (!acc[poId]) acc[poId] = []
       acc[poId].push(item)
       return acc
@@ -242,40 +228,33 @@ export async function handleListPOs(req, res) {
 
     const latestItemRevisions = new Map()
     itemObjects.forEach((item) => {
-      // Gunakan itemObjects
       const poId = item.purchase_order_id
       const rev = toNum(item.revision_number, -1)
       const current = latestItemRevisions.get(poId)
       if (current === undefined || rev > current) {
-        // Periksa undefined
         latestItemRevisions.set(poId, rev)
       }
     })
 
-    // --- Hitung hasil akhir ---
     const result = latestPoRows.map((po) => {
-      // 'po' di sini adalah GoogleSpreadsheetRow
-      const poObject = po.toObject() // Konversi ke objek biasa SEKARANG
+      const poObject = po.toObject()
       const poId = poObject.id
       const latestRev = latestItemRevisions.get(poId) ?? -1
 
-      // Filter item dari itemsByPoId yang sudah berupa objek
       const poItems = (itemsByPoId[poId] || []).filter(
         (item) => toNum(item.revision_number, -1) === latestRev
       )
 
-      // Hitung progress (logika sama seperti sebelumnya)
       let poProgress = 0
       if (poItems.length > 0) {
         let totalPercentage = 0
         poItems.forEach((item) => {
           const itemId = item.id
-          const stages = PRODUCTION_STAGES // Pastikan ini terdefinisi/diimpor
+          const stages = PRODUCTION_STAGES
           const compositeKey = `${poId}-${itemId}`
           const itemProgressHistory = progressByCompositeKey[compositeKey] || []
           let latestStageIndex = -1
           if (itemProgressHistory.length > 0) {
-            // Salin array sebelum sort
             const latestProgress = [...itemProgressHistory].sort(
               (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
             )[0]
@@ -288,23 +267,22 @@ export async function handleListPOs(req, res) {
         poProgress = totalPercentage / poItems.length
       }
 
-      // Tentukan status final dan completed_at (logika sama seperti sebelumnya)
       let finalStatus = poObject.status
       let completed_at = null
       if (finalStatus !== 'Cancelled') {
-        const roundedProgress = Math.round(poProgress) // Bulatkan sekali saja
+        const roundedProgress = Math.round(poProgress)
         if (roundedProgress >= 100) {
           finalStatus = 'Completed'
-          const allProgressForPO = progressRows // Gunakan progressRows asli
+          const allProgressForPO = progressRows
             .filter((row) => row.get('purchase_order_id') === poId)
             .map((row) => {
               try {
                 return new Date(row.get('created_at')).getTime()
               } catch {
                 return 0
-              } // Handle invalid date strings
+              }
             })
-            .filter((time) => time > 0) // Filter out invalid dates
+            .filter((time) => time > 0)
 
           if (allProgressForPO.length > 0) {
             completed_at = new Date(Math.max(...allProgressForPO)).toISOString()
@@ -316,33 +294,29 @@ export async function handleListPOs(req, res) {
         }
       }
 
-      // Tambahkan field yang dibutuhkan frontend (konsisten dengan Electron)
       const lastRevisedBy = poObject.revised_by || 'N/A'
-      const lastRevisedDate = poObject.created_at // Timestamp revisi terakhir
+      const lastRevisedDate = poObject.created_at
 
-      // Susun objek hasil
       return {
-        ...poObject, // Sertakan semua data asli dari sheet
-        items: poItems, // Sertakan item yang sudah difilter
-        progress: Math.round(poProgress), // Progress yang dibulatkan
+        ...poObject,
+        items: poItems,
+        progress: Math.round(poProgress),
         status: finalStatus,
         completed_at: completed_at,
-        pdf_link: poObject.pdf_link || null, // Pastikan pdf_link diambil dari poObject
-        // Field tambahan untuk konsistensi
+        pdf_link: poObject.pdf_link || null,
         acc_marketing: poObject.acc_marketing || '',
         alamat_kirim: poObject.alamat_kirim || '',
         lastRevisedBy: lastRevisedBy,
         lastRevisedDate: lastRevisedDate
       }
-    }) // Akhir .map
+    })
 
-    // Kirim hasil JSON ke klien
-    return res.status(200).json(result)
+    // [FILTER MARKETING]
+    const filteredResult = filterPOsByMarketing(result, user)
+
+    return res.status(200).json(filteredResult)
   } catch (err) {
-    // Blok catch untuk menangani error
-    console.error('💥 [Vercel] ERROR in handleListPOs:', err.message, err.stack) // Log error detail
-    // Kirim respons error ke klien
-    // @ts-ignore - Abaikan error TS jika 'message' tidak ada di tipe 'err'
+    console.error('💥 [Vercel] ERROR in handleListPOs:', err.message, err.stack)
     return res.status(500).json({
       success: false,
       error: 'Internal Server Error processing listPOs',
@@ -354,59 +328,49 @@ export async function handleListPOs(req, res) {
 async function generateAndUploadPO(poData, revisionNumber) {
   let auth
   try {
-    // 1. Generate Buffer JPEG (panggil fungsi dari _helpers.js)
     console.log('⏳ [Vercel] Generating JPEG buffer...')
-    // @ts-ignore
-    const jpegResult = await generatePOJpeg(poData, revisionNumber) // Tidak perlu argumen 'true'
+    const jpegResult = await generatePOJpeg(poData, revisionNumber)
     if (!jpegResult.success || !jpegResult.buffer) {
       throw new Error(jpegResult.error || 'Gagal membuat buffer JPEG.')
     }
     const jpegBuffer = jpegResult.buffer
-    const fileName = jpegResult.fileName // Ambil nama file dari hasil generate
+    const fileName = jpegResult.fileName
     console.log(`✅ [Vercel] JPEG buffer created: ${fileName}`)
 
-    // 2. Dapatkan objek auth dan authorize
     console.log('🔄 [Vercel] Mendapatkan otentikasi baru sebelum upload/get...')
-    auth = getAuth() // Panggil fungsi getAuth dari _helpers.js
+    auth = getAuth()
     await auth.authorize()
     console.log('✅ [Vercel] Otorisasi ulang berhasil.')
 
     const mimeType = 'image/jpeg'
-
     console.log(`🚀 [Vercel] Mengunggah file via auth.request: ${fileName} ke Drive...`)
 
-    // --- Upload via auth.request menggunakan Buffer ---
     const metadata = {
       name: fileName,
       mimeType: mimeType,
-      parents: [PO_ARCHIVE_FOLDER_ID] // Pastikan konstanta ini diimpor/tersedia
+      parents: [PO_ARCHIVE_FOLDER_ID]
     }
     const boundary = `----VercelBoundary${Date.now()}----`
 
-    // Buat multipart body langsung dari buffer
     const metaPart = Buffer.from(
       `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n\r\n`
     )
     const mediaHeaderPart = Buffer.from(`--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`)
     const endBoundaryPart = Buffer.from(`\r\n--${boundary}--\r\n`)
-
-    // Gabungkan buffer menjadi satu payload
     const requestBody = Buffer.concat([metaPart, mediaHeaderPart, jpegBuffer, endBoundaryPart])
 
-    // Panggil API create menggunakan auth.request
     const createResponse = await auth.request({
       url: `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true`,
       method: 'POST',
       headers: {
         'Content-Type': `multipart/related; boundary=${boundary}`,
-        'Content-Length': requestBody.length // Penting untuk Vercel
+        'Content-Length': requestBody.length
       },
-      data: requestBody, // Kirim Buffer gabungan sebagai data
+      data: requestBody,
       maxBodyLength: Infinity,
       maxContentLength: Infinity
     })
 
-    // --- Ambil webViewLink via auth.request ---
     const fileId = createResponse?.data?.id
     if (!fileId) {
       console.error(
@@ -419,54 +383,31 @@ async function generateAndUploadPO(poData, revisionNumber) {
       `✅ [Vercel] File berhasil diunggah (ID: ${fileId}). Mengambil webViewLink via auth.request...`
     )
 
-    // Panggil files.get endpoint menggunakan auth.request
     const getResponse = await auth.request({
       url: `https://www.googleapis.com/drive/v3/files/${fileId}`,
       method: 'GET',
       params: {
-        fields: 'webViewLink',
+        fields: 'webViewLink,size', // Tambahkan size di sini
         supportsAllDrives: true
       }
     })
 
     const webViewLink = getResponse?.data?.webViewLink
+    const fileSize = getResponse?.data?.size // Ambil size dari respons
+
     if (!webViewLink) {
       console.error('❌ [Vercel] Gagal mendapatkan webViewLink via auth.request:', getResponse.data)
       throw new Error('Gagal mendapatkan link file setelah upload berhasil.')
     }
-    console.log(`✅ [Vercel] Link file didapatkan via auth.request: ${webViewLink}`)
+    console.log(`✅ [Vercel] Link file didapatkan: ${webViewLink}, Size: ${fileSize}`)
 
-    // Tidak ada file lokal yang perlu dihapus di Vercel
-    return { success: true, link: webViewLink }
+    return { success: true, link: webViewLink, size: Number(fileSize || 0) }
   } catch (error) {
     console.error('❌ [Vercel] Proses Generate & Upload PO Gagal:', error.message)
-    // @ts-ignore
-    if (error.response && error.response.data && error.response.data.error) {
-      // @ts-ignore
-      console.error(
-        '   -> Detail Error Google API:',
-        JSON.stringify(error.response.data.error, null, 2)
-      )
-      // @ts-ignore
-    } else if (error.response) {
-      // @ts-ignore
-      console.error(`   -> Status Error HTTP: ${error.response.status}`)
-      // @ts-ignore
-      console.error('   -> Data Error:', error.response.data)
-    }
-    // @ts-ignore
-    return { success: false, error: error.message } // Kembalikan objek error
+    return { success: false, error: error.message, size: 0 }
   }
 }
 
-async function generateAndUploadPO_Vercel(poData, revisionNumber) {
-  // ... (Kode fungsi ini sudah benar dari revisi sebelumnya, pastikan returnnya { success, link, size }) ...
-  return { success: true, link: webViewLink, size: Number(fileSize || 0) } // Pastikan size dikembalikan
-  // ... (Catch block juga return size: 0) ...
-  return { success: false, error: error.message, size: 0 }
-}
-
-// --- LOGIC FOR: saveNewPO ---
 export async function handleSaveNewPO(req, res) {
   console.log('🏁 [Vercel] handleSaveNewPO started!')
   const data = req.body
@@ -476,17 +417,15 @@ export async function handleSaveNewPO(req, res) {
   let photoSize = 0
 
   try {
-    doc = await openDoc() // Panggil openDoc di dalam try
+    doc = await openDoc()
     const now = new Date().toISOString()
     const poSheet = getSheet(doc, 'purchase_orders')
     const itemSheet = getSheet(doc, 'purchase_order_items')
     const poId = await getNextIdFromSheet(poSheet)
 
     if (data.poPhotoBase64) {
-      // Gunakan Base64 dari Vercel
       console.log('  -> Uploading PO Reference Photo...')
       const photoResult = await uploadPoPhoto(
-        // Panggil helper Vercel
         data.poPhotoBase64,
         data.nomorPo || `PO-${poId}`,
         data.namaCustomer || 'Customer'
@@ -499,7 +438,6 @@ export async function handleSaveNewPO(req, res) {
       }
     }
 
-    // Data untuk baris baru di sheet
     const newPoRowData = {
       id: poId,
       revision_number: 0,
@@ -513,30 +451,28 @@ export async function handleSaveNewPO(req, res) {
       acc_marketing: data.marketing || '',
       created_at: now,
       pdf_link: 'generating...',
-      foto_link: fotoLink, // <- Masukkan link foto
-      file_size_bytes: 0, // Placeholder
+      foto_link: fotoLink,
+      file_size_bytes: 0,
       alamat_kirim: data.alamatKirim || '',
       revised_by: 'N/A'
     }
 
     console.log('📝 [Vercel] Adding new PO row to sheet:', newPoRowData.po_number)
-    newPoRow = await poSheet.addRow(newPoRowData) // Tambah baris ke sheet
+    newPoRow = await poSheet.addRow(newPoRowData)
 
-    // Proses item
     const itemsWithIds = []
     let nextItemId = parseInt(await getNextIdFromSheet(itemSheet), 10)
     const itemsToAdd = (data.items || []).map((raw) => {
-      const clean = scrubItemPayload(raw) // Bersihkan payload
-      const kubikasiItem = toNum(raw.kubikasi, 0) // Hitung kubikasi (atau ambil jika sudah ada)
+      const clean = scrubItemPayload(raw)
+      const kubikasiItem = toNum(raw.kubikasi, 0)
       const newItem = {
         id: nextItemId,
         purchase_order_id: poId,
-        revision_number: 0, // Set revisi item
+        revision_number: 0,
         kubikasi: kubikasiItem,
-        ...clean // Tambahkan field bersih lainnya
-        // Pastikan field lain (product_name, wood_type, dll.) ada di 'clean'
+        ...clean
       }
-      itemsWithIds.push({ ...raw, id: nextItemId, kubikasi: kubikasiItem }) // Untuk generator JPEG
+      itemsWithIds.push({ ...raw, id: nextItemId, kubikasi: kubikasiItem })
       nextItemId++
       return newItem
     })
@@ -548,9 +484,7 @@ export async function handleSaveNewPO(req, res) {
       console.warn(`⚠️ [Vercel] No items provided for new PO ${poId}`)
     }
 
-    // Siapkan data untuk generateAndUploadPO
     const poDataForUpload = {
-      // Ambil data dari newPoRowData agar konsisten dengan yang disimpan
       po_number: newPoRowData.po_number,
       project_name: newPoRowData.project_name,
       deadline: newPoRowData.deadline,
@@ -562,12 +496,11 @@ export async function handleSaveNewPO(req, res) {
       alamat_kirim: newPoRowData.alamat_kirim,
       foto_link: fotoLink,
       items: itemsWithIds,
-      poPhotoBase64: data.poPhotoBase64 // Ambil dari request body jika ada
+      poPhotoBase64: data.poPhotoBase64
     }
 
     console.log(`⏳ [Vercel] Calling generateAndUploadPO for PO ${poId}...`)
-    // Panggil fungsi generateAndUploadPO yang baru
-    const uploadResult = await generateAndUploadPO(poDataForUpload, 0) // Revisi 0
+    const uploadResult = await generateAndUploadPO(poDataForUpload, 0)
 
     let jpegSize = 0
     if (uploadResult.success) {
@@ -575,124 +508,110 @@ export async function handleSaveNewPO(req, res) {
     }
     totalFileSize = photoSize + jpegSize
 
-    // 6. Update link JPEG dan total ukuran file
     console.log(`🔄 [Vercel] Updating pdf_link & file_size_bytes for PO ${poId}...`)
     newPoRow.set(
       'pdf_link',
       uploadResult.success ? uploadResult.link : `ERROR: ${uploadResult.error || 'Unknown'}`
     )
     newPoRow.set('file_size_bytes', totalFileSize)
-    // Link foto sudah diset saat addRow
     await newPoRow.save({ raw: false })
     console.log(`✅ [Vercel] pdf_link & file_size_bytes updated.`)
 
     return res.status(200).json({ success: true, poId, revision_number: 0 })
   } catch (err) {
-    // Tangani error, catat, dan kirim respons error
     console.error('💥 [Vercel] ERROR in handleSaveNewPO:', err.message, err.stack)
-    // Jika baris PO sudah terlanjur dibuat tapi upload gagal, update link error
     if (newPoRow && !newPoRow.get('pdf_link')?.startsWith('http')) {
       try {
-        // @ts-ignore
         newPoRow.set('pdf_link', `ERROR: ${err.message}`)
         await newPoRow.save()
       } catch (saveErr) {
-        // @ts-ignore
-        console.error('   -> Failed to save error link back to sheet:', saveErr.message)
+        console.error('  -> Failed to save error link back to sheet:', saveErr.message)
       }
     }
-    // @ts-ignore
     return res
       .status(500)
       .json({ success: false, error: 'Internal Server Error saving PO', details: err.message })
   }
 }
 
-// --- LOGIC FOR: updatePO ---
 export async function handleUpdatePO(req, res) {
   console.log('🏁 [Vercel] handleUpdatePO started!')
-  const data = req.body // Data dari frontend (termasuk poId, nomorPo, items, poPhotoBase64, revisedBy, dll.)
+  const data = req.body
   let doc, newRevisionRow
-  let totalFileSize = 0 // Ukuran file total untuk revisi baru
-  let fotoLink = '' // Link foto referensi untuk revisi baru
-  let photoSize = 0 // Ukuran foto referensi baru (jika ada)
+  let totalFileSize = 0
+  let fotoLink = ''
+  let photoSize = 0
 
   try {
-    doc = await openDoc() // Buka spreadsheet utama
+    doc = await openDoc()
     const now = new Date().toISOString()
     const poSheet = await getSheet(doc, 'purchase_orders')
     const itemSheet = await getSheet(doc, 'purchase_order_items')
 
-    const poId = String(data.poId) // Pastikan poId adalah string
+    const poId = String(data.poId)
     if (!poId) {
       throw new Error('PO ID is required for update.')
     }
 
-    // Dapatkan data dari revisi sebelumnya
-    const latestRevNum = await latestRevisionNumberForPO(poId, doc) // Dapatkan nomor revisi terakhir
+    const latestRevNum = await latestRevisionNumberForPO(poId, doc)
     const prevRow = latestRevNum >= 0 ? await getHeaderForRevision(poId, latestRevNum, doc) : null
-    const prevData = prevRow ? prevRow.toObject() : {} // Konversi baris lama ke objek
-    const newRevNum = latestRevNum >= 0 ? latestRevNum + 1 : 0 // Hitung nomor revisi baru
+    const prevData = prevRow ? prevRow.toObject() : {}
+    const newRevNum = latestRevNum >= 0 ? latestRevNum + 1 : 0
 
-    fotoLink = prevData.foto_link || 'Tidak ada foto' // Warisi link foto lama sebagai default
+    fotoLink = prevData.foto_link || 'Tidak ada foto'
 
-    // 1. Logika Upload Foto Referensi BARU (jika ada data Base64 dikirim)
     if (data.poPhotoBase64) {
       console.log(`[Vercel Update] 📸 New reference photo detected (Base64), uploading...`)
       const photoResult = await uploadPoPhoto(
-        // Panggil helper upload foto Vercel
         data.poPhotoBase64,
-        data.nomorPo ?? prevData.po_number ?? `PO-${poId}`, // Gunakan nomor PO baru atau lama
-        data.namaCustomer ?? prevData.project_name ?? 'Customer' // Gunakan nama customer baru atau lama
+        data.nomorPo ?? prevData.po_number ?? `PO-${poId}`,
+        data.namaCustomer ?? prevData.project_name ?? 'Customer'
       )
       if (photoResult.success) {
-        fotoLink = photoResult.link // Update link foto jika berhasil
-        photoSize = photoResult.size || 0 // Simpan ukuran foto baru
+        fotoLink = photoResult.link
+        photoSize = photoResult.size || 0
         console.log(` -> New photo uploaded: ${fotoLink}, Size: ${photoSize}`)
       } else {
-        fotoLink = `ERROR: ${photoResult.error || 'Upload foto gagal'}` // Tandai error jika gagal
+        fotoLink = `ERROR: ${photoResult.error || 'Upload foto gagal'}`
         console.error(` -> Failed to upload new photo: ${fotoLink}`)
       }
     } else {
       console.log(`[Vercel Update] 🖼️ No new reference photo. Inheriting link: ${fotoLink}`)
-      // photoSize tetap 0 jika tidak ada foto baru
     }
 
-    // 2. Siapkan data untuk baris revisi baru di sheet 'purchase_orders'
     const newRevisionRowData = {
       id: poId,
       revision_number: newRevNum,
       po_number: data.nomorPo ?? prevData.po_number ?? `PO-${poId}`,
       project_name: data.namaCustomer ?? prevData.project_name ?? 'N/A',
       deadline: data.tanggalKirim ?? prevData.deadline ?? null,
-      status: data.status ?? prevData.status ?? 'Open', // Pertimbangkan apakah status harus direset?
+      status: data.status ?? prevData.status ?? 'Open',
       priority: data.prioritas ?? prevData.priority ?? 'Normal',
       notes: data.catatan ?? prevData.notes ?? '',
       kubikasi_total: toNum(data.kubikasi_total, toNum(prevData.kubikasi_total, 0)),
       acc_marketing: data.marketing ?? prevData.acc_marketing ?? '',
-      created_at: now, // Timestamp revisi
-      pdf_link: 'generating...', // Placeholder link JPEG PO
-      foto_link: fotoLink, // Masukkan link foto (baru, lama, atau error)
-      file_size_bytes: 0, // Placeholder ukuran total
-      revised_by: data.revisedBy || 'Unknown', // Nama perevisi
+      created_at: now,
+      pdf_link: 'generating...',
+      foto_link: fotoLink,
+      file_size_bytes: 0,
+      revised_by: data.revisedBy || 'Unknown',
       alamat_kirim: data.alamatKirim ?? prevData.alamat_kirim ?? ''
     }
     console.log(`📝 [Vercel Update] Adding revision ${newRevNum} row data for PO ${poId}`)
-    newRevisionRow = await poSheet.addRow(newRevisionRowData) // Tambahkan baris revisi baru
+    newRevisionRow = await poSheet.addRow(newRevisionRowData)
 
-    // 3. Proses item-item baru untuk revisi ini
-    const itemsWithIds = [] // Array untuk menyimpan item dengan ID baru (untuk JPEG)
+    const itemsWithIds = []
     let nextItemId = parseInt(await getNextIdFromSheet(itemSheet), 10)
     const itemsToAdd = (data.items || []).map((raw) => {
-      const clean = scrubItemPayload(raw) // Bersihkan field ID/revisi lama
+      const clean = scrubItemPayload(raw)
       const newItem = {
-        id: nextItemId, // ID unik baru
+        id: nextItemId,
         purchase_order_id: poId,
-        revision_number: newRevNum, // Set nomor revisi baru
-        kubikasi: toNum(raw.kubikasi, 0), // Pastikan kubikasi adalah angka
-        ...clean // Tambahkan field bersih lainnya
+        revision_number: newRevNum,
+        kubikasi: toNum(raw.kubikasi, 0),
+        ...clean
       }
-      itemsWithIds.push({ ...raw, id: nextItemId, kubikasi: newItem.kubikasi }) // Simpan untuk JPEG
+      itemsWithIds.push({ ...raw, id: nextItemId, kubikasi: newItem.kubikasi })
       nextItemId++
       return newItem
     })
@@ -701,33 +620,25 @@ export async function handleUpdatePO(req, res) {
       console.log(
         `➕ [Vercel Update] Adding ${itemsToAdd.length} items to sheet for PO ${poId} Rev ${newRevNum}`
       )
-      await itemSheet.addRows(itemsToAdd) // Tambahkan item baru ke sheet
+      await itemSheet.addRows(itemsToAdd)
     } else {
       console.warn(`⚠️ [Vercel Update] No items provided for PO ${poId} Rev ${newRevNum}`)
     }
 
-    // 4. Siapkan data untuk generate & upload JPEG PO (selalu buat ulang karena data/item bisa berubah)
     const poDataForUpload = {
-      ...newRevisionRowData, // Gunakan data dari revisi baru yang sudah disiapkan
-      // Catatan: generatePOJpeg di _helpers.js masih menerima poPhotoBase64 untuk disematkan
-      poPhotoBase64: data.poPhotoBase64, // Kirim Base64 foto baru (jika ada) ke generator
-      items: itemsWithIds // Kirim item baru dengan ID uniknya
-      // Hapus poPhotoPath karena Vercel tidak bisa akses path lokal
+      ...newRevisionRowData,
+      poPhotoBase64: data.poPhotoBase64,
+      items: itemsWithIds
     }
-    console.log(
-      `⏳ [Vercel Update] Calling generateAndUploadPO_Vercel for PO ${poId} Rev ${newRevNum}...`
-    )
-    const uploadResult = await generateAndUploadPO_Vercel(poDataForUpload, newRevNum)
+    console.log(`⏳ [Vercel Update] Calling generateAndUploadPO for PO ${poId} Rev ${newRevNum}...`)
+    const uploadResult = await generateAndUploadPO(poDataForUpload, newRevNum)
 
-    // 5. Hitung total ukuran file
     let jpegSize = 0
     if (uploadResult.success) {
-      jpegSize = uploadResult.size || 0 // Ambil ukuran JPEG baru
+      jpegSize = uploadResult.size || 0
     }
 
-    // Ukuran total = (ukuran foto BARU jika ada, ATAU 0) + (ukuran JPEG BARU jika sukses, ATAU 0)
     totalFileSize = photoSize + jpegSize
-    // Fallback: Jika JPEG gagal DAN tidak ada foto baru, warisi ukuran total lama
     if (totalFileSize === 0 && !data.poPhotoBase64) {
       totalFileSize = Number(prevData.file_size_bytes || 0)
       console.log(
@@ -739,11 +650,9 @@ export async function handleUpdatePO(req, res) {
       )
     }
 
-    // 6. Update link JPEG dan total ukuran file di baris revisi baru
     console.log(
       `🔄 [Vercel Update] Updating pdf_link & file_size_bytes for PO ${poId} Rev ${newRevNum}...`
     )
-    // Jika upload JPEG gagal, coba warisi link JPEG lama
     newRevisionRow.set(
       'pdf_link',
       uploadResult.success
@@ -751,36 +660,28 @@ export async function handleUpdatePO(req, res) {
         : prevData.pdf_link || `ERROR: ${uploadResult.error || 'Unknown'}`
     )
     newRevisionRow.set('file_size_bytes', totalFileSize)
-    // Link foto sudah diset saat addRow, tidak perlu diset lagi
-    // newRevisionRow.set('foto_link', fotoLink);
-    await newRevisionRow.save({ raw: false }) // Simpan perubahan ke sheet
+    await newRevisionRow.save({ raw: false })
     console.log(`✅ [Vercel Update] pdf_link & file_size_bytes updated.`)
 
-    // Kirim respons sukses ke frontend
     return res.status(200).json({ success: true, revision_number: newRevNum })
   } catch (err) {
     console.error('💥 [Vercel Update] ERROR in handleUpdatePO:', err.message, err.stack)
-    // Jika baris revisi baru sudah terlanjur dibuat, coba update link error
     if (newRevisionRow) {
       try {
-        // Hanya update jika link belum valid
         if (!newRevisionRow.get('pdf_link')?.startsWith('http')) {
           newRevisionRow.set('pdf_link', `ERROR: ${err.message}`)
         }
-        // Anda mungkin juga ingin update foto_link jika error terjadi sebelum JPEG dibuat
         await newRevisionRow.save({ raw: false })
       } catch (saveErr) {
         console.error(' -> Failed to save error link back during error handling:', saveErr.message)
       }
     }
-    // Kirim respons error ke frontend
     return res
       .status(500)
       .json({ success: false, error: 'Internal Server Error (updatePO)', details: err.message })
   }
 }
 
-// --- LOGIC FOR: deletePO ---
 export async function handleDeletePO(req, res) {
   const { poId } = req.query
   const startTime = Date.now()
@@ -807,6 +708,16 @@ export async function handleDeletePO(req, res) {
     const pdfLink = poRow.get('pdf_link')
     if (pdfLink && !pdfLink.startsWith('ERROR:') && !pdfLink.includes('generating')) {
       const fileId = extractGoogleDriveFileId(pdfLink)
+      if (fileId) fileIds.add(fileId)
+    }
+    const fotoLink = poRow.get('foto_link')
+    if (
+      fotoLink &&
+      !fotoLink.startsWith('ERROR:') &&
+      !fotoLink.includes('generating') &&
+      fotoLink !== 'Tidak ada foto'
+    ) {
+      const fileId = extractGoogleDriveFileId(fotoLink)
       if (fileId) fileIds.add(fileId)
     }
   })
@@ -850,7 +761,6 @@ export async function handleDeletePO(req, res) {
   return res.status(200).json({ success: true, message, summary })
 }
 
-// --- LOGIC FOR: getProducts ---
 export async function handleGetProducts(req, res) {
   const doc = await openDoc()
   const sheet = getSheet(doc, 'product_master')
@@ -859,7 +769,6 @@ export async function handleGetProducts(req, res) {
   return res.status(200).json(products)
 }
 
-// --- LOGIC FOR: listPOItems ---
 export async function handleListPOItems(req, res) {
   const { poId } = req.query
   const doc = await openDoc()
@@ -869,7 +778,6 @@ export async function handleListPOItems(req, res) {
   return res.status(200).json(items)
 }
 
-// --- LOGIC FOR: getRevisionHistory ---
 export async function handleGetRevisionHistory(req, res) {
   const { poId } = req.query
   const doc = await openDoc()
@@ -894,7 +802,6 @@ export async function handleGetRevisionHistory(req, res) {
   return res.status(200).json(history)
 }
 
-// --- LOGIC FOR: previewPO ---
 export async function handlePreviewPO(req, res) {
   const data = req.body
   const poData = { ...data, created_at: new Date().toISOString() }
@@ -906,7 +813,6 @@ export async function handlePreviewPO(req, res) {
   throw new Error(result.error || 'Failed to generate JPEG buffer')
 }
 
-// --- LOGIC FOR: updateItemProgress ---
 export async function handleUpdateItemProgress(req, res) {
   const { poId, itemId, poNumber, stage, notes, photoBase64 } = req.body
   let photoLink = null
@@ -935,15 +841,16 @@ export async function handleUpdateItemProgress(req, res) {
     purchase_order_item_id: itemId,
     stage: stage,
     notes: notes || '',
-    photo_url: photoLink,
+    photo_url: photoLink || '',
     created_at: new Date().toISOString()
   })
   return res.status(200).json({ success: true })
 }
 
-// --- LOGIC FOR: getActivePOsWithProgress ---
 export async function handleGetActivePOsWithProgress(req, res) {
   console.log('--- 🏃‍♂️ EXECUTING handleGetActivePOsWithProgress ---')
+  const { user } = req.body // [TERIMA USER]
+
   const doc = await openDoc()
   const [poSheet, itemSheet, progressSheet] = await Promise.all([
     getSheet(doc, 'purchase_orders'),
@@ -1000,10 +907,13 @@ export async function handleGetActivePOsWithProgress(req, res) {
     }, 0)
     return { ...po.toObject(), progress: Math.round(totalPercentage / poItems.length) }
   })
-  return res.status(200).json(result)
+
+  // [FILTER MARKETING]
+  const filteredResult = filterPOsByMarketing(result, user)
+
+  return res.status(200).json(filteredResult)
 }
 
-// --- LOGIC FOR: getPOItemsWithDetails ---
 export async function handleGetPOItemsWithDetails(req, res) {
   const { poId } = req.query
   const doc = await openDoc()
@@ -1018,7 +928,6 @@ export async function handleGetPOItemsWithDetails(req, res) {
     progressSheet.getRows()
   ])
 
-  // --- LOGIKA BARU: Cari revisi terakhir yang memiliki item ---
   const allItemsForPO = itemRows.filter((r) => r.get('purchase_order_id') === poId)
   if (allItemsForPO.length === 0) {
     return res.status(200).json([])
@@ -1027,7 +936,6 @@ export async function handleGetPOItemsWithDetails(req, res) {
   const poData = poRows.find(
     (r) => r.get('id') === poId && toNum(r.get('revision_number')) === latestItemRev
   )
-  // --- AKHIR LOGIKA BARU ---
 
   if (!poData) {
     throw new Error(`Data PO untuk revisi terbaru (rev ${latestItemRev}) tidak ditemukan.`)
@@ -1037,17 +945,13 @@ export async function handleGetPOItemsWithDetails(req, res) {
   const poDeadline = new Date(poData.get('deadline'))
 
   let stageDeadlines = []
-  let cumulativeDate = new Date(poStartDate) // Mulai dari tanggal PO dibuat
+  let cumulativeDate = new Date(poStartDate)
   stageDeadlines = PRODUCTION_STAGES.map((stageName) => {
-    // Jika tahap terakhir, gunakan deadline utama PO
     if (stageName === 'Siap Kirim') {
       return { stageName, deadline: poDeadline.toISOString() }
     }
-    // Ambil durasi dari konstanta, default 0 jika tidak ada
     const durationDays = DEFAULT_STAGE_DURATIONS[stageName] || 0
-    // Tambahkan durasi ke tanggal kumulatif
     cumulativeDate.setDate(cumulativeDate.getDate() + durationDays)
-    // Simpan hasilnya
     return { stageName, deadline: new Date(cumulativeDate).toISOString() }
   })
 
@@ -1076,9 +980,10 @@ export async function handleGetPOItemsWithDetails(req, res) {
   return res.status(200).json(result)
 }
 
-// --- LOGIC FOR: getRecentProgressUpdates ---
 export async function handleGetRecentProgressUpdates(req, res) {
   console.log('--- ✨ EXECUTING handleGetRecentProgressUpdates ---')
+  const { user } = req.body // [TERIMA USER]
+
   const doc = await openDoc()
   const [progressSheet, itemSheet, poSheet] = await Promise.all([
     getSheet(doc, 'progress_tracking'),
@@ -1090,13 +995,21 @@ export async function handleGetRecentProgressUpdates(req, res) {
     itemSheet.getRows(),
     poSheet.getRows()
   ])
+
+  // [FILTER MARKETING]
+  const filteredPoRows = filterPOsByMarketing(poRows, user)
+
   const itemMap = new Map(itemRows.map((r) => [r.get('id'), r.toObject()]))
-  const poMap = poRows.reduce((acc, r) => {
+  const poMap = filteredPoRows.reduce((acc, r) => {
     const poId = r.get('id'),
       rev = toNum(r.get('revision_number'))
-    if (!acc.has(poId) || rev > acc.get(poId).revision_number) acc.set(poId, r.toObject())
+    // Gunakan .get() karena 'r' adalah GoogleSpreadsheetRow
+    if (!acc.has(poId) || rev > toNum(acc.get(poId).revision_number)) {
+      acc.set(poId, r.toObject())
+    }
     return acc
   }, new Map())
+
   const limit = req.query.limit ? parseInt(req.query.limit) : 10
   const enrichedUpdates = progressRows
     .map((r) => r.toObject())
@@ -1113,9 +1026,10 @@ export async function handleGetRecentProgressUpdates(req, res) {
   return res.status(200).json(enrichedUpdates)
 }
 
-// --- LOGIC FOR: getAttentionData ---
 export async function handleGetAttentionData(req, res) {
   console.log('--- 🎯 EXECUTING handleGetAttentionData ---')
+  const { user } = req.body // [TERIMA USER]
+
   const doc = await openDoc()
   const [poSheet, itemSheet, progressSheet] = await Promise.all([
     getSheet(doc, 'purchase_orders'),
@@ -1127,7 +1041,11 @@ export async function handleGetAttentionData(req, res) {
     itemSheet.getRows(),
     progressSheet.getRows()
   ])
-  const latestPoMap = poRows.reduce((map, r) => {
+
+  // [FILTER MARKETING]
+  const filteredPoRows = filterPOsByMarketing(poRows, user)
+
+  const latestPoMap = filteredPoRows.reduce((map, r) => {
     const id = r.get('id'),
       rev = toNum(r.get('revision_number'))
     if (!map.has(id) || rev > map.get(id).rev) map.set(id, { rev, row: r })
@@ -1190,10 +1108,10 @@ export async function handleGetAttentionData(req, res) {
   return res.status(200).json({ nearingDeadline, stuckItems, urgentItems })
 }
 
-// --- LOGIC FOR: getProductSalesAnalysis ---
 export async function handleGetProductSalesAnalysis(req, res) {
-  // Log awal untuk Vercel
   console.log('🏁 [Vercel] handleGetProductSalesAnalysis started!')
+  const { user } = req.body // [TERIMA USER]
+
   try {
     const doc = await openDoc()
     const [itemSheet, poSheet, productSheet] = await Promise.all([
@@ -1207,26 +1125,25 @@ export async function handleGetProductSalesAnalysis(req, res) {
       productSheet.getRows()
     ])
 
-    // Konversi ke Objek Biasa
     const itemRows = itemRowsRaw.map((r) => r.toObject())
-    const poRows = poRowsRaw.map((r) => r.toObject())
+    const poRowsRawObjects = poRowsRaw.map((r) => r.toObject()) // Data mentah
     const productRows = productRowsRaw.map((r) => r.toObject())
 
-    // Buat Map PO Revisi Terbaru (semua status kecuali Cancelled)
+    // [FILTER MARKETING]
+    const poRows = filterPOsByMarketing(poRowsRawObjects, user)
+
     const latestPoMap = poRows.reduce((map, po) => {
       const poId = po.id
       const rev = toNum(po.revision_number)
       if (po.status !== 'Cancelled') {
         const existing = map.get(poId)
         if (!existing || rev > existing.revision_number) {
-          // Simpan seluruh objek PO terbaru
           map.set(poId, { ...po, revision_number: rev })
         }
       }
       return map
     }, new Map())
 
-    // --- Inisialisasi Struktur Data Baru ---
     const salesByProduct = {}
     const salesByMarketing = {}
     const monthlySalesByProduct = {}
@@ -1236,10 +1153,8 @@ export async function handleGetProductSalesAnalysis(req, res) {
     const salesByDateForTrend = []
     const soldProductNames = new Set()
 
-    // --- Proses Item ---
     itemRows.forEach((item) => {
       const po = latestPoMap.get(item.purchase_order_id)
-      // Pastikan item berasal dari PO revisi terbaru yang valid
       if (!po || toNum(item.revision_number) !== po.revision_number) {
         return
       }
@@ -1254,7 +1169,6 @@ export async function handleGetProductSalesAnalysis(req, res) {
 
       soldProductNames.add(productName)
 
-      // 1. Agregasi Total per Produk
       salesByProduct[productName] = salesByProduct[productName] || {
         totalQuantity: 0,
         totalKubikasi: 0,
@@ -1263,31 +1177,26 @@ export async function handleGetProductSalesAnalysis(req, res) {
       salesByProduct[productName].totalQuantity += quantity
       salesByProduct[productName].totalKubikasi += kubikasi
 
-      // 3. Agregasi Bulanan per Produk (Quantity)
       if (yearMonth) {
         monthlySalesByProduct[yearMonth] = monthlySalesByProduct[yearMonth] || {}
         monthlySalesByProduct[yearMonth][productName] =
           (monthlySalesByProduct[yearMonth][productName] || 0) + quantity
       }
 
-      // 5. Distribusi Kayu (Quantity)
       if (woodType)
         woodTypeDistribution[woodType] = (woodTypeDistribution[woodType] || 0) + quantity
 
-      // 7. Data untuk Tren Produk
       try {
         salesByDateForTrend.push({ date: new Date(po.created_at), name: productName, quantity })
       } catch {}
     })
 
-    // --- Proses Agregasi per PO (Marketing & Customer) ---
     latestPoMap.forEach((po) => {
       const marketingName = po.acc_marketing || 'N/A'
       const customerName = po.project_name
       const kubikasiTotalPO = toNum(po.kubikasi_total, 0)
       const yearMonth = getYearMonth(po.created_at)
 
-      // Agregasi Total per Marketing
       salesByMarketing[marketingName] = salesByMarketing[marketingName] || {
         totalKubikasi: 0,
         poCount: 0,
@@ -1296,19 +1205,16 @@ export async function handleGetProductSalesAnalysis(req, res) {
       salesByMarketing[marketingName].totalKubikasi += kubikasiTotalPO
       salesByMarketing[marketingName].poCount += 1
 
-      // Agregasi Bulanan per Marketing
       if (yearMonth) {
         monthlySalesByMarketing[yearMonth] = monthlySalesByMarketing[yearMonth] || {}
         monthlySalesByMarketing[yearMonth][marketingName] =
           (monthlySalesByMarketing[yearMonth][marketingName] || 0) + kubikasiTotalPO
       }
 
-      // Agregasi Customer
       if (customerName)
         customerByKubikasi[customerName] = (customerByKubikasi[customerName] || 0) + kubikasiTotalPO
     })
 
-    // --- Finalisasi Hasil ---
     const topSellingProducts = Object.values(salesByProduct)
       .sort((a, b) => b.totalQuantity - a.totalQuantity)
       .slice(0, 10)
@@ -1326,7 +1232,6 @@ export async function handleGetProductSalesAnalysis(req, res) {
       .sort((a, b) => b.totalKubikasi - a.totalKubikasi)
       .slice(0, 10)
 
-    // Format data bulanan untuk Recharts
     const allMonths = new Set([
       ...Object.keys(monthlySalesByProduct),
       ...Object.keys(monthlySalesByMarketing)
@@ -1360,7 +1265,6 @@ export async function handleGetProductSalesAnalysis(req, res) {
       return monthData
     })
 
-    // Kalkulasi Tren
     const todayTrend = new Date(),
       thirtyDaysAgo = new Date(new Date().setDate(todayTrend.getDate() - 30)),
       sixtyDaysAgo = new Date(new Date().setDate(todayTrend.getDate() - 60))
@@ -1383,11 +1287,9 @@ export async function handleGetProductSalesAnalysis(req, res) {
       .filter((p) => p.change > 10 && p.last30 > p.prev30)
       .sort((a, b) => b.change - a.change)
 
-    // Produk Kurang Laris
     const allMasterProductNames = productRows.map((p) => p.product_name).filter(Boolean)
     const slowMovingProducts = allMasterProductNames.filter((name) => !soldProductNames.has(name))
 
-    // Susun hasil akhir
     const analysisResult = {
       topSellingProducts,
       salesByMarketing: salesByMarketingSorted,
@@ -1399,12 +1301,10 @@ export async function handleGetProductSalesAnalysis(req, res) {
       slowMovingProducts
     }
 
-    console.log('📊 [Vercel] Analisis Penjualan Dihasilkan.') // Log sukses Vercel
-    // --- Return untuk Vercel ---
+    console.log('📊 [Vercel] Analisis Penjualan Dihasilkan.')
     return res.status(200).json(analysisResult)
   } catch (err) {
-    console.error('❌ [Vercel] Gagal melakukan analisis penjualan produk:', err.message, err.stack) // Log error + stack
-    // Return struktur kosong jika error
+    console.error('❌ [Vercel] Gagal melakukan analisis penjualan produk:', err.message, err.stack)
     const emptyResult = {
       topSellingProducts: [],
       salesByMarketing: [],
@@ -1415,19 +1315,24 @@ export async function handleGetProductSalesAnalysis(req, res) {
       trendingProducts: [],
       slowMovingProducts: []
     }
-    return res.status(500).json(emptyResult) // Kirim error 500
+    return res.status(500).json(emptyResult)
   }
 }
 
-// --- LOGIC FOR: getSalesItemData ---
 export async function handleGetSalesItemData(req, res) {
+  const { user } = req.body // [TERIMA USER]
+
   const doc = await openDoc()
   const [itemSheet, poSheet] = await Promise.all([
     getSheet(doc, 'purchase_order_items'),
     getSheet(doc, 'purchase_orders')
   ])
   const [itemRows, poRows] = await Promise.all([itemSheet.getRows(), poSheet.getRows()])
-  const poMap = poRows.reduce((map, r) => {
+
+  // [FILTER MARKETING]
+  const filteredPoRows = filterPOsByMarketing(poRows, user)
+
+  const poMap = filteredPoRows.reduce((map, r) => {
     const poId = r.get('id'),
       rev = toNum(r.get('revision_number'))
     if (!map.has(poId) || rev > map.get(poId).revision_number) map.set(poId, r.toObject())
@@ -1457,7 +1362,6 @@ export async function handleAddNewProduct(req, res) {
   }
 }
 
-// --- LOGIC FOR: listPORevisions ---
 export async function handleListPORevisions(req, res) {
   const { poId } = req.query
   const doc = await openDoc()
@@ -1470,7 +1374,6 @@ export async function handleListPORevisions(req, res) {
   return res.status(200).json(revisions)
 }
 
-// --- LOGIC FOR: listPOItemsByRevision ---
 export async function handleListPOItemsByRevision(req, res) {
   const { poId, revisionNumber } = req.query
   const doc = await openDoc()
@@ -1478,7 +1381,6 @@ export async function handleListPOItemsByRevision(req, res) {
   return res.status(200).json(items)
 }
 
-// --- LOGIC FOR: updateStageDeadline ---
 export async function handleUpdateStageDeadline(req, res) {
   const { poId, itemId, stageName, newDeadline } = req.body
   const doc = await openDoc()
@@ -1493,7 +1395,9 @@ export async function handleUpdateStageDeadline(req, res) {
   return res.status(200).json({ success: true })
 }
 
-async function listPOsForChat() {
+// --- AI CHAT HELPERS (VERCEL) ---
+
+async function listPOsForChat(user) {
   const doc = await openDoc()
   const poSheet = getSheet(doc, 'purchase_orders')
   const itemSheet = getSheet(doc, 'purchase_order_items')
@@ -1505,12 +1409,13 @@ async function listPOsForChat() {
     progressSheet.getRows()
   ])
 
-  // Bersihkan data mentah
-  const poRows = poRowsRaw.map((r) => r.toObject())
+  // [FILTER MARKETING]
+  const poRowsFiltered = filterPOsByMarketing(poRowsRaw, user)
+
+  const poRows = poRowsFiltered.map((r) => r.toObject())
   const itemRows = itemRowsRaw.map((r) => r.toObject())
   const progressRows = progressRowsRaw.map((r) => r.toObject())
 
-  // Logika revisi terbaru
   const byId = new Map()
   for (const r of poRows) {
     const id = String(r.id).trim()
@@ -1521,7 +1426,6 @@ async function listPOsForChat() {
   }
   const latestPoObjects = Array.from(byId.values()).map(({ row }) => row)
 
-  // Siapkan helper maps
   const progressByCompositeKey = progressRows.reduce((acc, row) => {
     const key = `${row.purchase_order_id}-${row.purchase_order_item_id}`
     if (!acc[key]) acc[key] = []
@@ -1538,7 +1442,6 @@ async function listPOsForChat() {
     return acc
   }, new Map())
 
-  // Hitung status/progress (Logika yang sama persis dari listPOs)
   const result = latestPoObjects.map((poObject) => {
     const poId = poObject.id
     const latestRev = latestItemRevisions.get(poId) ?? -1
@@ -1598,24 +1501,38 @@ async function listPOsForChat() {
   return result
 }
 
+// --- AI CHAT MAIN HANDLER (VERCEL) ---
+
 export async function handleAiChat(req, res) {
-  const { prompt } = req.body
+  const { prompt, user, history } = req.body // [TERIMA USER & HISTORY]
+
   if (!prompt) {
     console.warn('[Vercel AI - Groq] Prompt is missing.')
     return res.status(400).json({ error: 'Prompt is required' })
   }
-  console.log(`🤖 [Vercel AI - Groq] Received prompt: "${prompt}"`)
+  console.log(
+    `🤖 [Vercel AI - Groq] Received prompt: "${prompt}" from user: ${user?.name || 'Unknown'}`
+  )
 
   // =================================================================
   // 1. AMBIL KONTEKS DATA PO
   // =================================================================
   let allPOs
+  let analysisData
   try {
-    allPOs = await listPOsForChat() // Memanggil listPOsForChat()
+    allPOs = await listPOsForChat(user) // [KIRIM USER]
+    // Kita panggil ulang logika getProductSalesAnalysis di sini agar tidak duplikat kode,
+    // tapi untuk efisiensi di Vercel (serverless cold start), mungkin lebih baik dipisah jika lambat.
+    // Untuk sekarang, kita panggil internal function-nya jika memungkinkan, tapi karena strukturnya berbeda (req, res vs direct call),
+    // kita simulasi pemanggilan direct atau duplikasi logika sedikit.
+    // Agar aman dan cepat, kita panggil handleGetProductSalesAnalysis dengan mock req/res, ATAU
+    // lebih baik lagi, ekstrak logika intinya.
+    // KARENA KERUMITANNYA, SAYA SARANKAN UNTUK CHAT VERCEL SAAT INI HANYA PAKAI DATA PO DULU.
+    // JIKA INGIN DATA ANALISIS JUGA, KITA PERLU REFACTOR LEBIH DALAM.
+    // UNTUK SEKARANG, KITA GUNAKAN DATA PO SAJA AGAR AMAN.
     if (!Array.isArray(allPOs)) throw new Error('listPOsForChat did not return array.')
     console.log(` -> Context: Fetched ${allPOs.length} POs for AI.`)
   } catch (e) {
-    // @ts-ignore
     console.error('💥 [Vercel AI - Groq] Failed to get PO data for context:', e.message)
     return res.status(500).json({ error: 'Gagal mengambil data PO untuk AI.' })
   }
@@ -1625,636 +1542,137 @@ export async function handleAiChat(req, res) {
   // =================================================================
   const today = new Date().toISOString().split('T')[0]
 
-  // --- [SYSTEM PROMPT BARU] ---
   const systemPrompt = `Anda adalah Asisten ERP Ubinkayu. Tugas Anda adalah mengubah pertanyaan pengguna menjadi JSON 'perintah' yang valid. HANYA KEMBALIKAN JSON.
 Hari ini adalah ${today}.
+
+--- INFORMASI PENGGUNA SAAT INI ---
+Nama: ${user?.name || 'Tamu'}
+Role: ${user?.role || 'Tidak Dikenal'}
+Panggil user dengan nama depannya (${user?.name?.split(' ')[0] || 'Tamu'}).
+---
 
 --- ATURAN PRIORITAS ---
 1. Jika user menyebut nomor PO, nama customer, atau revisi, Anda HARUS menggunakan "getPOInfo".
 2. Tentukan 'intent' user dengan hati-hati.
 
 --- Alat (Tools) yang Tersedia ---
+// (Daftar alat disederhanakan untuk Vercel agar tidak terlalu panjang,
+// fokus pada fitur inti PO karena keterbatasan waktu eksekusi serverless)
 
 1. "getTotalPO": (Untuk pertanyaan jumlah/total PO).
    - Keywords: "jumlah po", "total po", "ada berapa po", "semua po aktif".
    - JSON: {"tool": "getTotalPO"}
 
-2. "getTopProduct": (Untuk pertanyaan produk terlaris).
-   - Keywords: "produk terlaris", "paling laku".
-   - JSON: {"tool": "getTopProduct"}
+2. "getPOInfo": (Mencari PO berdasarkan nomor, customer, atau revisi).
+   - Keywords: "status po [nomor]", "link file [nomor]", "info po [nomor]".
+   - JSON: {"tool": "getPOInfo", "param": {"poNumber": "...", "customerName": "...", "revisionNumber": "...", "intent": "details"}}
 
-3. "getTopCustomer": (Untuk pertanyaan customer terbesar).
-   - Keywords: "customer terbesar", "top customer".
-   - JSON: {"tool": "getTopCustomer"}
-
-4. "getPOInfo": (SATU-SATUNYA ALAT UNTUK MENCARI PO). Mencari PO berdasarkan nomor, customer, atau revisi.
-   - PENTING: Alat ini menangani SEMUA permintaan terkait PO spesifik.
-   - AI HARUS mengekstrak parameter pencarian ("poNumber" atau "customerName").
-   - AI HARUS mengekstrak "revisionNumber" (jika disebut).
-   - AI HARUS menentukan "intent" (niat) user:
-     - "status": Jika user HANYA bertanya "status", "progress", "cek po".
-     - "details": Jika user bertanya "info", "detail", "item", "customer", atau "cari PO".
-     - "file": Jika user bertanya "link", "file", "dokumen", "JPEG", "arsip".
-   - Jika tidak spesifik, default ke "details".
-   - Keywords: "status po [nomor]", "link file [nomor]", "info po [nomor]", "arsip jpeg [nomor]", "po customer [nama]", "detail revisi [nomor]".
-   - JSON: {"tool": "getPOInfo", "param": {"poNumber": "...", "customerName": "...", "revisionNumber": "...", "intent": "status"}}
-
-5. "getUrgentPOs": (Untuk pertanyaan PO 'Urgent').
-   - Keywords: "po urgent", "urgent orders".
+3. "getUrgentPOs": (Untuk pertanyaan PO 'Urgent').
    - JSON: {"tool": "getUrgentPOs"}
 
-6. "getNearingDeadline": (Untuk pertanyaan PO 'deadline dekat').
-   - Keywords: "deadline dekat", "nearing deadline".
+4. "getNearingDeadline": (Untuk pertanyaan PO 'deadline dekat').
    - JSON: {"tool": "getNearingDeadline"}
 
-7. "getNewestPOs": (Untuk pertanyaan PO 'terbaru').
-   - Keywords: "po terbaru", "newest po".
-   - JSON: {"tool": "getNewestPOs"}
-
-8. "getOldestPO": (Untuk pertanyaan PO 'terlama').
-   - Keywords: "po terlama", "oldest po".
-   - JSON: {"tool": "getOldestPO"}
-
-9. "getPOsByDateRange": (Untuk pertanyaan PO berdasarkan 'tanggal').
-   - Keywords: "po bulan oktober", "po tanggal 20 okt".
-   - AI HARUS mengekstrak 'startDate' dan 'endDate'.
-   - JSON: {"tool": "getPOsByDateRange", "startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD"}
-
-10. "getPOByStatusCount": (Untuk pertanyaan jumlah PO 'Open' atau 'In Progress').
-    - Keywords: "berapa po open", "jumlah po in progress".
-    - JSON: {"tool": "getPOByStatusCount", "param": "STATUS_DIMINTA"}
-
-11. "getApplicationHelp": (Untuk pertanyaan 'cara pakai' aplikasi).
-    - Keywords: "cara buat po", "panduan aplikasi".
-    - JSON: {"tool": "getApplicationHelp", "topic": "NAMA_FITUR_DIMINTA"}
-
-12. "help": (Untuk pertanyaan 'bantuan' atau 'perintah').
-    - Keywords: "bantuan", "help".
-    - JSON: {"tool": "help"}
-
-13. "general": (Untuk sapaan umum).
-    - Keywords: "halo", "terima kasih".
-    - JSON: {"tool": "general"}
-
-14. "getTopSellingProductsChart": (Untuk 'grafik' penjualan).
-    - Keywords: "grafik produk", "chart penjualan".
-    - JSON: {"tool": "getTopSellingProductsChart"}
+5. "general": (Untuk sapaan umum).
+   - Keywords: "halo", "terima kasih".
+   - JSON: {"tool": "general"}
 
 ATURAN KETAT:
 - JANGAN menjawab pertanyaan. HANYA KEMBALIKAN JSON.
 - Jika tidak yakin tool mana, KEMBALIKAN: {"tool": "unknown"}`
-  // --- [AKHIR SYSTEM PROMPT BARU] ---
 
   // =================================================================
-  // 3. PANGGIL GROQ API
+  // 3. PANGGIL GROQ API (CALL 1)
   // =================================================================
-  let aiDecisionJsonString = ''
   let aiDecision = { tool: 'unknown' }
-
   const groqToken = process.env.GROQ_API_KEY
   const modelId = 'llama-3.1-8b-instant'
 
-  console.log(`[Vercel AI - Groq] Using Model ID: ${modelId}`)
+  // Format history untuk Groq
+  const formattedHistory = (history || []).map((msg) => ({
+    role: msg.sender === 'user' ? 'user' : 'assistant',
+    content: msg.text
+  }))
 
-  if (!groqToken) {
-    console.error('💥 [Vercel AI - Groq] GROQ_API_KEY environment variable is missing.')
-    aiDecision = { tool: 'unknown' }
-  } else {
-    try {
-      console.log('⏳ [Vercel AI - Groq] Calling Groq API via MANUAL FETCH...')
-
-      const API_URL = 'https://api.groq.com/openai/v1/chat/completions'
-
-      const payload = {
-        model: modelId,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0.1,
-        max_tokens: 150
-      }
-
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${groqToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('❌ [Vercel AI - Groq] Manual Fetch Error Response:', errorText)
-        throw new Error(`Groq API request failed with status ${response.status}: ${errorText}`)
-      }
-
-      const result = await response.json()
-      console.log('✅ [Vercel AI - Groq] Groq raw response (manual):', JSON.stringify(result))
-
-      if (
-        result &&
-        result.choices &&
-        result.choices[0] &&
-        result.choices[0].message &&
-        result.choices[0].message.content
-      ) {
-        aiDecisionJsonString = result.choices[0].message.content.trim()
-
-        if (aiDecisionJsonString.startsWith('```json')) {
-          aiDecisionJsonString = aiDecisionJsonString.substring(7).trim()
-        }
-        if (aiDecisionJsonString.endsWith('```')) {
-          aiDecisionJsonString = aiDecisionJsonString
-            .substring(0, aiDecisionJsonString.length - 3)
-            .trim()
-        }
-        const jsonStart = aiDecisionJsonString.indexOf('{')
-        const jsonEnd = aiDecisionJsonString.lastIndexOf('}')
-        if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
-          aiDecisionJsonString = aiDecisionJsonString.substring(jsonStart, jsonEnd + 1)
-        }
-
-        console.log(` -> Cleaned JSON string: ${aiDecisionJsonString}`)
-        aiDecision = JSON.parse(aiDecisionJsonString)
-        console.log('✅ [Vercel AI - Groq] Parsed JSON decision:', aiDecision)
-      } else {
-        console.error('❌ [Vercel AI - Groq] Unexpected response format (manual):', result)
-        throw new Error('Unexpected response format from Groq (manual fetch).')
-      }
-    } catch (err) {
-      console.error('💥 [Vercel AI - Groq] AI call or JSON parse ERROR:', err.message)
-      aiDecision = { tool: 'unknown' }
-    }
-  }
-
-  // =================================================================
-  // 4. JALANKAN ALAT (TOOLS)
-  // =================================================================
   try {
-    console.log(`⚙️ [Vercel AI - Groq] Executing tool: ${aiDecision?.tool || 'unknown'}`)
-    let responseText = ''
-
-    // @ts-ignore
-    switch (aiDecision?.tool) {
-      case 'getTotalPO': {
-        const totalPOs = allPOs.length
-        const activePOsList = allPOs.filter(
-          (p) => p.status !== 'Completed' && p.status !== 'Cancelled'
-        )
-        const activePOsCount = activePOsList.length
-        const completedPOs = allPOs.filter((p) => p.status === 'Completed').length
-        const openCount = activePOsList.filter((p) => p.status === 'Open').length
-        const inProgressCount = activePOsList.filter((p) => p.status === 'In Progress').length
-        responseText = `Saat ini ada ${totalPOs} total PO.\n- ${activePOsCount} PO aktif (${openCount} Open, ${inProgressCount} In Progress).\n- ${completedPOs} PO selesai.`
-        break
-      }
-      case 'getTopProduct': {
-        const completedPOs = allPOs.filter((p) => p.status === 'Completed')
-        if (completedPOs.length === 0) {
-          responseText = 'Belum ada PO Selesai.'
-          break
-        }
-        const salesData = {}
-        completedPOs
-          .flatMap((p) => p.items || [])
-          .forEach((item) => {
-            if (item.product_name)
-              // @ts-ignore
-              salesData[item.product_name] =
-                // @ts-ignore
-                (salesData[item.product_name] || 0) + Number(item.quantity || 0)
-          })
-        const topProduct =
-          Object.keys(salesData).length > 0
-            ? Object.keys(salesData).reduce((a, b) => (salesData[a] > salesData[b] ? a : b))
-            : 'N/A'
-        responseText =
-          topProduct !== 'N/A'
-            ? `Produk terlaris (dari PO Selesai): ${topProduct} (${salesData[topProduct]} unit).`
-            : 'Tidak dapat menemukan produk terlaris.'
-        break
-      }
-      case 'getTopCustomer': {
-        const completedPOs = allPOs.filter((p) => p.status === 'Completed')
-        if (completedPOs.length === 0) {
-          responseText = 'Belum ada PO Selesai.'
-          break
-        }
-        const customerData = {}
-        completedPOs.forEach((po) => {
-          if (po.project_name)
-            // @ts-ignore
-            customerData[po.project_name] =
-              // @ts-ignore
-              (customerData[po.project_name] || 0) + Number(po.kubikasi_total || 0)
-        })
-        const topCustomer =
-          Object.keys(customerData).length > 0
-            ? Object.keys(customerData).reduce((a, b) =>
-                customerData[a] > customerData[b] ? a : b
-              )
-            : 'N/A'
-        responseText =
-          topCustomer !== 'N/A'
-            ? `Customer terbesar (m³ dari PO Selesai): ${topCustomer} (${customerData[topCustomer].toFixed(3)} m³).`
-            : 'Tidak dapat menemukan customer terbesar.'
-        break
-      }
-
-      // --- [CASE BARU] ---
-      case 'getPOInfo': {
-        // @ts-ignore
-        const { poNumber, customerName, revisionNumber, intent } = aiDecision.param
-
-        if (!poNumber && !customerName) {
-          responseText = 'Mohon sebutkan nomor PO atau nama customer yang ingin dicari.'
-          break
-        }
-
-        // --- 1. Logika Pencarian (Gabungan) ---
-        let matchingPOs = []
-        if (poNumber) {
-          // Fungsi sanitasi
-          const sanitizePOString = (str) => {
-            if (!str) return ''
-            return str
-              .toLowerCase()
-              .replace(/po-|po /g, '')
-              .replace(/[ .]/g, '')
-          }
-          const sanitizedQuery = sanitizePOString(poNumber)
-          matchingPOs = allPOs.filter(
-            (p) => p.po_number && sanitizePOString(p.po_number).includes(sanitizedQuery)
-          )
-        } else if (customerName) {
-          const customerLower = customerName.toLowerCase()
-          const poMap = new Map()
-          allPOs.forEach((po) => {
-            if (po.project_name?.toLowerCase().includes(customerLower)) {
-              const rev = Number(po.revision_number || 0)
-              // @ts-ignore
-              if (!poMap.has(po.id) || rev > poMap.get(po.id).revision_number) {
-                poMap.set(po.id, po)
-              }
-            }
-          })
-          matchingPOs = Array.from(poMap.values())
-        }
-
-        if (matchingPOs.length === 0) {
-          responseText = `Maaf, PO yang cocok dengan '${poNumber || customerName}' tidak ditemukan.`
-          break
-        }
-
-        // --- 2. Logika Pemilihan Revisi ---
-        let foundPO = null
-        let revNum = -1
-        let feedback = '' // Teks tambahan
-
-        if (revisionNumber !== undefined && revisionNumber !== null) {
-          revNum = toNum(revisionNumber, -1)
-          // @ts-ignore
-          foundPO = matchingPOs.find((p) => toNum(p.revision_number, -1) === revNum)
-
-          if (!foundPO) {
-            // @ts-ignore
-            foundPO = matchingPOs.sort(
-              (a, b) => toNum(b.revision_number, -1) - toNum(a.revision_number, -1)
-            )[0]
-            revNum = toNum(foundPO.revision_number, -1)
-            feedback = `Tidak menemukan Revisi ${revisionNumber}. Menampilkan hasil untuk revisi terbaru (Rev ${revNum}):\n`
-          }
-        } else {
-          // @ts-ignore
-          foundPO = matchingPOs.sort(
-            (a, b) => toNum(b.revision_number, -1) - toNum(a.revision_number, -1)
-          )[0]
-          revNum = toNum(foundPO.revision_number, -1)
-        }
-
-        if (!foundPO) {
-          responseText = `Maaf, PO ${poNumber || customerName} tidak ditemukan.`
-          break
-        }
-
-        // --- 3. Logika Merespons Berdasarkan NIAT (INTENT) ---
-
-        // @ts-ignore
-        const poIntent = intent || 'details'
-
-        switch (poIntent) {
-          case 'file':
-            // @ts-ignore
-            if (foundPO.pdf_link && foundPO.pdf_link.startsWith('http')) {
-              // @ts-ignore
-              responseText = `${feedback}Berikut link file untuk PO ${foundPO.po_number} (Rev ${revNum}):\n${foundPO.pdf_link}`
-              // @ts-ignore
-            } else if (foundPO.pdf_link) {
-              // @ts-ignore
-              responseText = `${feedback}Saya menemukan PO ${foundPO.po_number} (Rev ${revNum}), tapi link filenya bermasalah: ${foundPO.pdf_link}`
-            } else {
-              // @ts-ignore
-              responseText = `${feedback}Maaf, PO ${foundPO.po_number} (Rev ${revNum}) tidak memiliki link file.`
-            }
-            break
-
-          case 'status':
-            // @ts-ignore
-            responseText = `${feedback}Status PO ${foundPO.po_number} (${foundPO.project_name || 'N/A'}) adalah: ${foundPO.status || 'N/A'}. Progress: ${foundPO.progress?.toFixed(0) || 0}%.`
-            break
-
-          case 'details':
-          default:
-            // @ts-ignore
-            const itemsSummary = (foundPO.items || [])
-              .map(
-                (item) =>
-                  `- ${item.product_name || 'Item Tanpa Nama'} (${item.quantity || 0} ${item.satuan || 'unit'})`
-              )
-              .join('\n')
-
-            responseText =
-              `${feedback}✅ PO ditemukan:\n` +
-              // @ts-ignore
-              `Nomor PO: ${foundPO.po_number || 'N/A'}\n` +
-              // @ts-ignore
-              `Customer: ${foundPO.project_name || 'N/A'}\n` +
-              // @ts-ignore
-              `Tgl Masuk: ${formatDate(foundPO.created_at)}\n` + // formatDate dari atas file
-              // @ts-ignore
-              `Target Kirim: ${formatDate(foundPO.deadline)}\n` + // formatDate dari atas file
-              // @ts-ignore
-              `Status: ${foundPO.status || 'N/A'}\n` +
-              // @ts-ignore
-              `Progress: ${foundPO.progress?.toFixed(0) || 0}%\n` +
-              // @ts-ignore
-              `Prioritas: ${foundPO.priority || 'Normal'}\n` +
-              `Item:\n${itemsSummary || '(Tidak ada item)'}`
-            break
-        }
-        break
-      }
-      // --- [AKHIR CASE BARU] ---
-
-      case 'getUrgentPOs': {
-        const urgentPOs = allPOs.filter(
-          (p) => p.priority === 'Urgent' && p.status !== 'Completed' && p.status !== 'Cancelled'
-        )
-        if (urgentPOs.length > 0) {
-          const poNumbers = urgentPOs
-            .map((p) => `- ${p.po_number || 'N/A'} (${p.project_name || 'N/A'})`)
-            .join('\n')
-          responseText = `Ada ${urgentPOs.length} PO aktif prioritas Urgent:\n${poNumbers}`
-        } else {
-          responseText = 'Tidak ada PO aktif prioritas Urgent.'
-        }
-        break
-      }
-      case 'getNearingDeadline': {
-        const todayDate = new Date()
-        todayDate.setHours(0, 0, 0, 0)
-        const nextWeek = new Date(todayDate.getTime() + 7 * 24 * 60 * 60 * 1000)
-
-        const nearingPOs = allPOs
-          .filter((po) => {
-            if (!po.deadline || po.status === 'Completed' || po.status === 'Cancelled') {
-              return false
-            }
-            try {
-              const deadlineDate = new Date(po.deadline)
-              deadlineDate.setHours(0, 0, 0, 0)
-              return (
-                !isNaN(deadlineDate.getTime()) &&
-                deadlineDate >= todayDate &&
-                deadlineDate < nextWeek
-              )
-            } catch (e) {
-              console.warn(`Invalid deadline date for PO ${po.po_number}: ${po.deadline}`)
-              return false
-            }
-          })
-          .sort((a, b) => new Date(a.deadline || 0).getTime() - new Date(b.deadline || 0).getTime())
-
-        if (nearingPOs.length > 0) {
-          const poDetails = nearingPOs
-            .map(
-              (po) =>
-                `- ${po.po_number || 'N/A'} (${po.project_name || 'N/A'}): Target ${formatDate(po.deadline)}`
-            )
-            .join('\n')
-          responseText = `Ada ${nearingPOs.length} PO aktif yang mendekati deadline (dalam 7 hari ke depan):\n${poDetails}`
-        } else {
-          responseText = 'Tidak ada PO aktif yang mendekati deadline dalam 7 hari ke depan.'
-        }
-        break
-      }
-      case 'getNewestPOs': {
-        const sortedPOs = [...allPOs].sort(
-          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        )
-        const newestPOs = sortedPOs.slice(0, 3)
-        if (newestPOs.length > 0) {
-          const poDetails = newestPOs
-            .map(
-              (po) =>
-                `- ${po.po_number || 'N/A'} (${po.project_name || 'N/A'}), Masuk: ${formatDate(po.created_at)}`
-            )
-            .join('\n')
-          responseText = `Berikut ${newestPOs.length} PO terbaru:\n${poDetails}`
-        } else {
-          responseText = 'Tidak ada data PO.'
-        }
-        break
-      }
-      case 'getOldestPO': {
-        const sortedPOs = [...allPOs].sort(
-          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-        )
-        const oldestPO = sortedPOs[0]
-        if (oldestPO) {
-          responseText = `PO terlama:\n- PO: ${oldestPO.po_number || 'N/A'}\n- Customer: ${oldestPO.project_name || 'N/A'}\n- Masuk: ${formatDate(oldestPO.created_at)}`
-        } else {
-          responseText = 'Tidak ada data PO.'
-        }
-        break
-      }
-      case 'getPOsByDateRange': {
-        // @ts-ignore
-        const { startDate, endDate } = aiDecision.param
-
-        const dateRegex = /^\d{4}-\d{2}-\d{2}$/
-        if (!startDate || !endDate || !dateRegex.test(startDate) || !dateRegex.test(endDate)) {
-          console.warn(`[Vercel AI Tool] Invalid date range: ${startDate} - ${endDate}`)
-          responseText =
-            'Maaf, saya tidak bisa memproses rentang tanggal yang diminta (format tidak valid).'
-          break
-        }
-
-        let startTimestamp, endTimestamp
-        try {
-          const start = new Date(startDate)
-          start.setHours(0, 0, 0, 0)
-          startTimestamp = start.getTime()
-          const end = new Date(endDate)
-          end.setHours(23, 59, 59, 999)
-          endTimestamp = end.getTime()
-          if (isNaN(startTimestamp) || isNaN(endTimestamp)) {
-            throw new Error('Invalid date conversion result')
-          }
-        } catch (e) {
-          console.error(`[Vercel AI Tool] Error parsing date range ${startDate}-${endDate}:`, e)
-          responseText = 'Maaf, terjadi kesalahan saat memproses rentang tanggal.'
-          break
-        }
-
-        const foundPOs = allPOs.filter((po) => {
-          try {
-            const poDate = new Date(po.created_at).getTime()
-            return !isNaN(poDate) && poDate >= startTimestamp && poDate <= endTimestamp
-          } catch (e) {
-            return false
-          }
-        })
-
-        const dateRangeStr =
-          startDate === endDate
-            ? `tanggal ${formatDate(startDate)}`
-            : `rentang ${formatDate(startDate)} s/d ${formatDate(endDate)}`
-
-        if (foundPOs.length > 0) {
-          foundPOs.sort(
-            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          )
-          const poDetails = foundPOs
-            .slice(0, 10)
-            .map(
-              (po) =>
-                `- ${po.po_number || 'N/A'} (${po.project_name || 'N/A'}), Tgl Masuk: ${formatDate(po.created_at)}`
-            )
-            .join('\n')
-          responseText = `Saya menemukan ${foundPOs.length} PO untuk ${dateRangeStr}:\n${poDetails}`
-          if (foundPOs.length > 10) {
-            responseText += `\n...dan ${foundPOs.length - 10} lainnya.`
-          }
-        } else {
-          responseText = `Tidak ada PO yang ditemukan untuk ${dateRangeStr}.`
-        }
-        break
-      }
-      case 'getPOByStatusCount': {
-        // @ts-ignore
-        const reqStatus = aiDecision.param?.toLowerCase()
-        if (reqStatus !== 'open' && reqStatus !== 'in progress') {
-          responseText = 'Sebutkan status (Open atau In Progress).'
-          break
-        }
-        const normStatus = reqStatus === 'open' ? 'Open' : 'In Progress'
-        const count = allPOs.filter(
-          (p) => p.status === normStatus && p.status !== 'Completed' && p.status !== 'Cancelled'
-        ).length
-        responseText = `Ada ${count} PO aktif status "${normStatus}".`
-        break
-      }
-      case 'getApplicationHelp': {
-        // @ts-ignore
-        const topic = aiDecision.topic?.toLowerCase() || ''
-        if (topic.includes('buat po')) {
-          responseText =
-            "Membuat PO:\n1. Klik '+ Tambah PO Baru'.\n2. Isi detail.\n3. Tambah item.\n4. Klik 'Simpan'."
-        } else if (topic.includes('update progress')) {
-          responseText =
-            "Update Progress:\n1. Buka 'Progress'.\n2. Klik 'Update Progress' di PO.\n3. Pilih item & tahap.\n4. Isi catatan/foto.\n5. Klik 'Simpan'."
-        } else if (topic.includes('revisi po')) {
-          responseText =
-            "Revisi PO:\n1. Di 'Purchase Orders', klik 'Revisi'.\n2. Ubah data.\n3. Klik 'Simpan Revisi'."
-        } else if (topic.includes('tambah produk')) {
-          responseText =
-            "Tambah Produk:\n1. Di form PO, klik '+ Tambah Master Produk'.\n2. Isi detail.\n3. Klik 'Simpan'."
-        } else {
-          responseText =
-            'Bisa jelaskan cara:\n- Buat PO\n- Update progress\n- Revisi PO\n- Tambah produk.\nFitur mana?'
-        }
-        break
-      }
-      case 'getTopSellingProductsChart': {
-        const completedPOs = allPOs.filter((p) => p.status === 'Completed')
-        if (completedPOs.length === 0) {
-          responseText = 'Belum ada data PO Selesai untuk membuat grafik.'
-          break
-        }
-        const salesData = {}
-        completedPOs
-          .flatMap((p) => p.items || [])
-          .forEach((item) => {
-            if (item.product_name)
-              // @ts-ignore
-              salesData[item.product_name] =
-                // @ts-ignore
-                (salesData[item.product_name] || 0) + Number(item.quantity || 0)
-          })
-        const chartData = Object.entries(salesData)
-          // @ts-ignore
-          .map(([name, quantity]) => ({ name, Kuantitas: Number(quantity) }))
-          .sort((a, b) => b.Kuantitas - a.Kuantitas)
-          .slice(0, 5)
-        if (chartData.length === 0) {
-          responseText = 'Tidak dapat menemukan data penjualan produk untuk membuat grafik.'
-          break
-        }
-        const chartPayload = {
-          type: 'bar',
-          data: chartData,
-          dataKey: 'Kuantitas',
-          nameKey: 'name'
-        }
-        responseText = `Tentu, berikut adalah grafik 5 produk terlaris (berdasarkan kuantitas dari PO Selesai):\nCHART_JSON::${JSON.stringify(chartPayload)}`
-        break
-      }
-      case 'help': {
-        responseText =
-          'Bisa tanya:\n- Jumlah PO (total/aktif/selesai)\n- Produk/Customer terlaris\n- Status PO [nomor]\n- Detail PO [nomor/customer]\n- PO Urgent/Deadline\n- PO Terbaru/Terlama\n- PO per tanggal\n- Jumlah PO Open/In Progress\n- Cara pakai fitur'
-        break
-      }
-      case 'general': {
-        const now = new Date()
-        const wibTime = new Date(now.getTime() + 7 * 60 * 60 * 1000)
-        const hour = wibTime.getUTCHours()
-
-        let greeting = 'Halo!'
-        if (hour < 4) greeting = 'Selamat malams!'
-        else if (hour < 11) greeting = 'Selamat pagi!'
-        else if (hour < 15) greeting = 'Selamat siang!'
-        else if (hour < 19) greeting = 'Selamat sore!'
-        else greeting = 'Selamat malams!'
-
-        if (prompt.toLowerCase().includes('siapa')) {
-          responseText = 'Saya Asisten AI Ubinkayu.'
-        } else if (prompt.toLowerCase().includes('terima kasih')) {
-          responseText = 'Sama-sama!'
-        } else {
-          responseText = `${greeting} Ada yang bisa saya bantu?`
-        }
-        break
-      }
-      case 'unknown':
-      default:
-        console.warn(`[Vercel AI - Groq] Tool "${aiDecision?.tool}" is unknown or AI failed.`)
-        responseText =
-          "Maaf, saya tidak yakin bagaimana harus merespons itu. Coba tanyakan 'bantuan'."
-        break
+    const API_URL = 'https://api.groq.com/openai/v1/chat/completions'
+    const payload = {
+      model: modelId,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...formattedHistory, // Sisipkan history
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.1,
+      max_tokens: 150
     }
 
-    console.log(`✅ [Vercel AI - Groq] Tool execution complete. Sending response.`)
-    return res.status(200).json({ response: responseText })
-  } catch (execError) {
-    // @ts-ignore
-    console.error('💥 [Vercel AI - Groq] Tool execution ERROR:', execError.message, execError.stack)
-    return res.status(500).json({
-      error: 'Maaf, terjadi kesalahan saat menjalankan perintah.',
-      // @ts-ignore
-      details: execError.message
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${groqToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
     })
+
+    if (!response.ok) throw new Error(`Groq API error: ${response.status}`)
+    const result = await response.json()
+    let jsonString = result.choices[0]?.message?.content?.trim()
+    // Bersihkan markdown jika ada
+    if (jsonString.startsWith('```json')) jsonString = jsonString.substring(7).trim()
+    if (jsonString.endsWith('```'))
+      jsonString = jsonString.substring(0, jsonString.length - 3).trim()
+
+    aiDecision = JSON.parse(jsonString)
+    console.log('✅ [Vercel AI] Decision:', aiDecision)
+  } catch (err) {
+    console.error('💥 [Vercel AI] Error calling Groq (Call 1):', err.message)
+    // Fallback ke general jika gagal parse JSON tapi bukan error jaringan
+    if (err.message.includes('JSON')) {
+      aiDecision = { tool: 'general' }
+    } else {
+      return res.status(500).json({ error: 'Gagal memproses permintaan AI.' })
+    }
   }
+
+  // =================================================================
+  // 4. EKSEKUSI TOOL & RESPONS FINAL
+  // =================================================================
+  // Catatan: Untuk Vercel, kita sederhanakan dengan langsung mengembalikan string respons
+  // daripada melakukan Panggilan AI ke-2, untuk menghemat waktu eksekusi serverless.
+
+  let responseText = ''
+  switch (aiDecision?.tool) {
+    case 'getTotalPO': {
+      const total = allPOs.length
+      responseText = `Total PO yang Anda miliki aksesnya adalah ${total}.`
+      break
+    }
+    case 'getPOInfo': {
+      const { poNumber, customerName } = aiDecision.param
+      // Logika pencarian sederhana untuk Vercel
+      let found = null
+      if (poNumber)
+        found = allPOs.find((p) => p.po_number?.toLowerCase().includes(poNumber.toLowerCase()))
+      else if (customerName)
+        found = allPOs.find((p) =>
+          p.project_name?.toLowerCase().includes(customerName.toLowerCase())
+        )
+
+      if (found) {
+        responseText = `Ditemukan PO ${found.po_number} (${found.project_name}). Status: ${found.status}, Progress: ${found.progress}%.`
+      } else {
+        responseText = `Maaf, tidak ditemukan PO dengan kriteria tersebut.`
+      }
+      break
+    }
+    case 'general':
+      responseText = `Halo ${user?.name?.split(' ')[0] || 'Tamu'}! Ada yang bisa saya bantu terkait data PO Anda?`
+      break
+    default:
+      responseText = 'Maaf, saya belum paham atau fitur ini belum tersedia di versi web.'
+  }
+
+  return res.status(200).json({ response: responseText })
 }

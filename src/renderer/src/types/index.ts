@@ -1,13 +1,13 @@
 // src/renderer/src/types/index.ts
 
 export interface User {
-  name: string;
-  role?: string;
+  name: string
+  role?: string
 }
 
 export interface SessionData {
-  user: User;
-  expiry: number;
+  user: User
+  expiry: number
 }
 
 export type ProductionStage =

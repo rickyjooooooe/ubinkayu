@@ -44,7 +44,7 @@ interface ICustomAPI {
   readFileAsBase64: (filePath: string) => Promise<string | null>;
 
   // --- [TAMBAHKAN INI] Fungsi AI Chat ---
-  ollamaChat: (prompt: string, user: any) => Promise<string>;
+  ollamaChat: (prompt: string, user: any, history: any[]) => Promise<string>;
 }
 
 declare global {

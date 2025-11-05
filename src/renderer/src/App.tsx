@@ -294,14 +294,16 @@ function App() {
       text: chatInputText,
       timestamp: new Date() // <-- TAMBAHKAN INI
     }
-    setChatMessages((prev) => [...prev, userMessage])
+    const updatedMessages = [...chatMessages, userMessage]
+    setChatMessages(updatedMessages)
 
     const currentInput = chatInputText
     setChatInputText('')
     setIsChatProcessing(true)
 
     try {
-      const botText = await apiService.ollamaChat(currentInput, currentUser)
+      const history = chatMessages.slice(-6)
+      const botText = await apiService.ollamaChat(currentInput, currentUser, history)
 
       const botMessage: Message = {
         sender: 'bot',

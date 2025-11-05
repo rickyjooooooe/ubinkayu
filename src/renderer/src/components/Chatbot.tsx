@@ -38,6 +38,8 @@ import './Chatbot.css'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
+const isElectron = !!window.api;
+
 // BARU: Helper function untuk memformat waktu menjadi HH:MM
 const formatTime = (date: Date) => {
   const hours = date.getHours().toString().padStart(2, '0')
@@ -247,14 +249,15 @@ const Chatbot: React.FC<ChatbotProps> = ({
           rows={mode === 'page' ? 3 : 2}
           disabled={isProcessing}
         />
-        <Button
-          onClick={handleMicClick}
-          variant={isListening ? 'danger' : 'secondary'} // Ganti warna saat merekam
-          aria-label={isListening ? 'Berhenti Merekam' : 'Mulai Merekam'}
-          disabled={isProcessing} // Nonaktifkan jika bot sedang memproses
-        >
-          {isListening ? <LuMicOff /> : <LuMic />}
-        </Button>
+        {!isElectron && (
+          <Button
+            onClick={handleMicClick}
+            variant={isListening ? 'danger' : 'secondary'}
+            disabled={isProcessing}
+          >
+            {isListening ? <LuMicOff /> : <LuMic />}
+          </Button>
+        )}
         <Button
           onClick={onSendMessage}
           disabled={!inputText.trim() || isProcessing}

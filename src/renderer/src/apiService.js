@@ -285,12 +285,12 @@ export function updateStageDeadline(data) {
   })
 }
 
-export async function ollamaChat(prompt, user) {
+export async function ollamaChat(prompt, user, history = []) {
   if (window.api && window.api.ollamaChat) {
     // Tambahkan cek window.api.ollamaChat
     console.log('%cELECTRON MODE: Calling Ollama via IPC', 'color: cyan; font-weight: bold;')
     // Panggil fungsi IPC yang ada di preload.js -> main.js -> sheet.js
-    return window.api.ollamaChat(prompt, user)
+    return window.api.ollamaChat(prompt, user, history)
   }
 
   // SELALU PANGGIL VERCEL API untuk chat
@@ -303,7 +303,7 @@ export async function ollamaChat(prompt, user) {
       // Panggil endpoint Vercel
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, user })
+      body: JSON.stringify({ prompt, user, history })
     })
     // Vercel mengembalikan objek { response: "..." }, ambil teksnya
     if (result && typeof result.response === 'string') {

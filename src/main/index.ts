@@ -311,67 +311,46 @@ async function deleteGoogleDriveFile(fileId: string) {
     return { success: false, error: 'File ID tidak valid', fileId };
   }
 
-  const auth = getAuth();
-  await auth.authorize(); // 1. Otorisasi dulu
-  console.log(`🔑 Otorisasi ulang untuk menghapus file ${fileId} berhasil.`);
+  try {
+    const auth = getAuth();
+    await auth.authorize();
+    console.log(`🔑 Otorisasi berhasil, mencoba menghapus file ${fileId}...`);
 
-  const MAX_RETRIES = 6;
-  const RETRY_DELAY = 10000;
-
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      console.log(`Attempt ${attempt}/${MAX_RETRIES} to delete ${fileId}...`);
-
-      // --- [PERBAIKAN] ---
-      // Gunakan auth.request() secara langsung, sama seperti fungsi upload
-      await auth.request({
-        url: `https://www.googleapis.com/drive/v3/files/${fileId}`,
-        method: 'DELETE',
-        params: {
-          supportsAllDrives: true
-        }
-      });
-      // --- [AKHIR PERBAIKAN] ---
-
-      console.log(`✅ File berhasil dihapus dari Google Drive: ${fileId}`);
-      return { success: true, fileId }; // SUKSES! Keluar dari loop.
-
-    } catch (error: any) {
-      // Logika Catch Anda sudah bagus, kita hanya perlu menyesuaikan cara membaca status code
-      console.error(`❌ Gagal attempt ${attempt} untuk ${fileId}:`, error.message);
-
-      // Penyesuaian untuk membaca error dari auth.request
-      const apiError = error.response?.data?.error || {};
-      const statusCode = error.code || error.response?.status || apiError.code;
-
-      if (statusCode === 404 && attempt < MAX_RETRIES) {
-        console.warn(`⚠️ File ${fileId} tidak ditemukan (404). Kemungkinan Google propagation delay. Mencoba lagi dalam ${RETRY_DELAY / 1000} detik...`);
-        await sleep(RETRY_DELAY);
-        continue;
+    // Langsung panggil delete sekali saja
+    await auth.request({
+      url: `https://www.googleapis.com/drive/v3/files/${fileId}`,
+      method: 'DELETE',
+      params: {
+        supportsAllDrives: true
       }
+    });
 
-      if (statusCode === 404 && attempt === MAX_RETRIES) {
-        console.warn(`⚠️ File ${fileId} tetap tidak ditemukan (404) setelah ${MAX_RETRIES} percobaan. Menganggap file 'yatim'.`);
-        return { success: false, error: 'File tidak ditemukan (404)', fileId };
-      }
+    console.log(`✅ File berhasil dihapus dari Google Drive: ${fileId}`);
+    return { success: true, fileId };
 
-      if (statusCode === 401 || statusCode === 403) {
-        console.error(`🚫 Akses Ditolak/Otentikasi Gagal untuk ${fileId}. Tidak akan mencoba lagi.`);
-        const errorMessage = apiError.message || error.response?.data?.message || error.message;
-        return { success: false, error: `Akses Ditolak/Login Gagal: ${errorMessage}`, fileId };
-      }
+  } catch (error: any) {
+    const apiError = error.response?.data?.error || {};
+    const statusCode = error.code || error.response?.status || apiError.code;
 
-      if (attempt < MAX_RETRIES) {
-        console.warn(`Error server (${statusCode}), mencoba lagi...`);
-        await sleep(RETRY_DELAY);
-        continue;
-      }
-
-      return { success: false, error: error.message || String(error), fileId };
+    // Penanganan khusus untuk 404 (File Not Found)
+    if (statusCode === 404) {
+      console.warn(`⚠️ File ${fileId} tidak ditemukan (404). Menganggap file sudah terhapus sebelumnya.`);
+      // Kita bisa menganggap ini "sukses" dalam konteks pembersihan,
+      // atau "gagal" tapi dengan catatan khusus.
+      // Di sini saya kembalikan false agar tercatat di summary sebagai "failedFileDeletes" tapi dengan alasan jelas.
+      return { success: false, error: 'File tidak ditemukan (404)', fileId };
     }
-  }
 
-  return { success: false, error: 'Retry loop finished unexpectedly', fileId };
+    // Penanganan error izin/auth
+    if (statusCode === 401 || statusCode === 403) {
+      console.error(`🚫 Akses Ditolak untuk ${fileId}:`, apiError.message || error.message);
+      return { success: false, error: `Akses Ditolak (403/401)`, fileId };
+    }
+
+    // Error lainnya
+    console.error(`❌ Gagal menghapus ${fileId}:`, error.message);
+    return { success: false, error: error.message || 'Unknown error', fileId };
+  }
 }
 
 async function uploadPoPhoto(photoPath: string, poNumber: string, customerName: string) {
@@ -976,6 +955,7 @@ export async function deletePO(poId: string) {
       const pdfName = poRow.get('pdf_file_name') || null
       if (pdfLink && !pdfLink.startsWith('ERROR:') && !pdfLink.includes('generating')) {
         const fileId = extractGoogleDriveFileId(pdfLink)
+        console.log(`[DEBUG] PDF Link: ${pdfLink} -> Extracted ID: ${fileId}`)
         if (fileId) {
           fileIds.add(fileId)
           if (pdfName) fileIdToName.set(fileId, pdfName)
@@ -2057,7 +2037,7 @@ Sekarang, tuliskan jawaban Anda untuk user.`
 // LANGKAH 3: GANTI FUNGSI 'handleGroqChat' LAMA ANDA DENGAN INI
 // =================================================================
 
-async function handleGroqChat(prompt: string, user: User | null) {
+async function handleGroqChat(prompt: string, user: User | null, history: any[] = []) {
   // 1. AMBIL KONTEKS DATA PO & ANALISIS
   let allPOs: any[]
   let analysisData: any // <-- [BARU]
@@ -2226,6 +2206,11 @@ ATURAN KETAT:
 
   // (systemPrompt didefinisikan di atas)
 
+  const formattedHistory = history.map((msg: any) => ({
+    role: msg.sender === 'user' ? 'user' : 'assistant',
+    content: msg.text
+  }));
+
   // 3. PANGGIL GROQ API (CALL 1 - MEMILIH TOOL)
   let aiDecisionJsonString = ''
   let aiDecision: any = { tool: 'unknown' }
@@ -2249,10 +2234,11 @@ ATURAN KETAT:
       model: modelId,
       messages: [
         { role: 'system', content: systemPrompt },
+        ...formattedHistory,
         { role: 'user', content: prompt }
       ],
       temperature: 0.1,
-      max_tokens: 250 // Dinaikkan sedikit untuk param filter yang panjang
+      max_tokens: 250
     }
 
     const response = await fetchWithRetry(API_URL, {
@@ -3083,8 +3069,8 @@ app.whenReady().then(async () => {
   ipcMain.handle('product:add', (_event, productData) => addNewProduct(productData))
   ipcMain.handle('progress:updateDeadline', (_event, data) => updateStageDeadline(data))
 
-  ipcMain.handle('ai:ollamaChat', async (_event, prompt, user) => {
-    return await handleGroqChat(prompt, user)
+  ipcMain.handle('ai:ollamaChat', async (_event, prompt, user, history) => {
+    return await handleGroqChat(prompt, user, history)
   })
 
   createWindow()

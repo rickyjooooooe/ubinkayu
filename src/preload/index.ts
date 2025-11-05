@@ -42,7 +42,7 @@ const api = {
   // --- Fungsi untuk File ---
   openFileDialog: () => ipcRenderer.invoke('app:open-file-dialog'),
   readFileAsBase64: (filePath) => ipcRenderer.invoke('app:read-file-base64', filePath),
-  ollamaChat: (prompt, user) => ipcRenderer.invoke('ai:ollamaChat', prompt, user)
+  ollamaChat: (prompt, user, history) => ipcRenderer.invoke('ai:ollamaChat', prompt, user, history)
 }
 
 try {
