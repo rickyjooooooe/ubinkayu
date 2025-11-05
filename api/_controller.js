@@ -1676,3 +1676,214 @@ ATURAN KETAT:
 
   return res.status(200).json({ response: responseText })
 }
+
+// =================================================================
+// AI CHAT HANDLER (VERCEL - FULL NATURAL VERSION)
+// =================================================================
+
+async function generateNaturalResponse(dataContext, userRequest, originalPrompt, user) {
+  const groqToken = process.env.GROQ_API_KEY
+  if (!groqToken) throw new Error('GROQ_API_KEY missing')
+
+  const sysPrompt = `Anda adalah Asisten AI ERP Ubinkayu.
+Tugas Anda adalah menjawab pertanyaan user secara natural.
+ANDA HARUS MENJAWAB HANYA BERDASARKAN DATA KONTEKS YANG DIBERIKAN.
+JANGAN mengarang data.
+Gunakan **format markdown** (bold, list) agar mudah dibaca.
+Sapa user dengan nama depannya (${user?.name?.split(' ')[0] || 'Tamu'}) jika relevan.
+
+---
+DATA KONTEKS (JSON):
+${dataContext}
+---
+DESKRIPSI PERMINTAAN USER:
+${userRequest}
+---
+PROMPT ASLI USER:
+"${originalPrompt}"
+---
+JAWABAN ANDA (BAHASA INDONESIA NATURAL):`
+
+  try {
+    const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${groqToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        messages: [{ role: 'system', content: sysPrompt }],
+        temperature: 0.3, // Sedikit kreatif tapi tetap patuh data
+        max_tokens: 500
+      })
+    })
+    if (!resp.ok) throw new Error(`Groq Error: ${await resp.text()}`)
+    const json = await resp.json()
+    return (
+      json.choices[0]?.message?.content?.trim() || 'Maaf, saya tidak bisa menghasilkan jawaban.'
+    )
+  } catch (e) {
+    console.error('Error generating natural response:', e)
+    return 'Maaf, terjadi kesalahan saat menyusun jawaban natural.'
+  }
+}
+
+// Helper untuk mengambil data PO yang sudah difilter untuk chat
+async function listPOsForChat(user) {
+  const doc = await openDoc()
+  const poSheet = getSheet(doc, 'purchase_orders')
+  const rawRows = await poSheet.getRows()
+  const allObjects = rawRows.map((r) => r.toObject())
+
+  // 1. Filter Marketing
+  const filtered = filterPOsByMarketing(allObjects, user)
+
+  // 2. Ambil revisi terbaru saja
+  const latestMap = new Map()
+  filtered.forEach((po) => {
+    const rev = toNum(po.revision_number)
+    if (!latestMap.has(po.id) || rev > latestMap.get(po.id).revision_number) {
+      latestMap.set(po.id, { ...po, revision_number: rev })
+    }
+  })
+
+  return Array.from(latestMap.values())
+}
+
+export async function handleAiChat(req, res) {
+  const { prompt, user, history } = req.body
+  if (!prompt) return res.status(400).json({ error: 'Prompt required' })
+
+  // 1. FETCH CONTEXT (Hanya PO dulu agar cepat di Vercel)
+  let allPOs = []
+  try {
+    allPOs = await listPOsForChat(user)
+  } catch (e) {
+    console.error(e)
+    return res.status(500).json({ error: 'Context fetch failed' })
+  }
+
+  // 2. DECIDE TOOL (Call 1)
+  let aiDecision = { tool: 'unknown' }
+  try {
+    const today = new Date().toISOString().split('T')[0]
+    // System prompt disingkat agar hemat token di Vercel, tapi tetap fungsional
+    const systemPrompt = `Anda Asisten ERP Ubinkayu. HANYA KEMBALIKAN JSON. Hari ini: ${today}.
+Tools: getTotalPO, getPOInfo(param:poNumber/customerName), getUserInfo, general, help.
+Jika tidak yakin, gunakan "general" untuk sapaan, atau "unknown".`
+
+    const formattedHistory = (history || []).map((m) => ({
+      role: m.sender === 'user' ? 'user' : 'assistant',
+      content: m.text
+    }))
+
+    const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        temperature: 0.1,
+        max_tokens: 150,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...formattedHistory,
+          { role: 'user', content: prompt }
+        ]
+      })
+    })
+    const json = await resp.json()
+    let content = json.choices[0]?.message?.content?.trim() || '{}'
+    if (content.includes('```json')) content = content.split('```json')[1].split('```')[0].trim()
+    else if (content.includes('```')) content = content.split('```')[1].trim()
+    aiDecision = JSON.parse(content)
+  } catch (e) {
+    // Fallback cerdas jika JSON gagal diparse
+    aiDecision = { tool: 'general' }
+  }
+
+  // 3. EXECUTE & GENERATE NATURAL RESPONSE (Call 2)
+  try {
+    switch (aiDecision.tool) {
+      case 'getTotalPO': {
+        const total = allPOs.length
+        const active = allPOs.filter(
+          (p) => p.status !== 'Completed' && p.status !== 'Cancelled'
+        ).length
+        const data = { totalPOs: total, activePOs: active }
+        const text = await generateNaturalResponse(
+          JSON.stringify(data),
+          'User tanya jumlah PO',
+          prompt,
+          user
+        )
+        return res.status(200).json({ response: text })
+      }
+      case 'getPOInfo': {
+        // Implementasi sederhana untuk Vercel (bisa dikembangkan lagi nanti)
+        const { poNumber, customerName } = aiDecision.param || {}
+        let found = allPOs.slice(0, 5) // Default ambil 5 teratas jika tidak ada param
+        if (poNumber)
+          found = allPOs.filter((p) => p.po_number?.toLowerCase().includes(poNumber.toLowerCase()))
+        else if (customerName)
+          found = allPOs.filter((p) =>
+            p.project_name?.toLowerCase().includes(customerName.toLowerCase())
+          )
+
+        const text = await generateNaturalResponse(
+          JSON.stringify(found.slice(0, 3)),
+          `User cari PO: ${poNumber || customerName || 'terbaru'}`,
+          prompt,
+          user
+        )
+        return res.status(200).json({ response: text })
+      }
+      case 'getUserInfo': {
+        if (!user) return res.status(200).json({ response: 'Anda belum login.' })
+        const data = {
+          nama: user.name,
+          role: user.role,
+          info: `Anda login sebagai ${user.name} (${user.role})`
+        }
+        const text = await generateNaturalResponse(
+          JSON.stringify(data),
+          'User tanya info akunnya',
+          prompt,
+          user
+        )
+        return res.status(200).json({ response: text })
+      }
+      case 'general':
+        // Panggil AI untuk sapaan yang natural
+        const text = await generateNaturalResponse(
+          JSON.stringify({ jam: new Date().getHours() }),
+          'User menyapa atau mengobrol santai',
+          prompt,
+          user
+        )
+        return res.status(200).json({ response: text })
+
+      case 'help':
+        return res.status(200).json({
+          response:
+            "Saya bisa membantu mengecek jumlah PO, mencari status PO, atau info akun Anda. Coba tanya: 'berapa po aktif saya?'"
+        })
+
+      default:
+        // Fallback ke AI untuk respons "saya tidak mengerti" yang lebih sopan
+        const unknownText = await generateNaturalResponse(
+          '{}',
+          'User bertanya hal di luar kemampuan bot',
+          prompt,
+          user
+        )
+        return res.status(200).json({ response: unknownText })
+    }
+  } catch (e) {
+    console.error(e)
+    return res.status(500).json({ error: `Terjadi kesalahan: ${e.message}` })
+  }
+}
