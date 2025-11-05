@@ -1503,180 +1503,6 @@ async function listPOsForChat(user) {
 
 // --- AI CHAT MAIN HANDLER (VERCEL) ---
 
-export async function handleAiChat(req, res) {
-  const { prompt, user, history } = req.body // [TERIMA USER & HISTORY]
-
-  if (!prompt) {
-    console.warn('[Vercel AI - Groq] Prompt is missing.')
-    return res.status(400).json({ error: 'Prompt is required' })
-  }
-  console.log(
-    `🤖 [Vercel AI - Groq] Received prompt: "${prompt}" from user: ${user?.name || 'Unknown'}`
-  )
-
-  // =================================================================
-  // 1. AMBIL KONTEKS DATA PO
-  // =================================================================
-  let allPOs
-  let analysisData
-  try {
-    allPOs = await listPOsForChat(user) // [KIRIM USER]
-    // Kita panggil ulang logika getProductSalesAnalysis di sini agar tidak duplikat kode,
-    // tapi untuk efisiensi di Vercel (serverless cold start), mungkin lebih baik dipisah jika lambat.
-    // Untuk sekarang, kita panggil internal function-nya jika memungkinkan, tapi karena strukturnya berbeda (req, res vs direct call),
-    // kita simulasi pemanggilan direct atau duplikasi logika sedikit.
-    // Agar aman dan cepat, kita panggil handleGetProductSalesAnalysis dengan mock req/res, ATAU
-    // lebih baik lagi, ekstrak logika intinya.
-    // KARENA KERUMITANNYA, SAYA SARANKAN UNTUK CHAT VERCEL SAAT INI HANYA PAKAI DATA PO DULU.
-    // JIKA INGIN DATA ANALISIS JUGA, KITA PERLU REFACTOR LEBIH DALAM.
-    // UNTUK SEKARANG, KITA GUNAKAN DATA PO SAJA AGAR AMAN.
-    if (!Array.isArray(allPOs)) throw new Error('listPOsForChat did not return array.')
-    console.log(` -> Context: Fetched ${allPOs.length} POs for AI.`)
-  } catch (e) {
-    console.error('💥 [Vercel AI - Groq] Failed to get PO data for context:', e.message)
-    return res.status(500).json({ error: 'Gagal mengambil data PO untuk AI.' })
-  }
-
-  // =================================================================
-  // 2. SIAPKAN SYSTEM PROMPT
-  // =================================================================
-  const today = new Date().toISOString().split('T')[0]
-
-  const systemPrompt = `Anda adalah Asisten ERP Ubinkayu. Tugas Anda adalah mengubah pertanyaan pengguna menjadi JSON 'perintah' yang valid. HANYA KEMBALIKAN JSON.
-Hari ini adalah ${today}.
-
---- INFORMASI PENGGUNA SAAT INI ---
-Nama: ${user?.name || 'Tamu'}
-Role: ${user?.role || 'Tidak Dikenal'}
-Panggil user dengan nama depannya (${user?.name?.split(' ')[0] || 'Tamu'}).
----
-
---- ATURAN PRIORITAS ---
-1. Jika user menyebut nomor PO, nama customer, atau revisi, Anda HARUS menggunakan "getPOInfo".
-2. Tentukan 'intent' user dengan hati-hati.
-
---- Alat (Tools) yang Tersedia ---
-// (Daftar alat disederhanakan untuk Vercel agar tidak terlalu panjang,
-// fokus pada fitur inti PO karena keterbatasan waktu eksekusi serverless)
-
-1. "getTotalPO": (Untuk pertanyaan jumlah/total PO).
-   - Keywords: "jumlah po", "total po", "ada berapa po", "semua po aktif".
-   - JSON: {"tool": "getTotalPO"}
-
-2. "getPOInfo": (Mencari PO berdasarkan nomor, customer, atau revisi).
-   - Keywords: "status po [nomor]", "link file [nomor]", "info po [nomor]".
-   - JSON: {"tool": "getPOInfo", "param": {"poNumber": "...", "customerName": "...", "revisionNumber": "...", "intent": "details"}}
-
-3. "getUrgentPOs": (Untuk pertanyaan PO 'Urgent').
-   - JSON: {"tool": "getUrgentPOs"}
-
-4. "getNearingDeadline": (Untuk pertanyaan PO 'deadline dekat').
-   - JSON: {"tool": "getNearingDeadline"}
-
-5. "general": (Untuk sapaan umum).
-   - Keywords: "halo", "terima kasih".
-   - JSON: {"tool": "general"}
-
-ATURAN KETAT:
-- JANGAN menjawab pertanyaan. HANYA KEMBALIKAN JSON.
-- Jika tidak yakin tool mana, KEMBALIKAN: {"tool": "unknown"}`
-
-  // =================================================================
-  // 3. PANGGIL GROQ API (CALL 1)
-  // =================================================================
-  let aiDecision = { tool: 'unknown' }
-  const groqToken = process.env.GROQ_API_KEY
-  const modelId = 'llama-3.1-8b-instant'
-
-  // Format history untuk Groq
-  const formattedHistory = (history || []).map((msg) => ({
-    role: msg.sender === 'user' ? 'user' : 'assistant',
-    content: msg.text
-  }))
-
-  try {
-    const API_URL = 'https://api.groq.com/openai/v1/chat/completions'
-    const payload = {
-      model: modelId,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...formattedHistory, // Sisipkan history
-        { role: 'user', content: prompt }
-      ],
-      temperature: 0.1,
-      max_tokens: 150
-    }
-
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${groqToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    })
-
-    if (!response.ok) throw new Error(`Groq API error: ${response.status}`)
-    const result = await response.json()
-    let jsonString = result.choices[0]?.message?.content?.trim()
-    // Bersihkan markdown jika ada
-    if (jsonString.startsWith('```json')) jsonString = jsonString.substring(7).trim()
-    if (jsonString.endsWith('```'))
-      jsonString = jsonString.substring(0, jsonString.length - 3).trim()
-
-    aiDecision = JSON.parse(jsonString)
-    console.log('✅ [Vercel AI] Decision:', aiDecision)
-  } catch (err) {
-    console.error('💥 [Vercel AI] Error calling Groq (Call 1):', err.message)
-    // Fallback ke general jika gagal parse JSON tapi bukan error jaringan
-    if (err.message.includes('JSON')) {
-      aiDecision = { tool: 'general' }
-    } else {
-      return res.status(500).json({ error: 'Gagal memproses permintaan AI.' })
-    }
-  }
-
-  // =================================================================
-  // 4. EKSEKUSI TOOL & RESPONS FINAL
-  // =================================================================
-  // Catatan: Untuk Vercel, kita sederhanakan dengan langsung mengembalikan string respons
-  // daripada melakukan Panggilan AI ke-2, untuk menghemat waktu eksekusi serverless.
-
-  let responseText = ''
-  switch (aiDecision?.tool) {
-    case 'getTotalPO': {
-      const total = allPOs.length
-      responseText = `Total PO yang Anda miliki aksesnya adalah ${total}.`
-      break
-    }
-    case 'getPOInfo': {
-      const { poNumber, customerName } = aiDecision.param
-      // Logika pencarian sederhana untuk Vercel
-      let found = null
-      if (poNumber)
-        found = allPOs.find((p) => p.po_number?.toLowerCase().includes(poNumber.toLowerCase()))
-      else if (customerName)
-        found = allPOs.find((p) =>
-          p.project_name?.toLowerCase().includes(customerName.toLowerCase())
-        )
-
-      if (found) {
-        responseText = `Ditemukan PO ${found.po_number} (${found.project_name}). Status: ${found.status}, Progress: ${found.progress}%.`
-      } else {
-        responseText = `Maaf, tidak ditemukan PO dengan kriteria tersebut.`
-      }
-      break
-    }
-    case 'general':
-      responseText = `Halo ${user?.name?.split(' ')[0] || 'Tamu'}! Ada yang bisa saya bantu terkait data PO Anda?`
-      break
-    default:
-      responseText = 'Maaf, saya belum paham atau fitur ini belum tersedia di versi web.'
-  }
-
-  return res.status(200).json({ response: responseText })
-}
-
 // =================================================================
 // AI CHAT HANDLER (VERCEL - FULL NATURAL VERSION)
 // =================================================================
@@ -1729,28 +1555,6 @@ JAWABAN ANDA (BAHASA INDONESIA NATURAL):`
   }
 }
 
-// Helper untuk mengambil data PO yang sudah difilter untuk chat
-async function listPOsForChat(user) {
-  const doc = await openDoc()
-  const poSheet = getSheet(doc, 'purchase_orders')
-  const rawRows = await poSheet.getRows()
-  const allObjects = rawRows.map((r) => r.toObject())
-
-  // 1. Filter Marketing
-  const filtered = filterPOsByMarketing(allObjects, user)
-
-  // 2. Ambil revisi terbaru saja
-  const latestMap = new Map()
-  filtered.forEach((po) => {
-    const rev = toNum(po.revision_number)
-    if (!latestMap.has(po.id) || rev > latestMap.get(po.id).revision_number) {
-      latestMap.set(po.id, { ...po, revision_number: rev })
-    }
-  })
-
-  return Array.from(latestMap.values())
-}
-
 export async function handleAiChat(req, res) {
   const { prompt, user, history } = req.body
   if (!prompt) return res.status(400).json({ error: 'Prompt required' })
@@ -1769,9 +1573,44 @@ export async function handleAiChat(req, res) {
   try {
     const today = new Date().toISOString().split('T')[0]
     // System prompt disingkat agar hemat token di Vercel, tapi tetap fungsional
-    const systemPrompt = `Anda Asisten ERP Ubinkayu. HANYA KEMBALIKAN JSON. Hari ini: ${today}.
-Tools: getTotalPO, getPOInfo(param:poNumber/customerName), getUserInfo, general, help.
-Jika tidak yakin, gunakan "general" untuk sapaan, atau "unknown".`
+    const systemPrompt = `Anda adalah Asisten ERP Ubinkayu. Tugas Anda adalah mengubah pertanyaan pengguna menjadi JSON 'perintah' yang valid. HANYA KEMBALIKAN JSON.
+Hari ini adalah ${today}.
+
+--- INFORMASI PENGGUNA SAAT INI ---
+Nama: ${user?.name || 'Tamu'}
+Role: ${user?.role || 'Tidak Dikenal'}
+Panggil user dengan nama depannya (${user?.name?.split(' ')[0] || 'Tamu'}).
+---
+
+--- ATURAN PRIORITAS ---
+1. Jika user menyebut nomor PO, nama customer, atau revisi, Anda HARUS menggunakan "getPOInfo".
+2. Tentukan 'intent' user dengan hati-hati.
+
+--- Alat (Tools) yang Tersedia ---
+// (Daftar alat disederhanakan untuk Vercel agar tidak terlalu panjang,
+// fokus pada fitur inti PO karena keterbatasan waktu eksekusi serverless)
+
+1. "getTotalPO": (Untuk pertanyaan jumlah/total PO).
+   - Keywords: "jumlah po", "total po", "ada berapa po", "semua po aktif".
+   - JSON: {"tool": "getTotalPO"}
+
+2. "getPOInfo": (Mencari PO berdasarkan nomor, customer, atau revisi).
+   - Keywords: "status po [nomor]", "link file [nomor]", "info po [nomor]".
+   - JSON: {"tool": "getPOInfo", "param": {"poNumber": "...", "customerName": "...", "revisionNumber": "...", "intent": "details"}}
+
+3. "getUrgentPOs": (Untuk pertanyaan PO 'Urgent').
+   - JSON: {"tool": "getUrgentPOs"}
+
+4. "getNearingDeadline": (Untuk pertanyaan PO 'deadline dekat').
+   - JSON: {"tool": "getNearingDeadline"}
+
+5. "general": (Untuk sapaan umum).
+   - Keywords: "halo", "terima kasih".
+   - JSON: {"tool": "general"}
+
+ATURAN KETAT:
+- JANGAN menjawab pertanyaan. HANYA KEMBALIKAN JSON.
+- Jika tidak yakin tool mana, KEMBALIKAN: {"tool": "unknown"}`
 
     const formattedHistory = (history || []).map((m) => ({
       role: m.sender === 'user' ? 'user' : 'assistant',
@@ -1856,8 +1695,7 @@ Jika tidak yakin, gunakan "general" untuk sapaan, atau "unknown".`
         )
         return res.status(200).json({ response: text })
       }
-      case 'general':
-        // Panggil AI untuk sapaan yang natural
+      case 'general': {
         const text = await generateNaturalResponse(
           JSON.stringify({ jam: new Date().getHours() }),
           'User menyapa atau mengobrol santai',
@@ -1865,6 +1703,7 @@ Jika tidak yakin, gunakan "general" untuk sapaan, atau "unknown".`
           user
         )
         return res.status(200).json({ response: text })
+      }
 
       case 'help':
         return res.status(200).json({
@@ -1872,7 +1711,7 @@ Jika tidak yakin, gunakan "general" untuk sapaan, atau "unknown".`
             "Saya bisa membantu mengecek jumlah PO, mencari status PO, atau info akun Anda. Coba tanya: 'berapa po aktif saya?'"
         })
 
-      default:
+      default: {
         // Fallback ke AI untuk respons "saya tidak mengerti" yang lebih sopan
         const unknownText = await generateNaturalResponse(
           '{}',
@@ -1881,6 +1720,7 @@ Jika tidak yakin, gunakan "general" untuk sapaan, atau "unknown".`
           user
         )
         return res.status(200).json({ response: unknownText })
+      }
     }
   } catch (e) {
     console.error(e)
