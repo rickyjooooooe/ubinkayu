@@ -15,8 +15,6 @@ import { google } from 'googleapis'
 // @ts-ignore (Abaikan error 'could not find declaration file')
 import { generatePOJpeg } from '../../electron/jpegGenerator.js'
 import stream from 'node:stream'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-require('dotenv').config()
 
 interface User {
   name: string
@@ -3007,6 +3005,40 @@ async function createWindow() {
 }
 
 app.whenReady().then(async () => {
+
+  try {
+    const isDev = !app.isPackaged;
+
+    // Di Dev, .env ada di root.
+    // Di Prod, .env akan kita salin ke folder 'Resources' (root dari app package)
+    const envPath = path.join(
+      isDev ? process.cwd() : process.resourcesPath,
+      ".env"
+    );
+
+    console.log(`[ENV Loader] Mencoba memuat .env dari: ${envPath}`);
+
+    if (fs.existsSync(envPath)) {
+        require('dotenv').config({ path: envPath });
+        if (process.env.GROQ_API_KEY) {
+            console.log('[ENV Loader] GROQ_API_KEY dimuat.');
+        } else {
+            console.error('[ENV Loader] .env ditemukan TAPI GROQ_API_KEY tidak ada di dalamnya.');
+        }
+    } else {
+         console.error(`[ENV Loader] Peringatan: file .env tidak ditemukan di ${envPath}.`);
+         // Coba fallback ke default (jika ada variabel sistem)
+         require('dotenv').config();
+    }
+
+    if (!process.env.GROQ_API_KEY) {
+         console.error('[ENV Loader] GAGAL MEMUAT GROQ_API_KEY.');
+    }
+
+  } catch (e) {
+    console.error('[ENV Loader] Error saat memuat .env:', e.message);
+  }
+
   testSheetConnection()
 
   // --- IPC Handlers ---

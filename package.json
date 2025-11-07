@@ -86,6 +86,10 @@
       {
         "from": "./resources/",
         "to": "resources"
+      },
+      {
+        "from": ".env",
+        "to": ".env"
       }
     ]
   }
