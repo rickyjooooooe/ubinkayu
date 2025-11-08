@@ -1,7 +1,10 @@
+/* eslint-disable prettier/prettier */
+/* eslint-disable @typescript-eslint/explicit-function-return-type */
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+
 import React, { useState, useEffect, useRef } from 'react'
-import logo from '../assets/WhatsApp Image 2025-09-09 at 14.30.02 - Edited.png' // Pastikan path logo benar
+import logo from '../assets/WhatsApp Image 2025-09-09 at 14.30.02 - Edited.png'
 import {
-  // Hanya impor ikon yang dipakai + IconType
   LuRefreshCw,
   LuLoader,
   LuLogOut,
@@ -12,25 +15,21 @@ import {
   LuBrainCircuit,
   LuMoveHorizontal
 } from 'react-icons/lu'
-// [FIX] Impor IconType dari 'react-icons' bukan 'react-icons/lu'
 import type { IconType } from 'react-icons'
-import { Button } from './Button' // <-- [FIX] Pastikan Button diimpor
+import { Button } from './Button'
 import { useWindowWidth } from '../hooks/useWindowWidth'
-import './Navbar.css' // Pastikan path CSS benar
+import './Navbar.css'
 import type { User } from '../types'
 
-// Definisikan tipe view yang valid untuk navigasi
 type AppView = 'dashboard' | 'list' | 'tracking' | 'analysis' | 'aiChat'
 
-// Definisikan interface untuk objek link navigasi
 interface NavLinkItem {
-  id: AppView | 'more' // ID bisa string AppView atau 'more'
+  id: AppView | 'more'
   label: string
-  Icon: IconType // Gunakan IconType
-  mobileOnly?: boolean // mobileOnly ditambahkan kembali jika diperlukan untuk filter
+  Icon: IconType
+  mobileOnly?: boolean
 }
 
-// Definisikan props untuk komponen Navbar
 interface NavbarProps {
   currentView: string
   onNavigate: (view: AppView) => void
@@ -66,27 +65,25 @@ const Navbar: React.FC<NavbarProps> = ({
   }
 
   const getLinkClass = (viewName: string) => {
-    const listViews = ['list', 'input', 'detail']
+    // [PERBAIKAN] 'updateProgress' juga harus mengaktifkan tab 'tracking'
     const trackingViews = ['tracking', 'updateProgress']
+    const listViews = ['list', 'input', 'detail', 'history'] // 'history' juga bagian dari PO
 
     if (viewName === 'list' && listViews.includes(currentView)) return 'active'
     if (viewName === 'tracking' && trackingViews.includes(currentView)) return 'active'
-    if (viewName === 'more' && currentView === 'aiChat') return 'active' // aiChat is under 'more'
+    if (viewName === 'more' && currentView === 'aiChat') return 'active'
     if (viewName === currentView) return 'active'
     return ''
   }
 
-  // [FIX] Beri tipe NavLinkItem[] dan pastikan ikon diimpor
-  // Pastikan ikon yang diimpor di atas sesuai dengan yang dipakai di sini
   const navLinksDefinition: NavLinkItem[] = [
     { id: 'dashboard', label: 'Dashboard', Icon: LuLayoutDashboard },
     { id: 'list', label: 'PO', Icon: LuListOrdered },
     { id: 'tracking', label: 'Progress', Icon: LuActivity },
     { id: 'analysis', label: 'Analysis', Icon: LuTrendingUp },
-    { id: 'more', label: 'Lainnya', Icon: LuMoveHorizontal } // Link 'Lainnya' untuk mobile
+    { id: 'more', label: 'Lainnya', Icon: LuMoveHorizontal }
   ]
 
-  // AI Assist link data, used inside the 'more' menu
   const aiAssistLink: NavLinkItem = {
     id: 'aiChat',
     label: 'AI Assist',
@@ -94,17 +91,16 @@ const Navbar: React.FC<NavbarProps> = ({
     mobileOnly: true
   }
 
-  // Filter link berdasarkan ukuran layar
-  // Di desktop, tampilkan 4 item utama. Di mobile, tampilkan 5 item (termasuk 'more')
+  // [PERBAIKAN UTAMA DI SINI]
   const linksToRender = (
     isMobile ? navLinksDefinition : navLinksDefinition.filter((link) => link.id !== 'more')
   ).filter((link) => {
     if (!currentUser?.role) return true
 
-    // Sembunyikan 'Progress' jika role adalah 'marketing' ATAU 'admin'
+    // Sembunyikan 'Progress' HANYA jika role adalah 'admin'
     if (
       link.id === 'tracking' &&
-      (currentUser.role === 'marketing' || currentUser.role === 'admin')
+      currentUser.role === 'admin' // <-- 'marketing' DIHAPUS DARI SINI
     ) {
       return false
     }
@@ -170,8 +166,8 @@ const Navbar: React.FC<NavbarProps> = ({
 
       {!isMobile && (
         <div className="navbar-actions">
-          {userName && <span className="user-greeting">Hi, {userName.split(' ')[0]}!</span>}
-          {/* [FIX] Gunakan komponen Button yang sudah diimpor */}
+          {/* [PERBAIKAN] Gunakan currentUser.name (lebih konsisten) */}
+          {currentUser?.name && <span className="user-greeting">Hi, {currentUser.name.split(' ')[0]}!</span>}
           <Button
             variant="secondary"
             className="refresh-btn-desktop"
@@ -191,7 +187,6 @@ const Navbar: React.FC<NavbarProps> = ({
             <LuLogOut />
             <span className="logout-btn-text">Logout</span>
           </Button>
-          {/* --- Akhir perbaikan Button --- */}
         </div>
       )}
 
@@ -207,8 +202,8 @@ const Navbar: React.FC<NavbarProps> = ({
                 setIsMoreMenuOpen(false)
               }}
             >
-              <aiAssistLink.Icon /> {/* Render Ikon AI */}
-              <span>{aiAssistLink.label}</span> {/* Render Label AI */}
+              <aiAssistLink.Icon />
+              <span>{aiAssistLink.label}</span>
             </button>
             <button
               className="more-menu-item logout-item"
@@ -218,7 +213,7 @@ const Navbar: React.FC<NavbarProps> = ({
               }}
             >
               <LuLogOut />
-              <span>Logout ({userName?.split(' ')[0]})</span>
+              <span>Logout ({currentUser?.name?.split(' ')[0]})</span>
             </button>
           </div>
         </div>

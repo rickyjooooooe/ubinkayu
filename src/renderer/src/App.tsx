@@ -419,6 +419,7 @@ function App() {
             po={trackingPO}
             onBack={() => handleNavigate('tracking')} // Gunakan handleNavigate
             onProgressSaved={() => fetchPOs(true)} // Refresh PO list setelah simpan progress
+            currentUser={currentUser}
           />
         )
       case 'analysis':
