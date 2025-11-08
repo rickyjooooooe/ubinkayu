@@ -48,10 +48,10 @@ const ProgressItem = ({
   currentUser: User | null
 }) => {
   const isElectron = !!(window as any).api
-  
+
   // [LOGIKA PERAN] Tentukan apakah user adalah marketing
   const isMarketingRole = currentUser?.role?.toLowerCase() === 'marketing';
-  
+
   const latestLog = item.progressHistory?.[item.progressHistory.length - 1]
   const latestStage = latestLog?.stage
   const currentStageIndex = latestStage ? STAGES.indexOf(latestStage) : -1
@@ -154,13 +154,13 @@ const ProgressItem = ({
   const handleUpdate = async () => {
     const stageToUpdate = selectedStage;
     if (!stageToUpdate) return alert('Tahap tidak valid.');
-    
+
     const targetStageIndex = STAGES.indexOf(stageToUpdate as ProductionStage);
 
     if (targetStageIndex <= currentStageIndex) {
       return alert('Tahap yang dipilih harus setelah tahap saat ini.');
     }
-    
+
     setIsUpdating(true);
     try {
       // 1. Simpan progress untuk tahap-tahap yang di-skip
@@ -173,7 +173,7 @@ const ProgressItem = ({
       const finalNotes = isSkipping ? (notes || 'Tahap dilewati (skipped)') : notes.trim();
       const finalPhotoPath = isSkipping ? null : photoPath;
       const finalPhotoBase64 = isSkipping ? null : photoBase64;
-      
+
       await sendSingleProgressUpdate(stageToUpdate, finalNotes, finalPhotoPath, finalPhotoBase64);
 
       alert(`Progress item ${item.product_name} berhasil diupdate ke tahap '${stageToUpdate}'!`);
@@ -238,8 +238,8 @@ const ProgressItem = ({
       </div>
 
       {/* [LOGIKA PERAN] Tampilkan form HANYA jika belum selesai */}
-      {currentStageIndex < STAGES.length - 1 && (
-        <div className={`update-form ${isMarketingRole ? 'readonly' : ''}`}>
+      {currentStageIndex < STAGES.length - 1 && !isMarketingRole && (
+        <div className="update-form">
           <h5>{isMarketingRole ? 'Form Update (Hanya Lihat)' : 'Update Progress Item'}</h5>
           <div className="form-group">
             <label htmlFor={`stage-select-${item.id}`}>Pilih Tahap Berikutnya:</label>
@@ -307,7 +307,7 @@ const ProgressItem = ({
               <div className="log-details">
                 <p className="log-stage-time">
                   <strong>{log.stage}</strong> ({formatDate(log.created_at)})
-                </p> 
+                </p>
                 {log.notes && <p className="log-notes">{log.notes}</p>}
               </div>
               {log.photo_url && (
@@ -332,8 +332,8 @@ const ProgressItem = ({
 interface UpdateProgressPageProps {
   po: POHeader | null;
   onBack: () => void;
-  onRefresh: () => Promise<void>; 
-  currentUser: User | null; 
+  onRefresh: () => Promise<void>;
+  currentUser: User | null;
 }
 
 const UpdateProgressPage: React.FC<UpdateProgressPageProps> = ({ po, onBack, onRefresh, currentUser }) => {
@@ -366,10 +366,10 @@ const UpdateProgressPage: React.FC<UpdateProgressPageProps> = ({ po, onBack, onR
       }
     } else {
       console.log(`Skipping item fetch for PO ${po?.id} with status ${po?.status}`);
-      setItems([]); 
+      setItems([]);
       setIsLoading(false);
     }
-  }, [po]); 
+  }, [po]);
 
   useEffect(() => {
     fetchItems();
@@ -410,7 +410,7 @@ const UpdateProgressPage: React.FC<UpdateProgressPageProps> = ({ po, onBack, onR
           Kembali
         </Button>
       </div>
-      
+
       {/* Selalu tampilkan timeline produksi */}
       {isLoading ? (
         <div style={{ textAlign: 'center', padding: '3rem' }}>Memuat detail item PO...</div>
