@@ -105,7 +105,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   return (
     <div className="page-container" style={{ maxWidth: '450px', margin: '5rem auto' }}>
       <Card>
-        <h1 style={{ textAlign: 'center', marginBottom: '1.5rem' }}>Login ERP Ubinkayu</h1>
+        <h1 style={{ textAlign: 'center', marginBottom: '1.5rem' }}>Login Sistem Ubinkayu</h1>
         <form onSubmit={handleLogin}>
           <Input
             label="Username"
