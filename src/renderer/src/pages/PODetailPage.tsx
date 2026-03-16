@@ -248,7 +248,7 @@ const PODetailPage: React.FC<PODetailPageProps> = ({ po, onBackToList }) => {
   if (!po) {
      return (
        <div className="page-container">
-         <p>Data PO tidak ditemukan atau belum dipilih.</p>
+         <p>Data Order tidak ditemukan atau belum dipilih.</p>
          <Button onClick={onBackToList}>Kembali ke Daftar</Button>
        </div>
      );
@@ -260,7 +260,7 @@ const PODetailPage: React.FC<PODetailPageProps> = ({ po, onBackToList }) => {
       {/* Header Halaman */}
       <div className="page-header">
         <div>
-          <h1>Detail Purchase Order: {po.po_number || 'N/A'}</h1>
+          <h1>Detail Order: {po.po_number || 'N/A'}</h1>
           <p>Menampilkan informasi terbaru dan riwayat revisi.</p>
         </div>
         <div className="header-actions">
@@ -269,7 +269,7 @@ const PODetailPage: React.FC<PODetailPageProps> = ({ po, onBackToList }) => {
         </div>
       </div>
 
-      {/* --- Bagian Detail PO Terbaru --- */}
+      {/* --- Bagian Detail Order Terbaru --- */}
       <div className="detail-po-info">
         {/* Card Ringkasan PO Terbaru */}
         <Card className="po-summary-card">
@@ -310,7 +310,7 @@ const PODetailPage: React.FC<PODetailPageProps> = ({ po, onBackToList }) => {
       {isLoading ? (
         <p>⏳ Loading data item terbaru...</p>
       ) : items.length === 0 ? (
-        <Card><p>Tidak ada item terdaftar untuk versi terbaru PO ini.</p></Card>
+        <Card><p>Tidak ada item terdaftar untuk versi terbaru Order ini.</p></Card>
       ) : (
         <Card>
           <div className="table-responsive">
@@ -377,7 +377,7 @@ const PODetailPage: React.FC<PODetailPageProps> = ({ po, onBackToList }) => {
       {isHistoryLoading ? (
         <p>⏳ Memuat riwayat revisi...</p>
       ) : history.length <= 1 ? (
-         <Card><p>Tidak ada riwayat revisi sebelumnya untuk PO ini.</p></Card>
+         <Card><p>Tidak ada riwayat revisi sebelumnya untuk Order ini.</p></Card>
       ) : (
         // Loop mulai dari index 1 untuk melewati revisi terbaru
         history.slice(1).map((revItem, indexInSlice) => {

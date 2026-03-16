@@ -21,7 +21,10 @@ interface ICustomAPI {
   listPOItems: (poId: string) => Promise<any[]>;
   previewPO: (data: any) => Promise<any>;
   addNewProduct: (data: any) => Promise<{ success: boolean; newId?: string; error?: string }>;
-
+  // [BARU] Request Project
+requestProject: (data: any) => Promise<{ success: boolean; poId?: string; error?: string }>;
+confirmRequest: (data: any) => Promise<{ success: boolean; poId?: string; error?: string }>;
+getCommissionData: (user: any) => Promise<any[]>;
   // Fungsi Revisi
   listPORevisions: (poId: string) => Promise<any[]>;
   listPOItemsByRevision: (revisionId: string) => Promise<any[]>;

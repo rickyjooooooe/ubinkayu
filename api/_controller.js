@@ -533,7 +533,181 @@ export async function handleSaveNewPO(req, res) {
       .json({ success: false, error: 'Internal Server Error saving PO', details: err.message })
   }
 }
+// =================================================================
+// TAMBAHKAN DUA HANDLER BARU INI KE _controller.js
+// =================================================================
 
+// ---------------------------------------------------------------
+// HANDLER 1: Marketing kirim request project (tanpa items)
+// Endpoint: POST /api/request-project
+// ---------------------------------------------------------------
+export async function handleRequestProject(req, res) {
+  console.log('🏁 [Vercel] handleRequestProject started!')
+  const data = req.body
+  // Validasi minimal
+  if (!data.nomorPo || !data.namaCustomer) {
+    return res.status(400).json({ success: false, error: 'Nomor PO dan Nama Customer harus diisi.' })
+  }
+
+  try {
+    const doc = await openDoc()
+    const now = new Date().toISOString()
+    const poSheet = getSheet(doc, 'purchase_orders')
+    const poId = await getNextIdFromSheet(poSheet)
+
+    const newPoRowData = {
+      id: poId,
+      revision_number: 0,
+      po_number: data.nomorPo,
+      project_name: data.namaCustomer,
+      deadline: data.tanggalKirim || null,
+      status: 'Requested',           // <-- Status khusus request
+      priority: data.prioritas || 'Normal',
+      notes: data.catatan || '',
+      kubikasi_total: 0,
+      acc_marketing: data.marketing || '',
+      created_at: now,
+      pdf_link: '',
+      foto_link: 'Tidak ada foto',
+      file_size_bytes: 0,
+      alamat_kirim: data.alamatKirim || '',
+      revised_by: 'N/A',
+      project_valuation: toNum(data.project_valuation, 0), // <-- Kolom baru
+    }
+
+    console.log(`📝 [Vercel] Adding new Request row: ${newPoRowData.po_number}`)
+    let newPoRow = await poSheet.addRow(newPoRowData)
+
+    // Upload foto referensi jika ada
+    if (data.poPhotoBase64) {
+      console.log('  -> Uploading reference photo for request...')
+      const photoResult = await uploadPoPhoto(
+        data.poPhotoBase64,
+        data.nomorPo,
+        data.namaCustomer
+      )
+      if (photoResult.success) {
+        newPoRow.set('foto_link', photoResult.link)
+        await newPoRow.save({ raw: false })
+      }
+    }
+
+    return res.status(200).json({ success: true, poId, message: 'Request project berhasil dikirim.' })
+  } catch (err) {
+    console.error('💥 [Vercel] ERROR in handleRequestProject:', err.message, err.stack)
+    return res.status(500).json({ success: false, error: 'Gagal menyimpan request project.', details: err.message })
+  }
+}
+
+// ---------------------------------------------------------------
+// HANDLER 2: Admin konfirmasi request → isi items → jadi PO resmi
+// Endpoint: POST /api/confirm-request
+// Body: { poId, items, revisedBy, kubikasi_total }
+// ---------------------------------------------------------------
+export async function handleConfirmRequest(req, res) {
+  console.log('🏁 [Vercel] handleConfirmRequest started!')
+  const data = req.body
+  const { poId, items, revisedBy } = data
+
+  if (!poId) return res.status(400).json({ success: false, error: 'PO ID harus diisi.' })
+  if (!items || items.length === 0) return res.status(400).json({ success: false, error: 'Minimal satu item harus diisi.' })
+
+  let doc, targetRow
+  try {
+    doc = await openDoc()
+    const poSheet = getSheet(doc, 'purchase_orders')
+    const itemSheet = getSheet(doc, 'purchase_order_items')
+
+    // Ambil row PO yang berstatus Requested
+    const allPoRows = await poSheet.getRows()
+    targetRow = allPoRows.find(
+      (r) =>
+        String(r.get('id')).trim() === String(poId).trim() &&
+        toNum(r.get('revision_number'), -1) === 0
+    )
+
+    if (!targetRow) {
+      return res.status(404).json({ success: false, error: `PO dengan ID ${poId} tidak ditemukan.` })
+    }
+
+    if (targetRow.get('status') !== 'Requested') {
+      return res.status(400).json({ success: false, error: 'PO ini bukan berstatus Requested.' })
+    }
+
+    // Hitung kubikasi total dari items
+    const itemsWithIds = []
+    let nextItemId = parseInt(await getNextIdFromSheet(itemSheet), 10)
+    const now = new Date().toISOString()
+
+    const itemsToAdd = (items || []).map((raw) => {
+      const clean = scrubItemPayload(raw)
+      const kubikasiItem = toNum(raw.kubikasi, 0)
+      const newItem = {
+        id: nextItemId,
+        purchase_order_id: poId,
+        revision_number: 0,
+        kubikasi: kubikasiItem,
+        ...clean
+      }
+      itemsWithIds.push({ ...raw, id: nextItemId, kubikasi: kubikasiItem })
+      nextItemId++
+      return newItem
+    })
+
+    console.log(`➕ [Vercel Confirm] Adding ${itemsToAdd.length} items for PO ${poId}`)
+    await itemSheet.addRows(itemsToAdd)
+
+    const kubikasiTotal = itemsWithIds.reduce((acc, item) => acc + toNum(item.kubikasi, 0), 0)
+
+    // Update status PO menjadi 'Open' dan set kubikasi total
+    targetRow.set('status', 'Open')
+    targetRow.set('kubikasi_total', kubikasiTotal)
+    targetRow.set('revised_by', revisedBy || 'Admin')
+    targetRow.set('pdf_link', 'generating...')
+    await targetRow.save({ raw: false })
+    console.log(`✅ [Vercel Confirm] PO ${poId} status updated to Open`)
+
+    // Generate & upload JPEG PO
+    const poDataForUpload = {
+      po_number: targetRow.get('po_number'),
+      project_name: targetRow.get('project_name'),
+      deadline: targetRow.get('deadline'),
+      priority: targetRow.get('priority'),
+      notes: targetRow.get('notes'),
+      created_at: targetRow.get('created_at'),
+      kubikasi_total: kubikasiTotal,
+      acc_marketing: targetRow.get('acc_marketing'),
+      alamat_kirim: targetRow.get('alamat_kirim'),
+      foto_link: targetRow.get('foto_link'),
+      items: itemsWithIds,
+    }
+
+    console.log(`⏳ [Vercel Confirm] Generating & uploading JPEG for PO ${poId}...`)
+    const uploadResult = await generateAndUploadPO(poDataForUpload, 0)
+
+    targetRow.set(
+      'pdf_link',
+      uploadResult.success ? uploadResult.link : `ERROR: ${uploadResult.error || 'Unknown'}`
+    )
+    targetRow.set('file_size_bytes', uploadResult.size || 0)
+    await targetRow.save({ raw: false })
+    console.log(`✅ [Vercel Confirm] PO ${poId} fully confirmed as Open PO.`)
+
+    return res.status(200).json({ success: true, poId, message: 'PO berhasil dibuat dari request.' })
+  } catch (err) {
+    console.error('💥 [Vercel] ERROR in handleConfirmRequest:', err.message, err.stack)
+    // Rollback status jika JPEG gagal tapi row sudah diupdate
+    if (targetRow) {
+      try {
+        targetRow.set('pdf_link', `ERROR: ${err.message}`)
+        await targetRow.save({ raw: false })
+      } catch (saveErr) {
+        console.error('  -> Failed to save error fallback:', saveErr.message)
+      }
+    }
+    return res.status(500).json({ success: false, error: 'Gagal konfirmasi request.', details: err.message })
+  }
+}
 export async function handleUpdatePO(req, res) {
   console.log('🏁 [Vercel] handleUpdatePO started!')
   const data = req.body

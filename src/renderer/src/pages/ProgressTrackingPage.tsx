@@ -32,7 +32,7 @@ const POTrackingItem = ({
   const getPriorityBadgeClass = (priority?: string) =>
     `status-badge priority-${(priority || 'normal').toLowerCase()}` // Tambahkan prefix 'priority-'
 
-  // Tambah class untuk PO Selesai (opsional, untuk styling)
+  // Tambah class untuk Order Selesai (opsional, untuk styling)
   const cardClassName = `po-tracking-item-card ${po.progress && po.progress >= 100 ? 'completed' : ''}`
 
   return (
@@ -85,7 +85,7 @@ const AttentionCard = ({ title, items, icon, reasonKey, reasonPrefix }) => (
       items.map((item, index) => (
         <div key={index} className="attention-item-small">
           <p>
-            <strong>{item.item_name || 'N/A'}</strong> (PO: {item.po_number || 'N/A'})
+            <strong>{item.item_name || 'N/A'}</strong> (Order: {item.po_number || 'N/A'})
           </p>
           <span>
             {reasonPrefix}:{' '}
@@ -107,7 +107,7 @@ const UpdateEntry = ({ update }) => (
     <div className="update-icon">⚙️</div>
     <div className="update-details">
       <p className="update-text">
-        Item <strong>{update.item_name || 'N/A'}</strong> (PO: {update.po_number || 'N/A'}) masuk
+        Item <strong>{update.item_name || 'N/A'}</strong> (Order: {update.po_number || 'N/A'}) masuk
         tahap <strong>{update.stage || '?'}</strong>.
       </p>
       <span className="update-time">{formatTimeAgo(update.created_at)}</span>
@@ -196,7 +196,7 @@ const ProgressTrackingPage: React.FC<ProgressTrackingPageProps> = ({
       <div className="page-header">
         <div>
           <h1>Tracking Progress Produksi</h1>
-          <p>Pantau dan update kemajuan pengerjaan Purchase Order</p>
+          <p>Pantau dan update kemajuan pengerjaan Order</p>
         </div>
         {/* Opsional: Tombol refresh jika diperlukan */}
       </div>
@@ -204,7 +204,7 @@ const ProgressTrackingPage: React.FC<ProgressTrackingPageProps> = ({
       <Card className="filter-panel-simple">
         <input
           type="text"
-          placeholder="Cari Nomor PO atau Nama Customer..."
+          placeholder="Cari Nomor Order atau Nama Customer..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="search-input-full"
@@ -218,9 +218,9 @@ const ProgressTrackingPage: React.FC<ProgressTrackingPageProps> = ({
           {/* Ganti nama class agar lebih deskriptif */}
           {/* Bagian PO Aktif */}
           <Card>
-            <h3>PO Aktif ({isLoadingPOs ? '...' : activePOs.length})</h3>
+            <h3>Order Aktif ({isLoadingPOs ? '...' : activePOs.length})</h3>
             {isLoadingPOs ? (
-              <p style={{ textAlign: 'center', padding: '2rem' }}>Memuat daftar PO...</p>
+              <p style={{ textAlign: 'center', padding: '2rem' }}>Memuat daftar Order...</p>
             ) : activePOs.length > 0 ? (
               <div className="po-tracking-list-wrapper">
                 {activePOs.map((po) => (
@@ -233,10 +233,10 @@ const ProgressTrackingPage: React.FC<ProgressTrackingPageProps> = ({
               </div>
             ) : searchTerm ? (
               <p style={{ textAlign: 'center', padding: '2rem' }}>
-                Tidak ada PO aktif yang cocok dengan "{searchTerm}".
+                Tidak ada Order aktif yang cocok dengan "{searchTerm}".
               </p>
             ) : (
-              <p style={{ textAlign: 'center', padding: '2rem' }}>Tidak ada PO aktif saat ini.</p>
+              <p style={{ textAlign: 'center', padding: '2rem' }}>Tidak ada Order aktif saat ini.</p>
             )}
           </Card>
           {/* Bagian PO Selesai */}
@@ -245,7 +245,7 @@ const ProgressTrackingPage: React.FC<ProgressTrackingPageProps> = ({
             <Card style={{ marginTop: '1.5rem' }}>
               {' '}
               {/* Beri jarak atas */}
-              <h3>PO Selesai ({completedPOs.length})</h3>
+              <h3>Order Selesai ({completedPOs.length})</h3>
               {completedPOs.length > 0 ? (
                 <div className="po-tracking-list-wrapper completed-list">
                   {' '}
@@ -263,7 +263,7 @@ const ProgressTrackingPage: React.FC<ProgressTrackingPageProps> = ({
                 // Tampil hanya jika ada searchTerm tapi tidak ada hasil
                 searchTerm && (
                   <p style={{ textAlign: 'center', padding: '2rem' }}>
-                    Tidak ada PO selesai yang cocok dengan "{searchTerm}".
+                    Tidak ada Order selesai yang cocok dengan "{searchTerm}".
                   </p>
                 )
                 // Jika tidak ada search term dan tidak ada PO selesai, bagian ini tidak tampil (atau tampilkan pesan default jika mau)

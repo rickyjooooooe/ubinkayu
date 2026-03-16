@@ -145,7 +145,7 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ currentUser }) => {
   if (!analysisData) {
     return (
       <div className="page-container">
-        <p>Gagal memuat data analisis atau tidak ada data PO yang valid.</p>
+        <p>Gagal memuat data analisis atau tidak ada data Order yang valid.</p>
       </div>
     )
   }
@@ -154,14 +154,14 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ currentUser }) => {
     <div className="page-container">
       <div className="page-header">
         <div>
-          <h1>Analisis Purchase Order</h1>
-          <p>Wawasan berbasis data dari SEMUA Purchase Order (kecuali Cancelled).</p>
+          <h1>Analisis Order</h1>
+          <p>Wawasan berbasis data dari SEMUA Order (kecuali Cancelled).</p>
         </div>
       </div>
 
       {/* --- Card Performa Marketing --- */}
       <Card style={{ marginBottom: '1.5rem' }}>
-        <h4>⭐ Performa Marketing (Total Kubikasi PO)</h4>
+        <h4>⭐ Performa Marketing (Total Kubikasi Order)</h4>
         {analysisData.salesByMarketing.length > 0 ? (
           <ResponsiveContainer width="100%" height={300}>
             <BarChart
@@ -175,13 +175,13 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ currentUser }) => {
               <Tooltip
                 formatter={(value, name) => {
                   if (name === 'Total m³') return [`${Number(value).toFixed(3)} m³`, name]
-                  if (name === 'Jumlah PO') return [`${value} PO`, name]
+                  if (name === 'Jumlah Order') return [`${value} Order`, name]
                   return [value, name]
                 }}
               />
               <Legend />
               <Bar dataKey="totalKubikasi" name="Total m³" fill={COLORS[0]} />
-              <Bar dataKey="poCount" name="Jumlah PO" fill={COLORS[1]} />
+              <Bar dataKey="poCount" name="Jumlah Order" fill={COLORS[1]} />
             </BarChart>
           </ResponsiveContainer>
         ) : (

@@ -19,7 +19,10 @@ const api = {
   updatePO: (data) => ipcRenderer.invoke('po:update', data),
   deletePO: (poId) => ipcRenderer.invoke('po:delete', poId),
   listPOItems: (poId) => ipcRenderer.invoke('po:listItems', poId),
-
+// [BARU] Request Project
+requestProject: (data) => ipcRenderer.invoke('po:requestProject', data),
+confirmRequest: (data) => ipcRenderer.invoke('po:confirmRequest', data),
+getCommissionData: (user) => ipcRenderer.invoke('commission:getData', user),
   // --- Fungsi untuk Revisi & Histori ---
   listPORevisions: (poId) => ipcRenderer.invoke('po:listRevisions', poId),
   listPOItemsByRevision: (revId) => ipcRenderer.invoke('po:listItemsByRevision', revId),

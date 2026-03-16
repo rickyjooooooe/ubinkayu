@@ -43,7 +43,25 @@ function createApiEndpoint(action, params = {}) {
   const query = new URLSearchParams({ action, ...params }).toString()
   return `/api?${query}`
 }
+// Kirim request project (marketing)
+export function requestProject(data) {
+  if (window.api) return window.api.requestProject(data)
+  return fetchAPI('/api/request-project', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+}
 
+// Admin konfirmasi request dengan items
+export function confirmRequest(data) {
+  if (window.api) return window.api.confirmRequest(data)
+  return fetchAPI('/api/confirm-request', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+}
 export async function loginUser(username, password) {
   const loginData = { username, password }
 
@@ -85,6 +103,7 @@ export async function loginUser(username, password) {
 }
 
 // --- Fungsi CRUD untuk Purchase Order (PO) ---
+
 
 export function listPOs(user) {
   if (window.api) {
@@ -275,7 +294,14 @@ export function addNewProduct(data) {
     body: JSON.stringify(data)
   })
 }
-
+export function getCommissionData(user) {
+   if (window.api) return window.api.getCommissionData(user)
+   return fetchAPI(createApiEndpoint('getCommissionData'), {
+     method: 'POST',
+     headers: { 'Content-Type': 'application/json' },
+     body: JSON.stringify({ user })
+   })
+}
 export function updateStageDeadline(data) {
   if (window.api) return window.api.updateStageDeadline(data)
   return fetchAPI(createApiEndpoint('updateStageDeadline'), {

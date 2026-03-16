@@ -650,7 +650,7 @@ async function listPOs(user: User | null) {
 
       const roundedProgress = Math.round(poProgress)
 
-      if (finalStatus !== 'Cancelled') {
+      if (finalStatus !== 'Cancelled' && finalStatus !== 'Requested') {
         if (roundedProgress >= 100) {
           finalStatus = 'Completed'
           const allProgressForPO = progressRows
@@ -685,6 +685,73 @@ async function listPOs(user: User | null) {
     return filteredResult;
   } catch (err: any) {
     console.error('❌ listPOs error:', err.message)
+    return []
+  }
+}
+async function getCommissionData(user: User | null) {
+  try {
+    const doc = await openDoc()
+    const userDoc = await openUserDoc()
+
+    const poSheet = await getSheet(doc, 'purchase_orders')
+    const poRows = await poSheet.getRows()
+
+    const userSheet = await getSheet(userDoc, 'users')
+    await userSheet.loadHeaderRow()
+    const userRows = await userSheet.getRows()
+
+    // Map nama marketing → commission_rate
+    const commissionRateMap: Record<string, number> = {}
+    userRows.forEach((r: any) => {
+      const name = r.get('name')?.trim()
+      const rate = Number(r.get('commision_rate') || 0)
+      if (name && rate > 0) {
+        commissionRateMap[name.toLowerCase()] = rate
+      }
+    })
+
+    // Ambil latest revision per PO
+    const poObjects = poRows.map((r: any) => r.toObject())
+    const byId = new Map()
+    for (const r of poObjects) {
+      const id = String(r.id).trim()
+      const rev = toNum(r.revision_number, -1)
+      const keep = byId.get(id)
+      if (!keep || rev > keep.rev) byId.set(id, { rev, row: r })
+    }
+    const latestPOs = Array.from(byId.values()).map(({ row }: any) => row)
+
+    const result = latestPOs
+      .filter((po: any) => {
+        if (po.status === 'Requested') return false
+        if (!po.acc_marketing) return false
+        if (!po.project_valuation || toNum(po.project_valuation, 0) === 0) return false
+        if (user?.role === 'marketing') {
+          return po.acc_marketing.toLowerCase() === user.name.toLowerCase()
+        }
+        return true
+      })
+      .map((po: any) => {
+        const marketingName = po.acc_marketing?.trim() || ''
+        const rate = commissionRateMap[marketingName.toLowerCase()] || 0
+        const valuation = toNum(po.project_valuation, 0)
+        return {
+          po_id: po.id,
+          po_number: po.po_number,
+          project_name: po.project_name,
+          marketing_name: marketingName,
+          commission_rate: rate,
+          project_valuation: valuation,
+          commission_amount: (valuation * rate) / 100,
+          status: po.status || 'Open',
+          deadline: po.deadline || null,
+          created_at: po.created_at,
+        }
+      })
+
+    return result
+  } catch (err: any) {
+    console.error('❌ getCommissionData error:', err.message)
     return []
   }
 }
@@ -790,7 +857,149 @@ async function saveNewPO(data: any) {
     return { success: false, error: err.message }
   }
 }
+// [BARU] Marketing kirim request project
+async function requestProject(data: any) {
+  const doc = await openDoc()
+  const now = new Date().toISOString()
+  const poSheet = await getSheet(doc, 'purchase_orders')
+  const poId = await getNextIdFromSheet(poSheet)
 
+  if (!data.nomorPo || !data.namaCustomer) {
+    return { success: false, error: 'Nomor PO dan Nama Customer harus diisi.' }
+  }
+
+  const newPoRowData = {
+    id: poId,
+    revision_number: 0,
+    po_number: data.nomorPo,
+    project_name: data.namaCustomer,
+    deadline: data.tanggalKirim || null,
+    status: 'Requested',
+    priority: data.prioritas || 'Normal',
+    notes: data.catatan || '',
+    kubikasi_total: 0,
+    acc_marketing: data.marketing || '',
+    created_at: now,
+    pdf_link: '',
+    foto_link: 'Tidak ada foto',
+    file_size_bytes: 0,
+    alamat_kirim: data.alamatKirim || '',
+    revised_by: 'N/A',
+    project_valuation: toNum(data.project_valuation, 0),
+  }
+
+  let newPoRow = await poSheet.addRow(newPoRowData)
+
+  // Upload foto jika ada
+  if (data.poPhotoBase64) {
+    try {
+      const auth = getAuth()
+      const imageBuffer = Buffer.from(data.poPhotoBase64, 'base64')
+      const safePoNumber = (data.nomorPo || 'NoPO').replace(/[/\\?%*:|"<>]/g, '-')
+      const safeName = (data.namaCustomer || 'Customer').replace(/[/\\?%*:|"<>]/g, '-')
+      const fileName = `PO-${safePoNumber}-${safeName}.jpg`
+      const drive = google.drive({ version: 'v3', auth })
+      const bufferStream = new stream.PassThrough()
+      bufferStream.end(imageBuffer)
+      const response = await drive.files.create({
+        requestBody: { name: fileName, mimeType: 'image/jpeg', parents: [PROGRESS_PHOTOS_FOLDER_ID] },
+        media: { mimeType: 'image/jpeg', body: bufferStream },
+        fields: 'id, webViewLink',
+        supportsAllDrives: true
+      })
+      if (response.data.webViewLink) {
+        newPoRow.set('foto_link', response.data.webViewLink)
+        await newPoRow.save()
+      }
+    } catch (photoErr: any) {
+      console.error('Gagal upload foto request:', photoErr.message)
+    }
+  }
+
+  return { success: true, poId, message: 'Request project berhasil dikirim.' }
+}
+
+// [BARU] Admin konfirmasi request → isi items → jadi PO resmi
+async function confirmRequest(data: any) {
+  const { poId, items, revisedBy } = data
+
+  if (!poId) return { success: false, error: 'PO ID harus diisi.' }
+  if (!items || items.length === 0) return { success: false, error: 'Minimal satu item harus diisi.' }
+
+  const doc = await openDoc()
+  const poSheet = await getSheet(doc, 'purchase_orders')
+  const itemSheet = await getSheet(doc, 'purchase_order_items')
+
+  const allPoRows = await poSheet.getRows()
+  const targetRow = allPoRows.find(
+    (r: any) =>
+      String(r.get('id')).trim() === String(poId).trim() &&
+      toNum(r.get('revision_number'), -1) === 0
+  )
+
+  if (!targetRow) return { success: false, error: `PO dengan ID ${poId} tidak ditemukan.` }
+  if (targetRow.get('status') !== 'Requested') return { success: false, error: 'PO ini bukan berstatus Requested.' }
+
+  // Tambah items ke sheet
+  let nextItemId = parseInt(await getNextIdFromSheet(itemSheet), 10)
+  const itemsWithIds: any[] = []
+  const itemsToAdd = items.map((raw: any) => {
+    const clean = scrubItemPayload(raw)
+    const kubikasiItem = toNum(raw.kubikasi, 0)
+    const newItem = { id: nextItemId, purchase_order_id: poId, revision_number: 0, kubikasi: kubikasiItem, ...clean }
+    itemsWithIds.push({ ...raw, id: nextItemId, kubikasi: kubikasiItem })
+    nextItemId++
+    return newItem
+  })
+  await itemSheet.addRows(itemsToAdd)
+
+  const kubikasiTotal = itemsWithIds.reduce((acc: number, item: any) => acc + toNum(item.kubikasi, 0), 0)
+
+  // Update status PO → Open
+  targetRow.set('status', 'Open')
+  targetRow.set('kubikasi_total', kubikasiTotal)
+  targetRow.set('revised_by', revisedBy || 'Admin')
+  targetRow.set('pdf_link', 'generating...')
+  await targetRow.save()
+
+  // Generate JPEG
+  const poDataForJpeg = {
+    po_number: targetRow.get('po_number'),
+    project_name: targetRow.get('project_name'),
+    deadline: targetRow.get('deadline'),
+    priority: targetRow.get('priority'),
+    notes: targetRow.get('notes'),
+    created_at: targetRow.get('created_at'),
+    kubikasi_total: kubikasiTotal,
+    acc_marketing: targetRow.get('acc_marketing'),
+    alamat_kirim: targetRow.get('alamat_kirim'),
+    items: itemsWithIds,
+  }
+
+  try {
+    const jpegResult = await generatePOJpeg(poDataForJpeg, 0)
+    if (jpegResult.success && jpegResult.buffer) {
+      const auth = getAuth()
+      const drive = google.drive({ version: 'v3', auth })
+      const bufferStream = new stream.PassThrough()
+      bufferStream.end(jpegResult.buffer)
+      const response = await drive.files.create({
+        requestBody: { name: jpegResult.fileName, mimeType: 'image/jpeg', parents: [PO_ARCHIVE_FOLDER_ID] },
+        media: { mimeType: 'image/jpeg', body: bufferStream },
+        fields: 'id, webViewLink',
+        supportsAllDrives: true
+      })
+      targetRow.set('pdf_link', response.data.webViewLink || '')
+    } else {
+      targetRow.set('pdf_link', `ERROR: Gagal generate JPEG`)
+    }
+  } catch (jpegErr: any) {
+    targetRow.set('pdf_link', `ERROR: ${jpegErr.message}`)
+  }
+  await targetRow.save()
+
+  return { success: true, poId, message: 'PO berhasil dibuat dari request.' }
+}
 async function updatePO(data: any) {
   console.log('TITIK B (Backend): Menerima data revisi:', data)
   let newRevisionRow: GoogleSpreadsheetRow | undefined
@@ -3059,6 +3268,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('po:listItemsByRevision', async (_event, poId, revisionNumber) =>
     listPOItemsByRevision(poId, revisionNumber)
   )
+  ipcMain.handle('commission:getData', async (_event, user) => getCommissionData(user))
   ipcMain.handle('po:getRevisionHistory', async (_event, poId) => getRevisionHistory(poId))
   ipcMain.handle('product:get', () => getProducts())
   ipcMain.handle('app:open-external-link', (_event, url) => {
@@ -3100,7 +3310,8 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('product:add', (_event, productData) => addNewProduct(productData))
   ipcMain.handle('progress:updateDeadline', (_event, data) => updateStageDeadline(data))
-
+ipcMain.handle('po:requestProject', async (_event, data) => requestProject(data))
+ipcMain.handle('po:confirmRequest', async (_event, data) => confirmRequest(data))
   ipcMain.handle('ai:ollamaChat', async (_event, prompt, user, history) => {
     return await handleGroqChat(prompt, user, history)
   })
@@ -3112,6 +3323,7 @@ app.whenReady().then(async () => {
   })
 })
 
+// Pastikan tidak ada syarat platform, langsung matikan saja
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
+  app.quit()
 })

@@ -11,6 +11,7 @@ import ProgressTrackingPage from './pages/ProgressTrackingPage'
 import UpdateProgressPage from './pages/UpdateProgressPage'
 import AnalysisPage from './pages/AnalysisPage'
 import Chatbot from './components/Chatbot' // Asumsi widget chatbot
+import CommissionView from './pages/CommissionView'
 
 // Impor Tipe Data dan Hooks
 import { POHeader, Message } from './types' // Asumsi tipe ini ada di types.ts
@@ -29,6 +30,7 @@ type AppView =
   | 'updateProgress'
   | 'analysis'
   | 'aiChat'
+  | 'commission'
 
 // Tipe sederhana untuk data user yang login (konsistenkan nama)
 interface User {
@@ -58,6 +60,7 @@ function App() {
   const [view, setView] = useState<AppView>('dashboard')
   const [allPOs, setAllPOs] = useState<POHeader[]>([])
   const [editingPO, setEditingPO] = useState<POHeader | null>(null)
+  const [formMode, setFormMode] = useState<'new' | 'request' | 'confirm' | 'edit'>('new')
   const [selectedPoId, setSelectedPoId] = useState<string | null>(null)
   const [trackingPO, setTrackingPO] = useState<POHeader | null>(null)
   const [previousView, setPreviousView] = useState<AppView>('dashboard')
@@ -236,10 +239,18 @@ function App() {
   }
   const handleEditPO = (po: POHeader) => {
     setEditingPO(po)
+    setFormMode('edit')
     setView('input')
   }
   const handleShowInputForm = () => {
     setEditingPO(null)
+    // Marketing → mode request, admin/manager → mode new
+    setFormMode(currentUser?.role === 'marketing' ? 'request' : 'new')
+    setView('input')
+  }
+  const handleConfirmRequest = (po: POHeader) => {
+    setEditingPO(po)
+    setFormMode('confirm')
     setView('input')
   }
   const handleShowDetail = (po: POHeader) => {
@@ -383,8 +394,9 @@ function App() {
             onDeletePO={handleDeletePO}
             onEditPO={handleEditPO}
             onShowDetail={handleShowDetail}
-            onShowProgress={handleSelectPOForTracking} // Gunakan handler yang sama
-            isLoading={isLoadingPOs} // Gunakan isLoadingPOs
+            onShowProgress={handleSelectPOForTracking}
+            onConfirmRequest={handleConfirmRequest}
+            isLoading={isLoadingPOs}
             currentUser={currentUser}
           />
         )
@@ -397,6 +409,8 @@ function App() {
               handleNavigate('list') // Kembali ke list
             }}
             editingPO={editingPO}
+            currentUser={currentUser}
+            mode={formMode}
           />
         )
       case 'detail':
@@ -440,6 +454,8 @@ function App() {
             onToggleTts={handleToggleTts}
           />
         )
+        case 'commission':
+          return <CommissionView currentUser={currentUser} />
       default:
         console.warn('Invalid view state:', view, 'defaulting to dashboard.')
         setView('dashboard') // Perbaiki state view

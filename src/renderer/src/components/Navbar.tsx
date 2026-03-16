@@ -1,4 +1,4 @@
-/* eslint-disable prettier/prettier */
+/* eslint-disable outdoor/prettier */
 /* eslint-disable @typescript-eslint/explicit-function-return-type */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 
@@ -13,7 +13,8 @@ import {
   LuActivity,
   LuTrendingUp,
   LuBrainCircuit,
-  LuMoveHorizontal
+  LuMoveHorizontal,
+  LuWallet // Ikon baru untuk fitur Komisi
 } from 'react-icons/lu'
 import type { IconType } from 'react-icons'
 import { Button } from './Button'
@@ -21,7 +22,8 @@ import { useWindowWidth } from '../hooks/useWindowWidth'
 import './Navbar.css'
 import type { User } from '../types'
 
-type AppView = 'dashboard' | 'list' | 'tracking' | 'analysis' | 'aiChat'
+// Tambahkan 'commission' ke dalam tipe AppView
+type AppView = 'dashboard' | 'list' | 'tracking' | 'analysis' | 'aiChat' | 'commission'
 
 interface NavLinkItem {
   id: AppView | 'more'
@@ -65,22 +67,26 @@ const Navbar: React.FC<NavbarProps> = ({
   }
 
   const getLinkClass = (viewName: string) => {
-    // [PERBAIKAN] 'updateProgress' juga harus mengaktifkan tab 'tracking'
+    // Definisi grouping view agar tab tetap menyala saat di sub-halaman
     const trackingViews = ['tracking', 'updateProgress']
-    const listViews = ['list', 'input', 'detail', 'history'] // 'history' juga bagian dari PO
+    const listViews = ['list', 'input', 'detail', 'history']
+    const commissionViews = ['commission', 'requestProject', 'accProject']
 
     if (viewName === 'list' && listViews.includes(currentView)) return 'active'
     if (viewName === 'tracking' && trackingViews.includes(currentView)) return 'active'
+    if (viewName === 'commission' && commissionViews.includes(currentView)) return 'active'
     if (viewName === 'more' && currentView === 'aiChat') return 'active'
     if (viewName === currentView) return 'active'
     return ''
   }
 
+  // Definisi semua link navigasi
   const navLinksDefinition: NavLinkItem[] = [
     { id: 'dashboard', label: 'Dashboard', Icon: LuLayoutDashboard },
     { id: 'list', label: 'PO', Icon: LuListOrdered },
     { id: 'tracking', label: 'Progress', Icon: LuActivity },
     { id: 'analysis', label: 'Analysis', Icon: LuTrendingUp },
+    { id: 'commission', label: 'Komisi', Icon: LuWallet }, // Fitur Baru
     { id: 'more', label: 'Lainnya', Icon: LuMoveHorizontal }
   ]
 
@@ -91,21 +97,23 @@ const Navbar: React.FC<NavbarProps> = ({
     mobileOnly: true
   }
 
-  // [PERBAIKAN UTAMA DI SINI]
+  // Logika Filter berdasarkan Role (Sangat Penting untuk Skripsi)
   const linksToRender = (
     isMobile ? navLinksDefinition : navLinksDefinition.filter((link) => link.id !== 'more')
   ).filter((link) => {
     if (!currentUser?.role) return true
 
-    // Sembunyikan 'Progress' HANYA jika role adalah 'admin'
-    if (
-      link.id === 'tracking' &&
-      currentUser.role === 'admin' // <-- 'marketing' DIHAPUS DARI SINI
-    ) {
+    // 1. Sembunyikan 'Progress' jika user adalah Admin (Admin fokus ke Manajerial)
+    if (link.id === 'tracking' && currentUser.role === 'admin') {
       return false
     }
 
-    // Tampilkan semua link lainnya
+    // 2. Sembunyikan 'Komisi' jika user adalah tim Produksi
+    // Fitur ini hanya untuk Marketing (pelaku) dan Admin (pemberi ACC/Owner)
+    if (link.id === 'commission' && currentUser.role === 'produksi') {
+      return false
+    }
+
     return true
   })
 
@@ -142,32 +150,31 @@ const Navbar: React.FC<NavbarProps> = ({
       )}
 
       <div className="navbar-links">
-        {linksToRender.map(
-          (
-            link // 'link' sekarang bertipe NavLinkItem
-          ) => (
-            <a
-              key={link.id} // Aman
-              id={`nav-link-${link.id}`} // Beri ID unik
-              href="#"
-              onClick={(e) => {
-                e.preventDefault()
-                handleLinkClick(link.id)
-              }} // Aman
-              className={`nav-link ${getLinkClass(link.id)} ${link.id === 'more' && isMoreMenuOpen ? 'more-open' : ''}`} // Aman
-              title={link.label} // Aman
-            >
-              <link.Icon className="nav-icon" /> {/* Aman */}
-              <span className="nav-link-label">{link.label}</span> {/* Aman */}
-            </a>
-          )
-        )}
+        {linksToRender.map((link) => (
+          <a
+            key={link.id}
+            id={`nav-link-${link.id}`}
+            href="#"
+            onClick={(e) => {
+              e.preventDefault()
+              handleLinkClick(link.id)
+            }}
+            className={`nav-link ${getLinkClass(link.id)} ${link.id === 'more' && isMoreMenuOpen ? 'more-open' : ''}`}
+            title={link.label}
+          >
+            <link.Icon className="nav-icon" />
+            <span className="nav-link-label">{link.label}</span>
+          </a>
+        ))}
       </div>
 
       {!isMobile && (
         <div className="navbar-actions">
-          {/* [PERBAIKAN] Gunakan currentUser.name (lebih konsisten) */}
-          {currentUser?.name && <span className="user-greeting">Hi, {currentUser.name.split(' ')[0]}!</span>}
+          {currentUser?.name && (
+            <span className="user-greeting">
+              Hi, {currentUser.name.split(' ')[0]}!
+            </span>
+          )}
           <Button
             variant="secondary"
             className="refresh-btn-desktop"
@@ -176,7 +183,9 @@ const Navbar: React.FC<NavbarProps> = ({
             title="Refresh Data"
           >
             {isRefreshing ? <LuLoader className="spin-icon" /> : <LuRefreshCw />}
-            <span className="refresh-btn-text">{isRefreshing ? 'Memuat...' : 'Refresh'}</span>
+            <span className="refresh-btn-text">
+              {isRefreshing ? 'Memuat...' : 'Refresh'}
+            </span>
           </Button>
           <Button
             variant="secondary"
@@ -194,7 +203,6 @@ const Navbar: React.FC<NavbarProps> = ({
         <div ref={moreMenuRef} className="more-menu-popup">
           <div className="more-menu-overlay" onClick={() => setIsMoreMenuOpen(false)}></div>
           <div className="more-menu-content">
-            {/* Gunakan data aiAssistLink */}
             <button
               className={`more-menu-item ${currentView === aiAssistLink.id ? 'active' : ''}`}
               onClick={() => {

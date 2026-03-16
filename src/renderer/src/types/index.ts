@@ -76,6 +76,8 @@ export interface POHeader {
   lastRevisedBy?: string
   lastRevisedDate?: string
   file_size_bytes?: number | null
+  foto_link?: string | null        // link foto referensi di Google Drive
+  project_valuation?: number | null // [BARU] valuasi project dari marketing
 }
 
 export interface PORevision {
@@ -92,6 +94,8 @@ export interface PORevision {
   acc_marketing?: string
   revised_by?: string
   alamat_kirim?: string
+  foto_link?: string | null        // link foto referensi di Google Drive
+  project_valuation?: number | null // [BARU] valuasi project dari marketing
 }
 
 export interface ProductMaster {

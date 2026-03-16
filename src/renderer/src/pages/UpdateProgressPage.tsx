@@ -384,7 +384,7 @@ const UpdateProgressPage: React.FC<UpdateProgressPageProps> = ({ po, onBack, onR
     return (
       <div className="page-container center-content">
         <Card>
-          <p>Silakan pilih Purchase Order dari halaman Tracking terlebih dahulu.</p>
+          <p>Silakan pilih Order dari halaman Tracking terlebih dahulu.</p>
           <Button onClick={onBack} style={{ marginTop: '1rem' }}>
             Kembali ke Tracking
           </Button>
@@ -402,7 +402,7 @@ const UpdateProgressPage: React.FC<UpdateProgressPageProps> = ({ po, onBack, onR
         <div>
           <h1>
             {/* [DIUBAH] Judul disederhanakan */}
-            Update Progress: PO {po.po_number}
+            Update Progress: Order {po.po_number}
           </h1>
           <p>Customer: {po.project_name}</p>
         </div>
@@ -429,7 +429,7 @@ const UpdateProgressPage: React.FC<UpdateProgressPageProps> = ({ po, onBack, onR
         </div>
       ) : (
         <Card style={{ textAlign: 'center', padding: '2rem' }}>
-          <p>Tidak ada item yang ditemukan untuk PO ini pada revisi terbaru.</p>
+          <p>Tidak ada item yang ditemukan untuk Order ini pada revisi terbaru.</p>
         </Card>
       )}
     </div>

@@ -108,8 +108,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
 
     const dailyPOData = allDaysSorted.map((day) => ({
       name: day,
-      'PO Baru': dailyCounts[day] || 0,
-      'PO Selesai': completedCounts[day] || 0
+      'Order Baru': dailyCounts[day] || 0,
+      'Order Selesai': completedCounts[day] || 0
     }))
 
     const statusCounts = poList.reduce((acc, po) => {
@@ -186,7 +186,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
     <div className="page-container">
       <div className="page-header">
         <div>
-          <h1>Dashboard PO UbinKayu</h1>
+          <h1>Dashboard Order UbinKayu</h1>
           <p>Ringkasan aktivitas produksi PT Ubinkayu — {todayFormatted}</p>
         </div>
       </div>
@@ -195,7 +195,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
         <Card className="attention-card">
           <h4>Perhatian!</h4>
           <p>
-            Ada <strong>{dashboardData.nearingDeadlinePOs.length} Purchase Order</strong> yang akan
+            Ada <strong>{dashboardData.nearingDeadlinePOs.length} Order</strong> yang akan
             jatuh tempo dalam 14 hari ke depan.
           </p>
 
@@ -204,7 +204,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
             {dashboardData.nearingDeadlinePOs.map((po) => (
               <div key={po.id} className="attention-item">
 
-                {/* Bagian Kiri: Info PO dan Customer */}
+                {/* Bagian Kiri: Info Order dan Customer */}
                 <div className="attention-info">
                   <p className="attention-line-1">
                     <strong>{po.po_number}</strong>
@@ -228,19 +228,19 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
       {/* [DIUBAH] Pastikan Anda memiliki CSS untuk 4 kolom */}
       <div className="dashboard-summary-grid">
         <StatCard
-          title="Total Purchase Order"
+          title="Total Order"
           value={summaryStats.totalPOs}
           icon={LuPackage}
           cardClassName="total-po-card" // Class for specific styling
         />
         <StatCard
-          title="PO Aktif (Produksi)"
+          title="Order Aktif (Produksi)"
           value={summaryStats.activePOs}
           icon={LuHourglass}
           cardClassName="active-po-card"
         />
         <StatCard
-          title="PO Selesai"
+          title="Order Selesai"
           value={summaryStats.completedPOs}
           icon={LuCheck}
           cardClassName="completed-po-card"
@@ -256,7 +256,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
       <div className="dashboard-widgets-grid">
         {/* Grafik LineChart (Tidak Berubah) */}
         <Card>
-          <h4>Purchase Order Baru per Hari</h4>
+          <h4>Order Baru per Hari</h4>
           {isLoading ? (
             <p>Memuat data...</p>
           ) : (
@@ -272,12 +272,12 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
                 <Legend />
                 <Line
                   type="monotone"
-                  dataKey="PO Baru"
+                  dataKey="Order Baru"
                   stroke="#8884d8"
                   strokeWidth={2}
                   activeDot={{ r: 8 }}
                 />
-                <Line type="monotone" dataKey="PO Selesai" stroke="#38A169" strokeWidth={2} />
+                <Line type="monotone" dataKey="Order Selesai" stroke="#38A169" strokeWidth={2} />
               </LineChart>
             </ResponsiveContainer>
           )}
@@ -285,7 +285,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
 
         {/* Grafik PieChart (Tidak Berubah) */}
         <Card>
-          <h4>Komposisi Status PO</h4>
+          <h4>Komposisi Status Order</h4>
           {isLoading ? (
             <p>Memuat data...</p>
           ) : (
@@ -318,7 +318,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
 
       {/* Tabel Deadline (Tidak Berubah) */}
       <Card>
-        <h4>🚨 PO Mendekati Deadline (14 Hari ke Depan)</h4>
+        <h4>🚨 Order Mendekati Deadline (14 Hari ke Depan)</h4>
         {isLoading ? (
           <p>Memuat data...</p>
         ) : dashboardData.nearingDeadlinePOs.length > 0 ? (
@@ -326,7 +326,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
             <table className="simple-table">
               <thead>
                 <tr>
-                  <th>Nomor PO</th>
+                  <th>Nomor Order</th>
                   <th>Customer</th>
                   <th>Deadline</th>
                   <th>Status</th>
@@ -351,7 +351,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
             </table>
           </div>
         ) : (
-          <p>Tidak ada PO yang mendekati deadline. Kerja bagus! 👍</p>
+          <p>Tidak ada Order yang mendekati deadline. Kerja bagus! 👍</p>
         )}
       </Card>
     </div>
