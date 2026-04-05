@@ -36,14 +36,14 @@ const STAGES: ProductionStage[] = [
 // --- Komponen ProgressItem (Untuk Produksi) ---
 const ProgressItem = ({
   item,
-  poId,
-  poNumber,
+  orderId,
+  orderNumber,
   onUpdate,
   currentUser
 }: {
   item: POItem
-  poId: string
-  poNumber: string
+  orderId: string
+  orderNumber: string
   onUpdate: () => void
   currentUser: User | null
 }) => {
@@ -81,7 +81,7 @@ const ProgressItem = ({
     setEditableDeadlines(updatedDeadlines)
 
     apiService
-      .updateStageDeadline({ poId, itemId: item.id, stageName, newDeadline: newDeadlineISO })
+      .updateStageDeadline({ orderId, itemId: item.id, stageName, newDeadline: newDeadlineISO })
       .catch((err) => {
         alert(`Gagal menyimpan deadline baru: ${err.message}`)
         setEditableDeadlines(item.stageDeadlines || [])
@@ -134,9 +134,9 @@ const ProgressItem = ({
 
   const sendSingleProgressUpdate = async (stage: string, updateNotes: string, updatePhotoPath: string | null, updatePhotoBase64: string | null) => {
     const payload = {
-      poId: poId,
+      orderId: orderId,
       itemId: item.id,
-      poNumber: poNumber,
+      orderNumber: orderNumber,
       stage: stage,
       notes: updateNotes,
       photoPath: isElectron ? updatePhotoPath : null,
@@ -330,30 +330,30 @@ const ProgressItem = ({
 
 // --- Komponen Halaman Utama ---
 interface UpdateProgressPageProps {
-  po: POHeader | null;
+  order: POHeader | null;
   onBack: () => void;
   onRefresh: () => Promise<void>;
   currentUser: User | null;
 }
 
-const UpdateProgressPage: React.FC<UpdateProgressPageProps> = ({ po, onBack, onRefresh, currentUser }) => {
+const UpdateProgressPage: React.FC<UpdateProgressPageProps> = ({ order, onBack, onRefresh, currentUser }) => {
   const [items, setItems] = useState<POItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Fungsi untuk mengambil item-item PO
   const fetchItems = useCallback(async () => {
     // [DIUBAH] Fetch item selama statusnya BUKAN 'Waiting for Approval'
-    if (po?.id && po.status !== 'Waiting for Approval') {
-      console.log(`Fetching items with details for PO ID: ${po.id}`)
+    if (order?.id && order.status !== 'Waiting for Approval') {
+      console.log(`Fetching items with details for PO ID: ${order.id}`)
       setIsLoading(true);
       try {
         // @ts-ignore
-        const fetchedItems: POItem[] = await apiService.getPOItemsWithDetails(po.id);
+        const fetchedItems: POItem[] = await apiService.getorderItemsWithDetails(order.id);
         if (Array.isArray(fetchedItems)) {
           setItems(fetchedItems);
           console.log(`Fetched ${fetchedItems.length} items successfully.`)
         } else {
-          console.error('getPOItemsWithDetails did not return an array:', fetchedItems)
+          console.error('getorderItemsWithDetails did not return an array:', fetchedItems)
           setItems([])
           alert('Gagal memuat detail item: Format data tidak sesuai.')
         }
@@ -365,11 +365,11 @@ const UpdateProgressPage: React.FC<UpdateProgressPageProps> = ({ po, onBack, onR
         setIsLoading(false);
       }
     } else {
-      console.log(`Skipping item fetch for PO ${po?.id} with status ${po?.status}`);
+      console.log(`Skipping item fetch for PO ${order?.id} with status ${order?.status}`);
       setItems([]);
       setIsLoading(false);
     }
-  }, [po]);
+  }, [order]);
 
   useEffect(() => {
     fetchItems();
@@ -380,7 +380,7 @@ const UpdateProgressPage: React.FC<UpdateProgressPageProps> = ({ po, onBack, onR
     onRefresh();
   }
 
-  if (!po) {
+  if (!order) {
     return (
       <div className="page-container center-content">
         <Card>
@@ -402,9 +402,9 @@ const UpdateProgressPage: React.FC<UpdateProgressPageProps> = ({ po, onBack, onR
         <div>
           <h1>
             {/* [DIUBAH] Judul disederhanakan */}
-            Update Progress: Order {po.po_number}
+            Update Progress: Order {order.order_number}
           </h1>
-          <p>Customer: {po.project_name}</p>
+          <p>Customer: {order.project_name}</p>
         </div>
         <Button onClick={onBack} variant="secondary">
           Kembali
@@ -420,8 +420,8 @@ const UpdateProgressPage: React.FC<UpdateProgressPageProps> = ({ po, onBack, onR
             <ProgressItem
               key={item.id}
               item={item}
-              poId={po.id}
-              poNumber={po.po_number || 'N/A'}
+              orderId={order.id}
+              orderNumber={order.order_number || 'N/A'}
               onUpdate={handleItemUpdateSuccess}
               currentUser={currentUser} // Teruskan currentUser
             />

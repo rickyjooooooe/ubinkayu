@@ -13,7 +13,7 @@ import { GoogleSpreadsheet, GoogleSpreadsheetRow } from 'google-spreadsheet'
 import { JWT } from 'google-auth-library'
 import { google } from 'googleapis'
 // @ts-ignore (Abaikan error 'could not find declaration file')
-import { generatePOJpeg } from '../../electron/jpegGenerator.js'
+import { generateOrderJpeg } from '../../electron/jpegGenerator.js'
 import stream from 'node:stream'
 
 interface User {
@@ -21,7 +21,7 @@ interface User {
   role?: string
 }
 
-function filterPOsByMarketing<T>( // Hapus batasan <T>
+function filterOrdersByMarketing<T>( // Hapus batasan <T>
   poList: T[],
   user: User | null
 ): T[] {
@@ -32,15 +32,15 @@ function filterPOsByMarketing<T>( // Hapus batasan <T>
   const marketingName = user.name.toLowerCase();
   console.log(`[Filter] Menerapkan filter Marketing untuk: ${user.name}`);
 
-  return poList.filter(po => {
+  return poList.filter(order => {
     // --- [PERBAIKAN] ---
-    // Cek apakah 'po' adalah object GoogleSpreadsheetRow (punya .get())
+    // Cek apakah 'order' adalah object GoogleSpreadsheetRow (punya .get())
     // atau object biasa (punya .acc_marketing)
     let poMarketing = '';
-    if (typeof (po as any).get === 'function') {
-      poMarketing = (po as any).get('acc_marketing');
+    if (typeof (order as any).get === 'function') {
+      poMarketing = (order as any).get('acc_marketing');
     } else {
-      poMarketing = (po as any).acc_marketing;
+      poMarketing = (order as any).acc_marketing;
     }
     // --- [AKHIR PERBAIKAN] ---
 
@@ -195,10 +195,10 @@ async function openUserDoc() {
 }
 
 const ALIASES: { [key: string]: string[] } = {
-  purchase_orders: ['purchase_orders', 'purchase_order'],
-  purchase_order_items: ['purchase_order_items', 'po_items'],
+  orders: ['orders', 'purchase_order'],
+  order_items: ['order_items', 'po_items'],
   product_master: ['product_master', 'products'],
-  progress_tracking: ['purchase_order_items_progress', 'progress'],
+  progress_tracking: ['order_items_progress', 'progress'],
   users: ['users_credentials', 'users']
 }
 
@@ -225,47 +225,47 @@ async function getNextIdFromSheet(sheet: any) {
 }
 
 function scrubItemPayload(item: any) {
-  const { id, purchase_order_id, revision_id, revision_number, ...rest } = item || {}
+  const { id, order_id, revision_id, revision_number, ...rest } = item || {}
   return rest
 }
 
-async function latestRevisionNumberForPO(poId: string, doc: GoogleSpreadsheet) {
-  const sh = await getSheet(doc, 'purchase_orders')
+async function latestRevisionNumberForOrder(orderId: string, doc: GoogleSpreadsheet) {
+  const sh = await getSheet(doc, 'orders')
   const rows = await sh.getRows()
   const nums = rows
-    .filter((r: any) => String(r.get('id')).trim() === String(poId).trim())
+    .filter((r: any) => String(r.get('id')).trim() === String(orderId).trim())
     .map((r: any) => toNum(r.get('revision_number'), -1))
   return nums.length ? Math.max(...nums) : -1
 }
 
-async function getHeaderForRevision(poId: string, rev: number, doc: GoogleSpreadsheet) {
-  const sh = await getSheet(doc, 'purchase_orders')
+async function getHeaderForRevision(orderId: string, rev: number, doc: GoogleSpreadsheet) {
+  const sh = await getSheet(doc, 'orders')
   const rows = await sh.getRows()
   return (
     rows.find(
       (r: any) =>
-        String(r.get('id')).trim() === String(poId).trim() &&
+        String(r.get('id')).trim() === String(orderId).trim() &&
         toNum(r.get('revision_number'), -1) === toNum(rev, -1)
     ) || null
   )
 }
 
-async function getItemsByRevision(poId: string, rev: number, doc: GoogleSpreadsheet) {
-  const sh = await getSheet(doc, 'purchase_order_items')
+async function getItemsByRevision(orderId: string, rev: number, doc: GoogleSpreadsheet) {
+  const sh = await getSheet(doc, 'order_items')
   const rows = await sh.getRows()
   return rows
     .filter(
       (r: any) =>
-        String(r.get('purchase_order_id')).trim() === String(poId).trim() &&
+        String(r.get('order_id')).trim() === String(orderId).trim() &&
         toNum(r.get('revision_number'), -1) === toNum(rev, -1)
     )
     .map((r: any) => r.toObject())
 }
 
-async function getLivePOItems(poId: string, doc: GoogleSpreadsheet) {
-  const latest = await latestRevisionNumberForPO(poId, doc)
+async function getLiveorderItems(orderId: string, doc: GoogleSpreadsheet) {
+  const latest = await latestRevisionNumberForOrder(orderId, doc)
   if (latest < 0) return []
-  return getItemsByRevision(poId, latest, doc)
+  return getItemsByRevision(orderId, latest, doc)
 }
 
 function extractGoogleDriveFileId(driveUrl: string) {
@@ -351,13 +351,13 @@ async function deleteGoogleDriveFile(fileId: string) {
   }
 }
 
-async function uploadPoPhoto(photoPath: string, poNumber: string, customerName: string) {
+async function UploadOrderPhoto(photoPath: string, orderNumber: string, customerName: string) {
   try {
     if (!fs.existsSync(photoPath)) throw new Error(`File foto tidak ditemukan: ${photoPath}`)
     const auth = getAuth()
     const drive = google.drive({ version: 'v3', auth })
     const safeCustomer = String(customerName || '').replace(/[/\\?%*:|"<>]/g, '-')
-    const fileName = `PO-${poNumber}-${safeCustomer}.jpg`
+    const fileName = `PO-${orderNumber}-${safeCustomer}.jpg`
     const response = await drive.files.create({
       requestBody: {
         name: fileName,
@@ -384,11 +384,11 @@ async function uploadPoPhoto(photoPath: string, poNumber: string, customerName: 
   }
 }
 
-async function generateAndUploadPO(poData: any, revisionNumber: number | string) {
+async function generateAndUploadOrder(orderData: any, revisionNumber: number | string) {
   let auth
   let filePath: string | undefined
   try {
-    const pdfResult = await generatePOJpeg(poData, revisionNumber, false)
+    const pdfResult = await generateOrderJpeg(orderData, revisionNumber, false)
     if (!pdfResult.success || !pdfResult.path) {
       throw new Error('Gagal membuat file JPEG lokal atau path tidak ditemukan.')
     }
@@ -573,64 +573,64 @@ async function handleLoginUser(loginData: any) {
   }
 }
 
-async function listPOs(user: User | null) {
+async function listOrders(user: User | null) {
   try {
     const doc = await openDoc()
-    const poSheet = await getSheet(doc, 'purchase_orders')
-    const itemSheet = await getSheet(doc, 'purchase_order_items')
+    const Sheet = await getSheet(doc, 'orders')
+    const itemSheet = await getSheet(doc, 'order_items')
     const progressSheet = await getSheet(doc, 'progress_tracking')
 
-    const rawPoRows = await poSheet.getRows()
+    const rawOrderRows = await Sheet.getRows()
     const rawItemRows = await itemSheet.getRows()
     const rawProgressRows = await progressSheet.getRows()
 
-    const poRows = rawPoRows.map((r: any) => r.toObject())
+    const orderRows = rawOrderRows.map((r: any) => r.toObject())
     const itemRows = rawItemRows.map((r: any) => r.toObject())
     const progressRows = rawProgressRows.map((r: any) => r.toObject())
 
     const byId = new Map()
-    for (const r of poRows) {
+    for (const r of orderRows) {
       const id = String(r.id).trim()
       const rev = toNum(r.revision_number, -1)
       const keep = byId.get(id)
       if (!keep || rev > keep.rev) byId.set(id, { rev, row: r })
     }
-    const latestPoObjects = Array.from(byId.values()).map(({ row }: any) => row)
+    const latestorderObjects = Array.from(byId.values()).map(({ row }: any) => row)
 
     const progressByCompositeKey = progressRows.reduce((acc: any, row: any) => {
-      const key = `${row.purchase_order_id}-${row.purchase_order_item_id}`
+      const key = `${row.order_id}-${row.order_item_id}`
       if (!acc[key]) acc[key] = []
       acc[key].push({ stage: row.stage, created_at: row.created_at })
       return acc
     }, {})
 
     const latestItemRevisions = itemRows.reduce((acc: any, item: any) => {
-      const poId = item.purchase_order_id
+      const orderId = item.order_id
       const rev = toNum(item.revision_number, -1)
-      if (!acc.has(poId) || rev > acc.get(poId)) {
-        acc.set(poId, rev)
+      if (!acc.has(orderId) || rev > acc.get(orderId)) {
+        acc.set(orderId, rev)
       }
       return acc
     }, new Map())
 
-    const result = latestPoObjects.map((poObject: any) => {
-      const poId = poObject.id
-      const lastRevisedBy = poObject.revised_by || 'N/A'
-      const lastRevisedDate = poObject.created_at
-      const latestRev = latestItemRevisions.get(poId) ?? -1
-      const poItems = itemRows.filter(
-        (item: any) => item.purchase_order_id === poId && toNum(item.revision_number, -1) === latestRev
+    const result = latestorderObjects.map((orderObject: any) => {
+      const orderId = orderObject.id
+      const lastRevisedBy = orderObject.revised_by || 'N/A'
+      const lastRevisedDate = orderObject.created_at
+      const latestRev = latestItemRevisions.get(orderId) ?? -1
+      const orderItems = itemRows.filter(
+        (item: any) => item.order_id === orderId && toNum(item.revision_number, -1) === latestRev
       )
 
-      let poProgress = 0
-      let finalStatus = poObject.status || 'Open'
+      let orderProgress = 0
+      let finalStatus = orderObject.status || 'Open'
       let completed_at: string | null = null // ⬅️ PERBAIKAN TS2322
 
-      if (poItems.length > 0) {
+      if (orderItems.length > 0) {
         let totalPercentage = 0
-        poItems.forEach((item: any) => {
+        orderItems.forEach((item: any) => {
           const itemId = item.id
-          const compositeKey = `${poId}-${itemId}`
+          const compositeKey = `${orderId}-${itemId}`
           const itemProgressHistory = progressByCompositeKey[compositeKey] || []
           let latestStageIndex = -1
 
@@ -645,20 +645,20 @@ async function listPOs(user: User | null) {
             latestStageIndex >= 0 ? ((latestStageIndex + 1) / PRODUCTION_STAGES.length) * 100 : 0
           totalPercentage += itemPercentage
         })
-        poProgress = totalPercentage / poItems.length
+        orderProgress = totalPercentage / orderItems.length
       }
 
-      const roundedProgress = Math.round(poProgress)
+      const roundedProgress = Math.round(orderProgress)
 
       if (finalStatus !== 'Cancelled' && finalStatus !== 'Requested') {
         if (roundedProgress >= 100) {
           finalStatus = 'Completed'
-          const allProgressForPO = progressRows
-            .filter((row: any) => row.purchase_order_id === poId)
+          const allProgressForOrder = progressRows
+            .filter((row: any) => row.order_id === orderId)
             .map((row: any) => new Date(row.created_at).getTime())
 
-          if (allProgressForPO.length > 0) {
-            completed_at = new Date(Math.max(...allProgressForPO)).toISOString()
+          if (allProgressForOrder.length > 0) {
+            completed_at = new Date(Math.max(...allProgressForOrder)).toISOString()
           }
         } else if (roundedProgress > 0) {
           finalStatus = 'In Progress'
@@ -668,23 +668,23 @@ async function listPOs(user: User | null) {
       }
 
       return {
-        ...poObject,
-        items: poItems,
+        ...orderObject,
+        items: orderItems,
         progress: roundedProgress,
         status: finalStatus,
         completed_at: completed_at,
-        pdf_link: poObject.pdf_link || null,
+        pdf_link: orderObject.pdf_link || null,
         lastRevisedBy: lastRevisedBy,
         lastRevisedDate: lastRevisedDate,
-        acc_marketing: poObject.acc_marketing || '',
-        file_size_bytes: poObject.file_size_bytes || 0
+        acc_marketing: orderObject.acc_marketing || '',
+        file_size_bytes: orderObject.file_size_bytes || 0
       }
     })
 
-    const filteredResult = filterPOsByMarketing(result, user);
+    const filteredResult = filterOrdersByMarketing(result, user);
     return filteredResult;
   } catch (err: any) {
-    console.error('❌ listPOs error:', err.message)
+    console.error('❌ listOrders error:', err.message)
     return []
   }
 }
@@ -693,8 +693,8 @@ async function getCommissionData(user: User | null) {
     const doc = await openDoc()
     const userDoc = await openUserDoc()
 
-    const poSheet = await getSheet(doc, 'purchase_orders')
-    const poRows = await poSheet.getRows()
+    const Sheet = await getSheet(doc, 'orders')
+    const orderRows = await Sheet.getRows()
 
     const userSheet = await getSheet(userDoc, 'users')
     await userSheet.loadHeaderRow()
@@ -711,9 +711,9 @@ async function getCommissionData(user: User | null) {
     })
 
     // Ambil latest revision per PO
-    const poObjects = poRows.map((r: any) => r.toObject())
+    const orderObjects = orderRows.map((r: any) => r.toObject())
     const byId = new Map()
-    for (const r of poObjects) {
+    for (const r of orderObjects) {
       const id = String(r.id).trim()
       const rev = toNum(r.revision_number, -1)
       const keep = byId.get(id)
@@ -722,30 +722,30 @@ async function getCommissionData(user: User | null) {
     const latestPOs = Array.from(byId.values()).map(({ row }: any) => row)
 
     const result = latestPOs
-      .filter((po: any) => {
-        if (po.status === 'Requested') return false
-        if (!po.acc_marketing) return false
-        if (!po.project_valuation || toNum(po.project_valuation, 0) === 0) return false
+      .filter((order: any) => {
+        if (order.status === 'Requested') return false
+        if (!order.acc_marketing) return false
+        if (!order.project_valuation || toNum(order.project_valuation, 0) === 0) return false
         if (user?.role === 'marketing') {
-          return po.acc_marketing.toLowerCase() === user.name.toLowerCase()
+          return order.acc_marketing.toLowerCase() === user.name.toLowerCase()
         }
         return true
       })
-      .map((po: any) => {
-        const marketingName = po.acc_marketing?.trim() || ''
+      .map((order: any) => {
+        const marketingName = order.acc_marketing?.trim() || ''
         const rate = commissionRateMap[marketingName.toLowerCase()] || 0
-        const valuation = toNum(po.project_valuation, 0)
+        const valuation = toNum(order.project_valuation, 0)
         return {
-          po_id: po.id,
-          po_number: po.po_number,
-          project_name: po.project_name,
+          order_id: order.id,
+          order_number: order.order_number,
+          project_name: order.project_name,
           marketing_name: marketingName,
           commission_rate: rate,
           project_valuation: valuation,
           commission_amount: (valuation * rate) / 100,
-          status: po.status || 'Open',
-          deadline: po.deadline || null,
-          created_at: po.created_at,
+          status: order.status || 'Open',
+          deadline: order.deadline || null,
+          created_at: order.created_at,
         }
       })
 
@@ -756,22 +756,22 @@ async function getCommissionData(user: User | null) {
   }
 }
 
-async function saveNewPO(data: any) {
+async function saveNewOrder(data: any) {
   console.log('TITIK B (Backend): Menerima data:', data)
-  let newPoRow: GoogleSpreadsheetRow | undefined
+  let NewOrderRow: GoogleSpreadsheetRow | undefined
   try {
     const doc = await openDoc()
     const now = new Date().toISOString()
-    const poSheet = await getSheet(doc, 'purchase_orders')
-    const itemSheet = await getSheet(doc, 'purchase_order_items')
+    const Sheet = await getSheet(doc, 'orders')
+    const itemSheet = await getSheet(doc, 'order_items')
 
-    const poId = await getNextIdFromSheet(poSheet)
+    const orderId = await getNextIdFromSheet(Sheet)
     let totalFileSize = 0
 
-    newPoRow = await poSheet.addRow({
-      id: poId,
+    NewOrderRow = await Sheet.addRow({
+      id: orderId,
       revision_number: 0,
-      po_number: data.nomorPo,
+      order_number: data.nomorOrder,
       project_name: data.namaCustomer,
       deadline: data.tanggalKirim || null,
       status: 'Open',
@@ -795,7 +795,7 @@ async function saveNewPO(data: any) {
       const clean = scrubItemPayload(raw)
       const newItem = {
         id: nextItemId,
-        purchase_order_id: poId,
+        order_id: orderId,
         ...clean,
         revision_id: 0,
         revision_number: 0,
@@ -812,20 +812,20 @@ async function saveNewPO(data: any) {
 
     if (data.poPhotoPath) {
       console.log('Mengunggah foto referensi PO...')
-      const photoResult = await uploadPoPhoto(data.poPhotoPath, data.nomorPo, data.namaCustomer)
+      const photoResult = await UploadOrderPhoto(data.poPhotoPath, data.nomorOrder, data.namaCustomer)
       if (photoResult.success) {
-        newPoRow.set('foto_link', photoResult.link)
-        newPoRow.set('foto_file_name', photoResult.name || '')
+        NewOrderRow.set('foto_link', photoResult.link)
+        NewOrderRow.set('foto_file_name', photoResult.name || '')
         totalFileSize += Number(photoResult.size || 0)
       } else {
-        newPoRow.set('foto_link', `ERROR: ${photoResult.error}`)
+        NewOrderRow.set('foto_link', `ERROR: ${photoResult.error}`)
       }
     } else {
-      newPoRow.set('foto_link', 'Tidak ada foto')
+      NewOrderRow.set('foto_link', 'Tidak ada foto')
     }
 
-    const poDataForJpeg = {
-      po_number: data.nomorPo,
+    const orderDataForJpeg = {
+      order_number: data.nomorOrder,
       project_name: data.namaCustomer,
       deadline: data.tanggalKirim,
       priority: data.prioritas,
@@ -838,22 +838,22 @@ async function saveNewPO(data: any) {
       alamat_kirim: data.alamatKirim || ''
     }
 
-    const uploadResult = await generateAndUploadPO(poDataForJpeg, 0)
+    const uploadResult = await generateAndUploadOrder(orderDataForJpeg, 0)
 
     if (uploadResult.success) {
-      newPoRow.set('pdf_link', uploadResult.link)
-      newPoRow.set('pdf_file_name', uploadResult.name || '')
+      NewOrderRow.set('pdf_link', uploadResult.link)
+      NewOrderRow.set('pdf_file_name', uploadResult.name || '')
       totalFileSize += Number(uploadResult.size || 0)
     } else {
-      newPoRow.set('pdf_link', `ERROR: ${uploadResult.error}`)
-      newPoRow.set('pdf_file_name', '')
+      NewOrderRow.set('pdf_link', `ERROR: ${uploadResult.error}`)
+      NewOrderRow.set('pdf_file_name', '')
     }
 
-    newPoRow.set('file_size_bytes', totalFileSize)
-    await newPoRow.save()
-    return { success: true, poId, revision_number: 0 }
+    NewOrderRow.set('file_size_bytes', totalFileSize)
+    await NewOrderRow.save()
+    return { success: true, orderId, revision_number: 0 }
   } catch (err: any) {
-    console.error('❌ saveNewPO error:', err.message)
+    console.error('❌ saveNewOrder error:', err.message)
     return { success: false, error: err.message }
   }
 }
@@ -861,17 +861,17 @@ async function saveNewPO(data: any) {
 async function requestProject(data: any) {
   const doc = await openDoc()
   const now = new Date().toISOString()
-  const poSheet = await getSheet(doc, 'purchase_orders')
-  const poId = await getNextIdFromSheet(poSheet)
+  const Sheet = await getSheet(doc, 'orders')
+  const orderId = await getNextIdFromSheet(Sheet)
 
-  if (!data.nomorPo || !data.namaCustomer) {
+  if (!data.nomorOrder || !data.namaCustomer) {
     return { success: false, error: 'Nomor PO dan Nama Customer harus diisi.' }
   }
 
-  const newPoRowData = {
-    id: poId,
+  const NewOrderRowData = {
+    id: orderId,
     revision_number: 0,
-    po_number: data.nomorPo,
+    order_number: data.nomorOrder,
     project_name: data.namaCustomer,
     deadline: data.tanggalKirim || null,
     status: 'Requested',
@@ -888,16 +888,16 @@ async function requestProject(data: any) {
     project_valuation: toNum(data.project_valuation, 0),
   }
 
-  let newPoRow = await poSheet.addRow(newPoRowData)
+  let NewOrderRow = await Sheet.addRow(NewOrderRowData)
 
   // Upload foto jika ada
   if (data.poPhotoBase64) {
     try {
       const auth = getAuth()
       const imageBuffer = Buffer.from(data.poPhotoBase64, 'base64')
-      const safePoNumber = (data.nomorPo || 'NoPO').replace(/[/\\?%*:|"<>]/g, '-')
+      const safeorderNumber = (data.nomorOrder || 'NoPO').replace(/[/\\?%*:|"<>]/g, '-')
       const safeName = (data.namaCustomer || 'Customer').replace(/[/\\?%*:|"<>]/g, '-')
-      const fileName = `PO-${safePoNumber}-${safeName}.jpg`
+      const fileName = `PO-${safeorderNumber}-${safeName}.jpg`
       const drive = google.drive({ version: 'v3', auth })
       const bufferStream = new stream.PassThrough()
       bufferStream.end(imageBuffer)
@@ -908,36 +908,36 @@ async function requestProject(data: any) {
         supportsAllDrives: true
       })
       if (response.data.webViewLink) {
-        newPoRow.set('foto_link', response.data.webViewLink)
-        await newPoRow.save()
+        NewOrderRow.set('foto_link', response.data.webViewLink)
+        await NewOrderRow.save()
       }
     } catch (photoErr: any) {
       console.error('Gagal upload foto request:', photoErr.message)
     }
   }
 
-  return { success: true, poId, message: 'Request project berhasil dikirim.' }
+  return { success: true, orderId, message: 'Request project berhasil dikirim.' }
 }
 
 // [BARU] Admin konfirmasi request → isi items → jadi PO resmi
 async function confirmRequest(data: any) {
-  const { poId, items, revisedBy } = data
+  const { orderId, items, revisedBy } = data
 
-  if (!poId) return { success: false, error: 'PO ID harus diisi.' }
+  if (!orderId) return { success: false, error: 'PO ID harus diisi.' }
   if (!items || items.length === 0) return { success: false, error: 'Minimal satu item harus diisi.' }
 
   const doc = await openDoc()
-  const poSheet = await getSheet(doc, 'purchase_orders')
-  const itemSheet = await getSheet(doc, 'purchase_order_items')
+  const Sheet = await getSheet(doc, 'orders')
+  const itemSheet = await getSheet(doc, 'order_items')
 
-  const allPoRows = await poSheet.getRows()
-  const targetRow = allPoRows.find(
+  const allOrderRows = await Sheet.getRows()
+  const targetRow = allOrderRows.find(
     (r: any) =>
-      String(r.get('id')).trim() === String(poId).trim() &&
+      String(r.get('id')).trim() === String(orderId).trim() &&
       toNum(r.get('revision_number'), -1) === 0
   )
 
-  if (!targetRow) return { success: false, error: `PO dengan ID ${poId} tidak ditemukan.` }
+  if (!targetRow) return { success: false, error: `PO dengan ID ${orderId} tidak ditemukan.` }
   if (targetRow.get('status') !== 'Requested') return { success: false, error: 'PO ini bukan berstatus Requested.' }
 
   // Tambah items ke sheet
@@ -946,7 +946,7 @@ async function confirmRequest(data: any) {
   const itemsToAdd = items.map((raw: any) => {
     const clean = scrubItemPayload(raw)
     const kubikasiItem = toNum(raw.kubikasi, 0)
-    const newItem = { id: nextItemId, purchase_order_id: poId, revision_number: 0, kubikasi: kubikasiItem, ...clean }
+    const newItem = { id: nextItemId, order_id: orderId, revision_number: 0, kubikasi: kubikasiItem, ...clean }
     itemsWithIds.push({ ...raw, id: nextItemId, kubikasi: kubikasiItem })
     nextItemId++
     return newItem
@@ -963,8 +963,8 @@ async function confirmRequest(data: any) {
   await targetRow.save()
 
   // Generate JPEG
-  const poDataForJpeg = {
-    po_number: targetRow.get('po_number'),
+  const orderDataForJpeg = {
+    order_number: targetRow.get('order_number'),
     project_name: targetRow.get('project_name'),
     deadline: targetRow.get('deadline'),
     priority: targetRow.get('priority'),
@@ -977,7 +977,7 @@ async function confirmRequest(data: any) {
   }
 
   try {
-    const jpegResult = await generatePOJpeg(poDataForJpeg, 0)
+    const jpegResult = await generateOrderJpeg(orderDataForJpeg, 0)
     if (jpegResult.success && jpegResult.buffer) {
       const auth = getAuth()
       const drive = google.drive({ version: 'v3', auth })
@@ -998,7 +998,7 @@ async function confirmRequest(data: any) {
   }
   await targetRow.save()
 
-  return { success: true, poId, message: 'PO berhasil dibuat dari request.' }
+  return { success: true, orderId, message: 'PO berhasil dibuat dari request.' }
 }
 async function updatePO(data: any) {
   console.log('TITIK B (Backend): Menerima data revisi:', data)
@@ -1006,11 +1006,11 @@ async function updatePO(data: any) {
   try {
     const doc = await openDoc()
     const now = new Date().toISOString()
-    const poSheet = await getSheet(doc, 'purchase_orders')
-    const itemSheet = await getSheet(doc, 'purchase_order_items')
+    const Sheet = await getSheet(doc, 'orders')
+    const itemSheet = await getSheet(doc, 'order_items')
 
-    const latest = await latestRevisionNumberForPO(String(data.poId), doc)
-    const prevRow = latest >= 0 ? await getHeaderForRevision(String(data.poId), latest, doc) : null
+    const latest = await latestRevisionNumberForOrder(String(data.orderId), doc)
+    const prevRow = latest >= 0 ? await getHeaderForRevision(String(data.orderId), latest, doc) : null
     const prev = prevRow ? prevRow.toObject() : {}
     const newRev = latest >= 0 ? latest + 1 : 0
 
@@ -1019,10 +1019,10 @@ async function updatePO(data: any) {
     let fotoSize = 0
     let fotoFileName = prev.foto_file_name || ''
 
-    newRevisionRow = await poSheet.addRow({
-      id: String(data.poId),
+    newRevisionRow = await Sheet.addRow({
+      id: String(data.orderId),
       revision_number: newRev,
-      po_number: data.nomorPo ?? prev.po_number ?? '',
+      order_number: data.nomorOrder ?? prev.order_number ?? '',
       project_name: data.namaCustomer ?? prev.project_name ?? '',
       deadline: data.tanggalKirim ?? prev.deadline ?? null,
       status: data.status ?? prev.status ?? 'Open',
@@ -1046,7 +1046,7 @@ async function updatePO(data: any) {
       const clean = scrubItemPayload(raw)
       const newItem = {
         id: nextItemId,
-        purchase_order_id: String(data.poId),
+        order_id: String(data.orderId),
         ...clean,
         revision_id: newRev,
         revision_number: newRev,
@@ -1063,7 +1063,7 @@ async function updatePO(data: any) {
 
     if (data.poPhotoPath) {
       console.log(`[updatePO] 📸 Terdeteksi foto referensi baru, mengunggah...`)
-      const photoResult = await uploadPoPhoto(data.poPhotoPath, data.nomorPo, data.namaCustomer)
+      const photoResult = await UploadOrderPhoto(data.poPhotoPath, data.nomorOrder, data.namaCustomer)
       if (photoResult.success) {
         fotoLink = photoResult.link
         fotoSize = Number(photoResult.size || 0)
@@ -1077,8 +1077,8 @@ async function updatePO(data: any) {
       totalFileSize = Number(prev.file_size_bytes || 0)
     }
 
-    const poDataForJpeg = {
-      po_number: data.nomorPo ?? prev.po_number,
+    const orderDataForJpeg = {
+      order_number: data.nomorOrder ?? prev.order_number,
       project_name: data.namaCustomer ?? prev.project_name,
       deadline: data.tanggalKirim ?? prev.deadline,
       priority: data.prioritas ?? prev.priority,
@@ -1092,7 +1092,7 @@ async function updatePO(data: any) {
       alamat_kirim: data.alamatKirim ?? prev.alamat_kirim ?? ''
     }
 
-    const uploadResult = await generateAndUploadPO(poDataForJpeg, newRev)
+    const uploadResult = await generateAndUploadOrder(orderDataForJpeg, newRev)
 
     let jpegSize = 0
     if (uploadResult.success) {
@@ -1125,32 +1125,32 @@ async function updatePO(data: any) {
   }
 }
 
-export async function deletePO(poId: string) {
+export async function deletePO(orderId: string) {
   const startTime = Date.now()
-  console.log(`🗑️ Memulai penghapusan lengkap PO ID: ${poId}`)
+  console.log(`🗑️ Memulai penghapusan lengkap PO ID: ${orderId}`)
 
   try {
     const doc = await openDoc()
 
     console.log(`📄 Mengambil data dari 3 sheet...`)
-    const [poSheet, itemSheet, progressSheet] = await Promise.all([
-      getSheet(doc, 'purchase_orders'),
-      getSheet(doc, 'purchase_order_items'),
+    const [Sheet, itemSheet, progressSheet] = await Promise.all([
+      getSheet(doc, 'orders'),
+      getSheet(doc, 'order_items'),
       getSheet(doc, 'progress_tracking')
     ])
 
-    const [poRows, itemRows, progressRows] = await Promise.all([
-      poSheet.getRows(),
+    const [orderRows, itemRows, progressRows] = await Promise.all([
+      Sheet.getRows(),
       itemSheet.getRows(),
       progressSheet.getRows()
     ])
 
-    const toDelHdr = poRows.filter((r: any) => String(r.get('id')).trim() === String(poId).trim())
+    const toDelHdr = orderRows.filter((r: any) => String(r.get('id')).trim() === String(orderId).trim())
     const toDelItems = itemRows.filter(
-      (r: any) => String(r.get('purchase_order_id')).trim() === String(poId).trim()
+      (r: any) => String(r.get('order_id')).trim() === String(orderId).trim()
     )
-    const poProgressRows = progressRows.filter(
-      (r: any) => String(r.get('purchase_order_id')).trim() === String(poId).trim()
+    const orderProgressRows = progressRows.filter(
+      (r: any) => String(r.get('order_id')).trim() === String(orderId).trim()
     )
 
     const fileIds = new Set<string>()
@@ -1187,7 +1187,7 @@ export async function deletePO(poId: string) {
       }
     })
 
-    poProgressRows.forEach((progressRow: any) => {
+    orderProgressRows.forEach((progressRow: any) => {
       // Cek 3: Foto Progress
       const photoUrl = progressRow.get('photo_url')
       const photoName = progressRow.get('photo_file_name') || null
@@ -1232,7 +1232,7 @@ export async function deletePO(poId: string) {
     const sheetDeletions: Promise<any>[] = []
     // ----------------------------
 
-    poProgressRows.reverse().forEach((row: any) => sheetDeletions.push(row.delete()))
+    orderProgressRows.reverse().forEach((row: any) => sheetDeletions.push(row.delete()))
     toDelHdr.reverse().forEach((row: any) => sheetDeletions.push(row.delete()))
     toDelItems.reverse().forEach((row: any) => sheetDeletions.push(row.delete()))
 
@@ -1244,14 +1244,14 @@ export async function deletePO(poId: string) {
     const summary = {
       deletedRevisions: toDelHdr.length,
       deletedItems: toDelItems.length,
-      deletedProgressRecords: poProgressRows.length,
+      deletedProgressRecords: orderProgressRows.length,
       deletedFiles: deletedFilesCount,
       failedFileDeletes: failedFilesCount,
       duration: `${duration}s`,
       failedFiles: failedFiles.length > 0 ? failedFiles : undefined
     }
 
-    console.log(`✅ PO ${poId} berhasil dihapus lengkap dalam ${duration}s:`, summary)
+    console.log(`✅ PO ${orderId} berhasil dihapus lengkap dalam ${duration}s:`, summary)
 
     const message =
       failedFilesCount > 0
@@ -1266,28 +1266,28 @@ export async function deletePO(poId: string) {
   } catch (err: any) {
     const endTime = Date.now()
     const duration = ((endTime - startTime) / 1000).toFixed(1)
-    console.error(`❌ Gagal menghapus PO ID ${poId} setelah ${duration}s:`, err.message)
+    console.error(`❌ Gagal menghapus PO ID ${orderId} setelah ${duration}s:`, err.message)
     return { success: false, error: err.message, duration: `${duration}s` }
   }
 }
 
-async function listPOItems(poId: string) {
+async function listorderItems(orderId: string) {
   try {
     const doc = await openDoc()
-    return await getLivePOItems(String(poId), doc)
+    return await getLiveorderItems(String(orderId), doc)
   } catch (err: any) {
-    console.error('❌ listPOItems error:', err.message)
+    console.error('❌ listorderItems error:', err.message)
     return []
   }
 }
 
-async function listPORevisions(poId: string) {
+async function listPORevisions(orderId: string) {
   try {
     const doc = await openDoc()
-    const poSheet = await getSheet(doc, 'purchase_orders')
-    const rows = await poSheet.getRows()
+    const Sheet = await getSheet(doc, 'orders')
+    const rows = await Sheet.getRows()
     return rows
-      .filter((r: any) => String(r.get('id')).trim() === String(poId).trim())
+      .filter((r: any) => String(r.get('id')).trim() === String(orderId).trim())
       .map((r: any) => r.toObject())
       .sort((a: any, b: any) => a.revision_number - b.revision_number)
   } catch (err: any) {
@@ -1296,12 +1296,12 @@ async function listPORevisions(poId: string) {
   }
 }
 
-async function listPOItemsByRevision(poId: string, revisionNumber: number) {
+async function listorderItemsByRevision(orderId: string, revisionNumber: number) {
   try {
     const doc = await openDoc()
-    return await getItemsByRevision(String(poId), toNum(revisionNumber, 0), doc)
+    return await getItemsByRevision(String(orderId), toNum(revisionNumber, 0), doc)
   } catch (err: any) {
-    console.error('❌ listPOItemsByRevision error:', err.message)
+    console.error('❌ listorderItemsByRevision error:', err.message)
     return []
   }
 }
@@ -1320,8 +1320,8 @@ async function getProducts() {
 
 async function previewPO(data: any) {
   try {
-    const poData = {
-      po_number: data.nomorPo,
+    const orderData = {
+      order_number: data.nomorOrder,
       project_name: data.namaCustomer,
       created_at: new Date().toISOString(),
       deadline: data.tanggalKirim || '',
@@ -1333,18 +1333,18 @@ async function previewPO(data: any) {
       marketing: data.marketing || 'Unknown',
       alamat_kirim: data.alamatKirim || ''
     }
-    return await generatePOJpeg(poData, 'preview', true)
+    return await generateOrderJpeg(orderData, 'preview', true)
   } catch (err: any) {
     console.error('❌ previewPO error:', err.message)
     return { success: false, error: err.message }
   }
 }
 
-async function getRevisionHistory(poId: string) {
+async function getRevisionHistory(orderId: string) {
   try {
     const doc = await openDoc()
-    const metas = await listPORevisions(String(poId))
-    const itemSheet = await getSheet(doc, 'purchase_order_items')
+    const metas = await listPORevisions(String(orderId))
+    const itemSheet = await getSheet(doc, 'order_items')
     const allItemRows = await itemSheet.getRows()
 
     const history = metas.map((m: any) => ({
@@ -1352,7 +1352,7 @@ async function getRevisionHistory(poId: string) {
       items: allItemRows
         .filter(
           (r: any) =>
-            String(r.get('purchase_order_id')) === String(poId) &&
+            String(r.get('order_id')) === String(orderId) &&
             toNum(r.get('revision_number'), -1) === toNum(m.revision_number, -1)
         )
         .map((r: any) => r.toObject())
@@ -1370,7 +1370,7 @@ async function updateItemProgress(data: any) {
   let photoLink: string | null = null
   let photoName: string | null = null
   let filePath: string | null = null // Tipe tetap string | null
-  const { poId, itemId, poNumber, stage, notes, photoPath } = data
+  const { orderId, itemId, orderNumber, stage, notes, photoPath } = data
 
   try {
     if (photoPath) {
@@ -1385,7 +1385,7 @@ async function updateItemProgress(data: any) {
         await auth.authorize()
         console.log('✅ Otorisasi ulang berhasil.')
 
-        const fileName = `PO-${poNumber}_ITEM-${itemId}_${new Date()
+        const fileName = `PO-${orderNumber}_ITEM-${itemId}_${new Date()
           .toISOString()
           .replace(/:/g, '-')}.jpg`
         const mimeType = 'image/jpeg'
@@ -1473,8 +1473,8 @@ async function updateItemProgress(data: any) {
     console.log(`📝 Menyimpan log progress ke Sheet... (Stage: ${stage})`)
     await progressSheet.addRow({
       id: nextId,
-      purchase_order_id: poId,
-      purchase_order_item_id: itemId,
+      order_id: orderId,
+      order_item_id: itemId,
       stage: stage,
       notes: notes || '',
       // --- PERBAIKAN 3 ---
@@ -1513,60 +1513,60 @@ async function updateItemProgress(data: any) {
   }
 }
 
-async function getActivePOsWithProgress(user: User | null) {
+async function getActiveOrdersWithProgress(user: User | null) {
   try {
     const doc = await openDoc()
-    const [poSheet, itemSheet, progressSheet] = await Promise.all([
-      getSheet(doc, 'purchase_orders'),
-      getSheet(doc, 'purchase_order_items'),
+    const [Sheet, itemSheet, progressSheet] = await Promise.all([
+      getSheet(doc, 'orders'),
+      getSheet(doc, 'order_items'),
       getSheet(doc, 'progress_tracking')
     ])
-    const [poRows, itemRows, progressRows] = await Promise.all([
-      poSheet.getRows(),
+    const [orderRows, itemRows, progressRows] = await Promise.all([
+      Sheet.getRows(),
       itemSheet.getRows(),
       progressSheet.getRows()
     ])
 
     const byId = new Map()
-    for (const r of poRows) {
+    for (const r of orderRows) {
       const id = String(r.get('id')).trim()
       const rev = toNum(r.get('revision_number'), -1)
       if (!byId.has(id) || rev > (byId.get(id) as any).rev) {
         byId.set(id, { rev, row: r })
       }
     }
-    const latestPoRows = Array.from(byId.values()).map(({ row }: any) => row)
+    const latestOrderRows = Array.from(byId.values()).map(({ row }: any) => row)
 
     const progressByCompositeKey = progressRows.reduce((acc: any, row: any) => {
-      const key = `${row.get('purchase_order_id')}-${row.get('purchase_order_item_id')}`
+      const key = `${row.get('order_id')}-${row.get('order_item_id')}`
       if (!acc[key]) acc[key] = []
       acc[key].push({ stage: row.get('stage'), created_at: row.get('created_at') })
       return acc
     }, {})
 
     const latestItemRevisions = itemRows.reduce((acc: any, item: any) => {
-      const poId = item.get('purchase_order_id')
+      const orderId = item.get('order_id')
       const rev = toNum(item.get('revision_number'), -1)
-      if (!acc.has(poId) || rev > acc.get(poId)) {
-        acc.set(poId, rev)
+      if (!acc.has(orderId) || rev > acc.get(orderId)) {
+        acc.set(orderId, rev)
       }
       return acc
     }, new Map())
 
-    const allPOsWithCalculatedStatus = latestPoRows.map((po: any) => {
-      const poId = po.get('id')
-      const latestRev = latestItemRevisions.get(poId) ?? -1
-      const poItems = itemRows.filter(
+    const allOrdersWithCalculatedStatus = latestOrderRows.map((order: any) => {
+      const orderId = order.get('id')
+      const latestRev = latestItemRevisions.get(orderId) ?? -1
+      const orderItems = itemRows.filter(
         (item: any) =>
-          item.get('purchase_order_id') === poId &&
+          item.get('order_id') === orderId &&
           toNum(item.get('revision_number'), -1) === latestRev
       )
 
       let totalPercentage = 0
-      if (poItems.length > 0) {
-        poItems.forEach((item: any) => {
+      if (orderItems.length > 0) {
+        orderItems.forEach((item: any) => {
           const itemId = item.get('id')
-          const itemProgressHistory = progressByCompositeKey[`${poId}-${itemId}`] || []
+          const itemProgressHistory = progressByCompositeKey[`${orderId}-${itemId}`] || []
           let latestStageIndex = -1
           if (itemProgressHistory.length > 0) {
             const latestProgress = [...itemProgressHistory].sort(
@@ -1579,78 +1579,78 @@ async function getActivePOsWithProgress(user: User | null) {
         })
       }
 
-      const poProgress = poItems.length > 0 ? totalPercentage / poItems.length : 0
-      const poObject = po.toObject()
+      const orderProgress = orderItems.length > 0 ? totalPercentage / orderItems.length : 0
+      const orderObject = order.toObject()
 
-      let finalStatus = poObject.status
+      let finalStatus = orderObject.status
       if (finalStatus !== 'Cancelled') {
-        if (poProgress >= 100) finalStatus = 'Completed'
-        else if (poProgress > 0) finalStatus = 'In Progress'
+        if (orderProgress >= 100) finalStatus = 'Completed'
+        else if (orderProgress > 0) finalStatus = 'In Progress'
         else finalStatus = 'Open'
       }
 
-      return { ...poObject, progress: Math.round(poProgress), status: finalStatus }
+      return { ...orderObject, progress: Math.round(orderProgress), status: finalStatus }
     })
 
-    const allActivePOs = allPOsWithCalculatedStatus.filter(
-      (po: any) => po.status !== 'Completed' && po.status !== 'Cancelled'
+    const allActiveOrders = allOrdersWithCalculatedStatus.filter(
+      (order: any) => order.status !== 'Completed' && order.status !== 'Cancelled'
     )
 
-    const filteredActivePOs = filterPOsByMarketing(allActivePOs, user);
-    return filteredActivePOs;
+    const filteredActiveOrders = filterOrdersByMarketing(allActiveOrders, user);
+    return filteredActiveOrders;
   } catch (err: any) {
     console.error('❌ Gagal get active POs with progress:', err.message)
     return []
   }
 }
 
-async function getPOItemsWithDetails(poId: string) {
+async function getorderItemsWithDetails(orderId: string) {
   try {
     const doc = await openDoc()
-    const [poSheet, itemSheet, progressSheet] = await Promise.all([
-      getSheet(doc, 'purchase_orders'),
-      getSheet(doc, 'purchase_order_items'),
+    const [Sheet, itemSheet, progressSheet] = await Promise.all([
+      getSheet(doc, 'orders'),
+      getSheet(doc, 'order_items'),
       getSheet(doc, 'progress_tracking')
     ])
-    const [poRows, itemRows, progressRows] = await Promise.all([
-      poSheet.getRows(),
+    const [orderRows, itemRows, progressRows] = await Promise.all([
+      Sheet.getRows(),
       itemSheet.getRows(),
       progressSheet.getRows()
     ])
 
-    const allItemsForPO = itemRows.filter((r: any) => r.get('purchase_order_id') === poId)
+    const allItemsForOrder = itemRows.filter((r: any) => r.get('order_id') === orderId)
 
-    if (allItemsForPO.length === 0) {
-      console.warn(`Tidak ada item sama sekali untuk PO ID ${poId} di sheet items.`)
+    if (allItemsForOrder.length === 0) {
+      console.warn(`Tidak ada item sama sekali untuk PO ID ${orderId} di sheet items.`)
       return []
     }
 
-    const latestItemRev = Math.max(-1, ...allItemsForPO.map((r: any) => toNum(r.get('revision_number'))))
+    const latestItemRev = Math.max(-1, ...allItemsForOrder.map((r: any) => toNum(r.get('revision_number'))))
 
-    const poData = poRows.find(
-      (r: any) => r.get('id') === poId && toNum(r.get('revision_number')) === latestItemRev
+    const orderData = orderRows.find(
+      (r: any) => r.get('id') === orderId && toNum(r.get('revision_number')) === latestItemRev
     )
 
-    if (!poData) {
+    if (!orderData) {
       console.error(
-        `Inkonsistensi Data: Ditemukan item untuk PO ID ${poId} rev ${latestItemRev}, tetapi tidak ada header PO yang cocok.`
+        `Inkonsistensi Data: Ditemukan item untuk PO ID ${orderId} rev ${latestItemRev}, tetapi tidak ada header PO yang cocok.`
       )
       throw new Error(`Data PO untuk revisi terbaru (rev ${latestItemRev}) tidak ditemukan.`)
     }
 
-    const poStartDateRaw = poData.get('created_at')
-    const poDeadlineRaw = poData.get('deadline')
+    const poStartDateRaw = orderData.get('created_at')
+    const poDeadlineRaw = orderData.get('deadline')
 
     let poStartDate = new Date(poStartDateRaw)
     let poDeadline = new Date(poDeadlineRaw)
 
     if (isNaN(poStartDate.getTime())) {
-      console.warn(`Tanggal created_at PO ${poId} tidak valid, menggunakan tanggal saat ini.`)
+      console.warn(`Tanggal created_at PO ${orderId} tidak valid, menggunakan tanggal saat ini.`)
       poStartDate = new Date()
     }
 
     if (isNaN(poDeadline.getTime())) {
-      console.warn(`Tanggal deadline PO ${poId} tidak valid, menggunakan created_at + 7 hari.`)
+      console.warn(`Tanggal deadline PO ${orderId} tidak valid, menggunakan created_at + 7 hari.`)
       poDeadline = new Date(poStartDate.getTime() + 7 * 24 * 60 * 60 * 1000)
     }
 
@@ -1665,20 +1665,20 @@ async function getPOItemsWithDetails(poId: string) {
       return { stageName, deadline: new Date(cumulativeDate).toISOString() }
     })
 
-    const poItemsForLatestRev = allItemsForPO.filter(
+    const orderItemsForLatestRev = allItemsForOrder.filter(
       (item: any) => toNum(item.get('revision_number'), -1) === latestItemRev
     )
 
     const progressByItemId = progressRows
-      .filter((row: any) => row.get('purchase_order_id') === poId)
+      .filter((row: any) => row.get('order_id') === orderId)
       .reduce((acc: any, row: any) => {
-        const itemId = row.get('purchase_order_item_id')
+        const itemId = row.get('order_item_id')
         if (!acc[itemId]) acc[itemId] = []
         acc[itemId].push(row.toObject())
         return acc
       }, {})
 
-    const result = poItemsForLatestRev.map((item: any) => {
+    const result = orderItemsForLatestRev.map((item: any) => {
       const itemObject = item.toObject()
       const itemId = String(itemObject.id)
       const history = (progressByItemId[itemId] || []).sort(
@@ -1689,19 +1689,19 @@ async function getPOItemsWithDetails(poId: string) {
 
     return result
   } catch (err: any) {
-    console.error(`❌ Gagal get PO items with details for PO ID ${poId}:`, err.message)
+    console.error(`❌ Gagal get PO items with details for PO ID ${orderId}:`, err.message)
     return []
   }
 }
 
 async function updateStageDeadline(data: any) {
-  const { poId, itemId, stageName, newDeadline } = data
+  const { orderId, itemId, stageName, newDeadline } = data
   try {
     const doc = await openDoc()
     const sheet = await getSheet(doc, 'progress_tracking')
     await sheet.addRow({
-      purchase_order_id: poId,
-      purchase_order_item_id: itemId,
+      order_id: orderId,
+      order_item_id: itemId,
       stage: `DEADLINE_OVERRIDE: ${stageName}`,
       custom_deadline: newDeadline,
       created_at: new Date().toISOString()
@@ -1716,24 +1716,24 @@ async function getRecentProgressUpdates(user: User | null, limit = 10) {
   try {
     const doc = await openDoc()
     const progressSheet = await getSheet(doc, 'progress_tracking')
-    const itemSheet = await getSheet(doc, 'purchase_order_items')
-    const poSheet = await getSheet(doc, 'purchase_orders')
+    const itemSheet = await getSheet(doc, 'order_items')
+    const Sheet = await getSheet(doc, 'orders')
 
-    const [progressRows, itemRows, poRows] = await Promise.all([
+    const [progressRows, itemRows, orderRows] = await Promise.all([
       progressSheet.getRows(),
       itemSheet.getRows(),
-      poSheet.getRows()
+      Sheet.getRows()
     ])
 
-    const filteredPoRows = filterPOsByMarketing(poRows, user);
+    const filteredOrderRows = filterOrdersByMarketing(orderRows, user);
 
     const itemMap = new Map(itemRows.map((r: any) => [r.get('id'), r.toObject()]))
-    const poMap = new Map()
-    filteredPoRows.forEach((r: any) => {
-      const poId = r.get('id')
+    const orderMap = new Map()
+    filteredOrderRows.forEach((r: any) => {
+      const orderId = r.get('id')
       const rev = toNum(r.get('revision_number'))
-      if (!poMap.has(poId) || rev > (poMap.get(poId) as any).revision_number) {
-        poMap.set(poId, r.toObject())
+      if (!orderMap.has(orderId) || rev > (orderMap.get(orderId) as any).revision_number) {
+        orderMap.set(orderId, r.toObject())
       }
     })
 
@@ -1745,16 +1745,16 @@ async function getRecentProgressUpdates(user: User | null, limit = 10) {
 
     const enrichedUpdates = recentUpdates
       .map((update: any) => {
-        const item = itemMap.get(update.purchase_order_item_id)
+        const item = itemMap.get(update.order_item_id)
         if (!item) return null
 
-        const po = poMap.get(item.purchase_order_id)
-        if (!po) return null
+        const order = orderMap.get(item.order_id)
+        if (!order) return null
 
         return {
           ...update,
           item_name: item.product_name,
-          po_number: po.po_number
+          order_number: order.order_number
         }
       })
       .filter(Boolean)
@@ -1769,55 +1769,55 @@ async function getRecentProgressUpdates(user: User | null, limit = 10) {
 async function getAttentionData(user: User | null) {
   try {
     const doc = await openDoc()
-    const poSheet = await getSheet(doc, 'purchase_orders')
-    const itemSheet = await getSheet(doc, 'purchase_order_items')
+    const Sheet = await getSheet(doc, 'orders')
+    const itemSheet = await getSheet(doc, 'order_items')
     const progressSheet = await getSheet(doc, 'progress_tracking')
 
-    const [poRows, itemRows, progressRows] = await Promise.all([
-      poSheet.getRows(),
+    const [orderRows, itemRows, progressRows] = await Promise.all([
+      Sheet.getRows(),
       itemSheet.getRows(),
       progressSheet.getRows()
     ])
 
-    const filteredPoRows = filterPOsByMarketing(poRows, user);
+    const filteredOrderRows = filterOrdersByMarketing(orderRows, user);
 
     const byId = new Map()
-    filteredPoRows.forEach((r: any) => {
+    filteredOrderRows.forEach((r: any) => {
       const id = r.get('id')
       const rev = toNum(r.get('revision_number'))
       if (!byId.has(id) || rev > (byId.get(id) as any).rev) {
         byId.set(id, { rev, row: r })
       }
     })
-    const latestPoMap = new Map(
+    const latestOrderMap = new Map(
       Array.from(byId.values()).map((item: any) => [item.row.get('id'), item.row])
     )
 
     const latestItemRevisions = new Map()
     itemRows.forEach((item: any) => {
-      const poId = item.get('purchase_order_id')
+      const orderId = item.get('order_id')
       const rev = toNum(item.get('revision_number'), -1)
-      const current = latestItemRevisions.get(poId)
+      const current = latestItemRevisions.get(orderId)
       if (!current || rev > current) {
-        latestItemRevisions.set(poId, rev)
+        latestItemRevisions.set(orderId, rev)
       }
     })
 
     const activeItems = itemRows.filter((item: any) => {
-      const po = latestPoMap.get(item.get('purchase_order_id'))
-      if (!po) return false
-      const latestRev = latestItemRevisions.get(item.get('purchase_order_id')) ?? -1
+      const order = latestOrderMap.get(item.get('order_id'))
+      if (!order) return false
+      const latestRev = latestItemRevisions.get(item.get('order_id')) ?? -1
       return (
-        po.get('status') !== 'Completed' &&
-        po.get('status') !== 'Cancelled' &&
+        order.get('status') !== 'Completed' &&
+        order.get('status') !== 'Cancelled' &&
         toNum(item.get('revision_number')) === latestRev
       )
     })
 
     const progressByCompositeKey = progressRows.reduce((acc: any, row: any) => {
-      const poId = row.get('purchase_order_id')
-      const itemId = row.get('purchase_order_item_id')
-      const key = `${poId}-${itemId}`
+      const orderId = row.get('order_id')
+      const itemId = row.get('order_item_id')
+      const key = `${orderId}-${itemId}`
       if (!acc[key]) acc[key] = []
       acc[key].push({ stage: row.get('stage'), created_at: row.get('created_at') })
       return acc
@@ -1831,10 +1831,10 @@ async function getAttentionData(user: User | null) {
     const fiveDaysAgo = new Date(today.getTime() - 5 * 24 * 60 * 60 * 1000)
 
     activeItems.forEach((item: any) => {
-      const po = latestPoMap.get(item.get('purchase_order_id'))
-      const poId = po.get('id')
+      const order = latestOrderMap.get(item.get('order_id'))
+      const orderId = order.get('id')
       const itemId = item.get('id')
-      const compositeKey = `${poId}-${itemId}`
+      const compositeKey = `${orderId}-${itemId}`
       const itemProgressHistory = progressByCompositeKey[compositeKey] || []
       const latestProgress = itemProgressHistory.sort(
         (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -1842,18 +1842,18 @@ async function getAttentionData(user: User | null) {
       const currentStage = latestProgress ? latestProgress.stage : 'Belum Mulai'
 
       const attentionItem = {
-        po_number: po.get('po_number'),
+        order_number: order.get('order_number'),
         item_name: item.get('product_name'),
         current_stage: currentStage
       }
 
-      if (po.get('priority') === 'Urgent') {
+      if (order.get('priority') === 'Urgent') {
         urgentItems.push(attentionItem)
       }
 
-      const deadline = new Date(po.get('deadline'))
+      const deadline = new Date(order.get('deadline'))
       if (deadline <= sevenDaysFromNow && deadline >= today && currentStage !== 'Siap Kirim') {
-        nearingDeadline.push({ ...attentionItem, deadline: po.get('deadline') })
+        nearingDeadline.push({ ...attentionItem, deadline: order.get('deadline') })
       }
 
       if (
@@ -1891,29 +1891,29 @@ const getYearMonth = (dateString: any) => {
 async function getProductSalesAnalysis(user: User | null) {
   try {
     const doc = await openDoc()
-    const [itemSheet, poSheet, productSheet] = await Promise.all([
-      getSheet(doc, 'purchase_order_items'),
-      getSheet(doc, 'purchase_orders'),
+    const [itemSheet, Sheet, productSheet] = await Promise.all([
+      getSheet(doc, 'order_items'),
+      getSheet(doc, 'orders'),
       getSheet(doc, 'product_master')
     ])
-    const [rawItemRows, rawPoRows, rawProductRows] = await Promise.all([
+    const [rawItemRows, rawOrderRows, rawProductRows] = await Promise.all([
       itemSheet.getRows(),
-      poSheet.getRows(),
+      Sheet.getRows(),
       productSheet.getRows()
     ])
 
     const itemRows = rawItemRows.map((r: any) => r.toObject())
-    const poRowsRaw = rawPoRows.map((r: any) => r.toObject())
+    const orderRowsRaw = rawOrderRows.map((r: any) => r.toObject())
     const productRows = rawProductRows.map((r: any) => r.toObject())
 
-    const poRows = filterPOsByMarketing(poRowsRaw, user)
+    const orderRows = filterOrdersByMarketing(orderRowsRaw, user)
 
-    const latestPoMap = poRows.reduce((map: any, po: any) => {
-      const poId = po.id
-      const rev = toNum(po.revision_number)
-      if (po.status !== 'Cancelled') {
-        if (!map.has(poId) || rev > map.get(poId).revision_number) {
-          map.set(poId, { ...po, revision_number: rev })
+    const latestOrderMap = orderRows.reduce((map: any, order: any) => {
+      const orderId = order.id
+      const rev = toNum(order.revision_number)
+      if (order.status !== 'Cancelled') {
+        if (!map.has(orderId) || rev > map.get(orderId).revision_number) {
+          map.set(orderId, { ...order, revision_number: rev })
         }
       }
       return map
@@ -1929,8 +1929,8 @@ async function getProductSalesAnalysis(user: User | null) {
     const soldProductNames = new Set()
 
     itemRows.forEach((item: any) => {
-      const po = latestPoMap.get(item.purchase_order_id)
-      if (!po || toNum(item.revision_number) !== po.revision_number) {
+      const order = latestOrderMap.get(item.order_id)
+      if (!order || toNum(item.revision_number) !== order.revision_number) {
         return
       }
 
@@ -1938,7 +1938,7 @@ async function getProductSalesAnalysis(user: User | null) {
       const quantity = toNum(item.quantity, 0)
       const kubikasi = toNum(item.kubikasi, 0)
       const woodType = item.wood_type
-      const yearMonth = getYearMonth(po.created_at)
+      const yearMonth = getYearMonth(order.created_at)
 
       if (!productName || quantity <= 0) return
 
@@ -1962,32 +1962,32 @@ async function getProductSalesAnalysis(user: User | null) {
         woodTypeDistribution[woodType] = (woodTypeDistribution[woodType] || 0) + quantity
 
       try {
-        salesByDateForTrend.push({ date: new Date(po.created_at), name: productName, quantity })
+        salesByDateForTrend.push({ date: new Date(order.created_at), name: productName, quantity })
       } catch { }
     })
 
-    latestPoMap.forEach((po: any) => {
-      const marketingName = po.acc_marketing || 'N/A'
-      const customerName = po.project_name
-      const kubikasiTotalPO = toNum(po.kubikasi_total, 0)
-      const yearMonth = getYearMonth(po.created_at)
+    latestOrderMap.forEach((order: any) => {
+      const marketingName = order.acc_marketing || 'N/A'
+      const customerName = order.project_name
+      const kubikasiTotalOrder = toNum(order.kubikasi_total, 0)
+      const yearMonth = getYearMonth(order.created_at)
 
       salesByMarketing[marketingName] = salesByMarketing[marketingName] || {
         totalKubikasi: 0,
-        poCount: 0,
+        orderCount: 0,
         name: marketingName
       }
-      salesByMarketing[marketingName].totalKubikasi += kubikasiTotalPO
-      salesByMarketing[marketingName].poCount += 1
+      salesByMarketing[marketingName].totalKubikasi += kubikasiTotalOrder
+      salesByMarketing[marketingName].orderCount += 1
 
       if (yearMonth) {
         monthlySalesByMarketing[yearMonth] = monthlySalesByMarketing[yearMonth] || {}
         monthlySalesByMarketing[yearMonth][marketingName] =
-          (monthlySalesByMarketing[yearMonth][marketingName] || 0) + kubikasiTotalPO
+          (monthlySalesByMarketing[yearMonth][marketingName] || 0) + kubikasiTotalOrder
       }
 
       if (customerName)
-        customerByKubikasi[customerName] = (customerByKubikasi[customerName] || 0) + kubikasiTotalPO
+        customerByKubikasi[customerName] = (customerByKubikasi[customerName] || 0) + kubikasiTotalOrder
     })
 
     const topSellingProductsFull = Object.values(salesByProduct).sort(
@@ -2099,33 +2099,33 @@ async function getProductSalesAnalysis(user: User | null) {
 async function getSalesItemData(user: User | null) {
   try {
     const doc = await openDoc()
-    const itemSheet = await getSheet(doc, 'purchase_order_items')
-    const poSheet = await getSheet(doc, 'purchase_orders')
+    const itemSheet = await getSheet(doc, 'order_items')
+    const Sheet = await getSheet(doc, 'orders')
 
-    const [itemRows, poRows] = await Promise.all([itemSheet.getRows(), poSheet.getRows()])
+    const [itemRows, orderRows] = await Promise.all([itemSheet.getRows(), Sheet.getRows()])
 
-    const filteredPoRows = filterPOsByMarketing(poRows, user);
+    const filteredOrderRows = filterOrdersByMarketing(orderRows, user);
 
-    const poMap = new Map()
-    filteredPoRows.forEach((r: any) => {
-      const poId = r.get('id')
+    const orderMap = new Map()
+    filteredOrderRows.forEach((r: any) => {
+      const orderId = r.get('id')
       const rev = toNum(r.get('revision_number'))
-      if (!poMap.has(poId) || rev > (poMap.get(poId) as any).revision_number) {
-        poMap.set(poId, r.toObject())
+      if (!orderMap.has(orderId) || rev > (orderMap.get(orderId) as any).revision_number) {
+        orderMap.set(orderId, r.toObject())
       }
     })
 
     const combinedData = itemRows
       .map((item: any) => {
         const itemObject = item.toObject()
-        const po = poMap.get(itemObject.purchase_order_id)
+        const order = orderMap.get(itemObject.order_id)
 
-        if (!po) return null
+        if (!order) return null
 
         return {
           ...itemObject,
-          customer_name: po.project_name,
-          po_date: po.created_at
+          customer_name: order.project_name,
+          order_date: order.created_at
         }
       })
       .filter(Boolean)
@@ -2246,14 +2246,14 @@ Sekarang, tuliskan jawaban Anda untuk user.`
 
 async function handleGroqChat(prompt: string, user: User | null, history: any[] = []) {
   // 1. AMBIL KONTEKS DATA PO & ANALISIS
-  let allPOs: any[]
+  let allOrders: any[]
   let analysisData: any // <-- [BARU]
 
   try {
-    allPOs = await listPOs(user)
-    if (!Array.isArray(allPOs)) {
-      console.error('listPOs did not return an array.')
-      allPOs = []
+    allOrders = await listOrders(user)
+    if (!Array.isArray(allOrders)) {
+      console.error('listOrders did not return an array.')
+      allOrders = []
     }
 
     // [BARU] Ambil data analisis yang sudah jadi
@@ -2276,7 +2276,7 @@ Panggil user dengan nama depannya (${user?.name?.split(' ')[0] || 'Tamu'}).
 ---
 
 --- ATURAN PRIORITAS ---
-1. Jika user menyebut nomor PO, nama customer, atau revisi, Anda HARUS menggunakan "getPOInfo".
+1. Jika user menyebut nomor PO, nama customer, atau revisi, Anda HARUS menggunakan "getOrderInfo".
 2. Tentukan 'intent' user dengan hati-hati.
 
 --- Alat (Tools) yang Tersedia ---
@@ -2307,59 +2307,59 @@ Panggil user dengan nama depannya (${user?.name?.split(' ')[0] || 'Tamu'}).
    - Keywords: "produk tidak laku", "produk belum terjual", "slow moving".
    - JSON: {"tool": "getSlowMovingProducts"}
 
-// --- ALAT PO (SUMBER: listPOs) ---
-7. "getTotalPO": (Untuk pertanyaan jumlah/total PO).
-   - Keywords: "jumlah po", "total po", "ada berapa po", "semua po aktif".
-   - JSON: {"tool": "getTotalPO"}
+// --- ALAT PO (SUMBER: listOrders) ---
+7. "getTotalOrder": (Untuk pertanyaan jumlah/total PO).
+   - Keywords: "jumlah order", "total order", "ada berapa order", "semua order aktif".
+   - JSON: {"tool": "getTotalOrder"}
 
-8. "getPOInfo": (Mencari PO berdasarkan 'header'-nya: Nomor PO atau Customer).
+8. "getOrderInfo": (Mencari PO berdasarkan 'header'-nya: Nomor PO atau Customer).
    - PENTING: JANGAN gunakan tool ini untuk mencari berdasarkan produk or kayu. Gunakan "getPOsByItem".
-   - PENTING: 'poNumber' BISA MENGANDUNG SPASI. 'revisionNumber' HANYA angka setelah kata "revisi" atau "rev".
-   - AI HARUS mengekstrak "poNumber" atau "customerName".
+   - PENTING: 'orderNumber' BISA MENGANDUNG SPASI. 'revisionNumber' HANYA angka setelah kata "revisi" atau "rev".
+   - AI HARUS mengekstrak "orderNumber" atau "customerName".
    - AI HARUS mengekstrak "revisionNumber" (jika disebut).
    - AI HARUS menentukan "intent" (niat) user: "status", "details", atau "file".
    - Default ke "details" jika tidak spesifik.
-   - JSON: {"tool": "getPOInfo", "param": {"poNumber": "...", "customerName": "...", "revisionNumber": "...", "intent": "status"}}
+   - JSON: {"tool": "getOrderInfo", "param": {"orderNumber": "...", "customerName": "...", "revisionNumber": "...", "intent": "status"}}
 
 9. "getPOsByItem": (Mencari PO berdasarkan 'isi' item).
-   - Keywords: "po yang ada produk [nama]", "cari po pakai kayu [jenis]", "po dengan [produk]".
+   - Keywords: "order yang ada produk [nama]", "cari order pakai kayu [jenis]", "order dengan [produk]".
    - AI HARUS mengekstrak "productName" ATAU "woodType".
    - JSON: {"tool": "getPOsByItem", "param": {"productName": "...", "woodType": "..."}}
 
-10. "getUrgentPOs": (Untuk pertanyaan PO 'Urgent').
-   - Keywords: "po urgent", "urgent orders".
-   - JSON: {"tool": "getUrgentPOs"}
+10. "getUrgentOrders": (Untuk pertanyaan PO 'Urgent').
+   - Keywords: "order urgent", "urgent orders".
+   - JSON: {"tool": "getUrgentOrders"}
 
 11. "getNearingDeadline": (Untuk pertanyaan PO 'deadline dekat').
    - Keywords: "deadline dekat", "nearing deadline".
    - JSON: {"tool": "getNearingDeadline"}
 
 12. "getNewestPOs": (Untuk pertanyaan PO 'terbaru').
-   - Keywords: "po terbaru", "newest po".
-   - PENGECUALIAN: Jika user bertanya "po hari ini", gunakan "getPOsByDateRange".
+   - Keywords: "order terbaru", "newest order".
+   - PENGECUALIAN: Jika user bertanya "order hari ini", gunakan "getPOsByDateRange".
    - JSON: {"tool": "getNewestPOs"}
 
 13. "getOldestPO": (Untuk pertanyaan PO 'terlama').
-   - Keywords: "po terlama", "oldest po".
+   - Keywords: "order terlama", "oldest order".
    - JSON: {"tool": "getOldestPO"}
 
 14. "getPOsByDateRange": (Untuk pertanyaan PO berdasarkan 'tanggal').
-   - Keywords: "po bulan oktober", "po tanggal 20 okt", "po 1-10 nov", "po hari ini".
+   - Keywords: "order bulan oktober", "order tanggal 20 okt", "order 1-10 nov", "order hari ini".
    - PRIORITAS: Jika user menyebut "hari ini", SELALU gunakan tool ini.
    - AI HARUS mengekstrak 'startDate' dan 'endDate' ("YYYY-MM-DD").
-   - Jika 1 tanggal (misal: "po 1 nov 2025"), 'startDate' DAN 'endDate' HARUS sama: "2025-11-01".
+   - Jika 1 tanggal (misal: "order 1 nov 2025"), 'startDate' DAN 'endDate' HARUS sama: "2025-11-01".
    - Jika "hari ini", 'startDate' DAN 'endDate' HARUS sama dengan tanggal hari ini (${today}).
    - JSON: {"tool": "getPOsByDateRange", "param": {"startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD"}}
 
 15. "getPOByStatusCount": (Untuk pertanyaan jumlah PO 'Open' atau 'In Progress').
-    - Keywords: "berapa po open", "jumlah po in progress".
+    - Keywords: "berapa order open", "jumlah order in progress".
     - JSON: {"tool": "getPOByStatusCount", "param": "STATUS_DIMINTA"}
 
 // --- ALAT BANTUAN & GRAFIK ---
 16. "getApplicationHelp": (Untuk pertanyaan 'cara pakai' atau 'hak akses').
-    - Keywords: "cara buat po", "panduan aplikasi", "apa yang bisa dilakukan admin", "role manager", "hak akses marketing", "peran orang pabrik".
-    - AI HARUS mengekstrak 'topic' dari kata kunci (misal: "buat po", "admin", "manager", "marketing", "orang pabrik").
-    - Contoh 1: "gimana cara input po baru?" -> "topic": "buat po".
+    - Keywords: "cara buat order", "panduan aplikasi", "apa yang bisa dilakukan admin", "role manager", "hak akses marketing", "peran orang pabrik".
+    - AI HARUS mengekstrak 'topic' dari kata kunci (misal: "buat order", "admin", "manager", "marketing", "orang pabrik").
+    - Contoh 1: "gimana cara input order baru?" -> "topic": "buat order".
     - Contoh 2: "role manager bisa apa?" -> "topic": "manager".
     - Contoh 3: "apa hak akses orang pabrik" -> "topic": "orang pabrik".
     - JSON: {"tool": "getApplicationHelp", "param": {"topic": "NAMA_FITUR_ATAU_ROLE"}}
@@ -2380,7 +2380,7 @@ Panggil user dengan nama depannya (${user?.name?.split(' ')[0] || 'Tamu'}).
           - Gunakan 'pie' jika user meminta "distribusi" atau "persentase" (misal: 'woodTypeDistribution').
           - Gunakan 'bar' untuk perbandingan (top 5, dll).
       3.  'nameKey': Kunci string di 'dataSource' untuk label (sumbu X). (Contoh: 'name', 'product_name').
-      4.  'dataKey': Kunci string di 'dataSource' untuk nilai (sumbu Y). (Contoh: 'totalQuantity', 'totalKubikasi', 'poCount', 'value', 'change').
+      4.  'dataKey': Kunci string di 'dataSource' untuk nilai (sumbu Y). (Contoh: 'totalQuantity', 'totalKubikasi', 'orderCount', 'value', 'change').
       5.  'filters' (Opsional): Array string jika user ingin memfilter data. (Contoh: ["kisi kisi", "pintu"]).
 
     - --- CONTOH ---
@@ -2401,7 +2401,7 @@ Panggil user dengan nama depannya (${user?.name?.split(' ')[0] || 'Tamu'}).
     - JSON: {"tool": "createCustomChart", "param": {"dataSource": "topSellingProducts", "chartType": "bar", "nameKey": "name", "dataKey": "totalQuantity", "filters": ["Kisi kisi", "Pintu"]}}
 
     - User: "grafik marketing berdasarkan jumlah PO"
-    - JSON: {"tool": "createCustomChart", "param": {"dataSource": "salesByMarketing", "chartType": "bar", "nameKey": "name", "dataKey": "poCount", "filters": null}}
+    - JSON: {"tool": "createCustomChart", "param": {"dataSource": "salesByMarketing", "chartType": "bar", "nameKey": "name", "dataKey": "orderCount", "filters": null}}
 
 20. "getUserInfo": (Untuk pertanyaan 'siapa saya').
     - Keywords: "siapa saya", "role saya apa", "info akun saya", "kamu tahu nama saya?".
@@ -2607,21 +2607,21 @@ ATURAN KETAT:
 
       // --- ALAT PO (PANGGILAN AI KE-2) ---
 
-      case 'getTotalPO': {
-        const totalPOs = allPOs.length
-        const activePOsList = allPOs.filter(
-          (po: any) => po.status !== 'Completed' && po.status !== 'Cancelled'
+      case 'getTotalOrder': {
+        const totalPOs = allOrders.length
+        const activeOrdersList = allOrders.filter(
+          (order: any) => order.status !== 'Completed' && order.status !== 'Cancelled'
         )
-        const activePOsCount = activePOsList.length
-        const completedPOs = allPOs.filter((po: any) => po.status === 'Completed').length
-        const openCount = activePOsList.filter((po: any) => po.status === 'Open').length
-        const inProgressCount = activePOsList.filter(
-          (po: any) => po.status === 'In Progress'
+        const activeOrdersCount = activeOrdersList.length
+        const completedPOs = allOrders.filter((order: any) => order.status === 'Completed').length
+        const openCount = activeOrdersList.filter((order: any) => order.status === 'Open').length
+        const inProgressCount = activeOrdersList.filter(
+          (order: any) => order.status === 'In Progress'
         ).length
 
         const data = {
           totalPOs,
-          activePOsCount,
+          activeOrdersCount,
           completedPOs,
           openCount,
           inProgressCount
@@ -2635,41 +2635,41 @@ ATURAN KETAT:
         )
       }
 
-      case 'getPOInfo': {
-        const { poNumber, customerName, revisionNumber, intent } = aiDecision.param
-        if (!poNumber && !customerName) {
+      case 'getOrderInfo': {
+        const { orderNumber, customerName, revisionNumber, intent } = aiDecision.param
+        if (!orderNumber && !customerName) {
           return 'Mohon sebutkan nomor PO atau nama customer yang ingin dicari.'
         }
 
         let matchingPOs: any[] = []
-        if (poNumber) {
+        if (orderNumber) {
           const sanitizePOString = (str: string) => {
             if (!str) return ''
             return str
               .toLowerCase()
-              .replace(/po-|po /g, '')
+              .replace(/order-|order /g, '')
               .replace(/[ .]/g, '')
           }
-          const sanitizedQuery = sanitizePOString(poNumber)
-          matchingPOs = allPOs.filter(
-            (p: any) => p.po_number && sanitizePOString(p.po_number).includes(sanitizedQuery)
+          const sanitizedQuery = sanitizePOString(orderNumber)
+          matchingPOs = allOrders.filter(
+            (p: any) => p.order_number && sanitizePOString(p.order_number).includes(sanitizedQuery)
           )
         } else if (customerName) {
           const customerLower = customerName.toLowerCase()
-          const poMap = new Map()
-          allPOs.forEach((po: any) => {
-            if (po.project_name?.toLowerCase().includes(customerLower)) {
-              const rev = Number(po.revision_number || 0)
-              if (!poMap.has(po.id) || rev > poMap.get(po.id).revision_number) {
-                poMap.set(po.id, po)
+          const orderMap = new Map()
+          allOrders.forEach((order: any) => {
+            if (order.project_name?.toLowerCase().includes(customerLower)) {
+              const rev = Number(order.revision_number || 0)
+              if (!orderMap.has(order.id) || rev > orderMap.get(order.id).revision_number) {
+                orderMap.set(order.id, order)
               }
             }
           })
-          matchingPOs = Array.from(poMap.values())
+          matchingPOs = Array.from(orderMap.values())
         }
 
         if (matchingPOs.length === 0) {
-          return `Maaf, PO yang cocok dengan '${poNumber || customerName}' tidak ditemukan.`
+          return `Maaf, PO yang cocok dengan '${orderNumber || customerName}' tidak ditemukan.`
         }
 
         let foundPO: any = null
@@ -2695,7 +2695,7 @@ ATURAN KETAT:
         }
 
         if (!foundPO) {
-          return `Maaf, PO ${poNumber || customerName} tidak ditemukan.`
+          return `Maaf, PO ${orderNumber || customerName} tidak ditemukan.`
         }
 
         // Format tanggal agar lebih ramah AI
@@ -2706,7 +2706,7 @@ ATURAN KETAT:
 
         return await generateNaturalResponse(
           JSON.stringify(data),
-          `User bertanya tentang PO ${poNumber || customerName} (Rev ${revNum}) dengan niat "${intent}". ${feedback}`,
+          `User bertanya tentang PO ${orderNumber || customerName} (Rev ${revNum}) dengan niat "${intent}". ${feedback}`,
           prompt,
           user
         )
@@ -2720,31 +2720,31 @@ ATURAN KETAT:
 
         const queryLower = (productName || woodType).toLowerCase()
         const searchType = productName ? 'produk' : 'jenis kayu'
-        const poMap = new Map()
-        const activePOs = allPOs.filter((p: any) => p.status !== 'Cancelled')
+        const orderMap = new Map()
+        const activeOrders = allOrders.filter((p: any) => p.status !== 'Cancelled')
 
-        for (const po of activePOs) {
-          if (!po.items || po.items.length === 0) continue
+        for (const order of activeOrders) {
+          if (!order.items || order.items.length === 0) continue
 
           let matchItem = null
           if (productName) {
-            matchItem = po.items.find((item: any) =>
+            matchItem = order.items.find((item: any) =>
               item.product_name?.toLowerCase().includes(queryLower)
             )
           } else if (woodType) {
-            matchItem = po.items.find((item: any) =>
+            matchItem = order.items.find((item: any) =>
               item.wood_type?.toLowerCase().includes(queryLower)
             )
           }
 
           if (matchItem) {
-            if (!poMap.has(po.id)) {
-              poMap.set(po.id, { po, matchItem })
+            if (!orderMap.has(order.id)) {
+              orderMap.set(order.id, { order, matchItem })
             }
           }
         }
 
-        const results = Array.from(poMap.values())
+        const results = Array.from(orderMap.values())
 
         if (results.length === 0) {
           return `Tidak ditemukan PO (aktif/selesai) yang menggunakan ${searchType} "${queryLower}".`
@@ -2760,9 +2760,9 @@ ATURAN KETAT:
         )
       }
 
-      case 'getUrgentPOs': {
-        const urgentPOs = allPOs.filter(
-          (po: any) => po.priority === 'Urgent' && po.status !== 'Completed' && po.status !== 'Cancelled'
+      case 'getUrgentOrders': {
+        const urgentPOs = allOrders.filter(
+          (order: any) => order.priority === 'Urgent' && order.status !== 'Completed' && order.status !== 'Cancelled'
         )
         if (urgentPOs.length === 0) {
           return 'Saat ini tidak ada PO aktif dengan prioritas Urgent.'
@@ -2778,11 +2778,11 @@ ATURAN KETAT:
       case 'getNearingDeadline': {
         const todayDate = new Date()
         const nextWeek = new Date(todayDate.getTime() + 7 * 24 * 60 * 60 * 1000)
-        const nearingPOs = allPOs
-          .filter((po: any) => {
-            if (!po.deadline || po.status === 'Completed' || po.status === 'Cancelled') return false
+        const nearingPOs = allOrders
+          .filter((order: any) => {
+            if (!order.deadline || order.status === 'Completed' || order.status === 'Cancelled') return false
             try {
-              const deadlineDate = new Date(po.deadline)
+              const deadlineDate = new Date(order.deadline)
               return (
                 !isNaN(deadlineDate.getTime()) &&
                 deadlineDate >= todayDate &&
@@ -2801,7 +2801,7 @@ ATURAN KETAT:
         }
 
         // Format tanggal
-        const data = nearingPOs.map(po => ({ ...po, deadline: formatDate(po.deadline) }));
+        const data = nearingPOs.map(order => ({ ...order, deadline: formatDate(order.deadline) }));
 
         return await generateNaturalResponse(
           JSON.stringify(data),
@@ -2812,12 +2812,12 @@ ATURAN KETAT:
       }
 
       case 'getNewestPOs': {
-        const sortedPOs = [...allPOs].sort(
+        const sortedPOs = [...allOrders].sort(
           (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         )
         const newestPOs = sortedPOs.slice(0, 3)
         // Format tanggal
-        const data = newestPOs.map(po => ({ ...po, created_at: formatDate(po.created_at) }));
+        const data = newestPOs.map(order => ({ ...order, created_at: formatDate(order.created_at) }));
 
         return await generateNaturalResponse(
           JSON.stringify(data),
@@ -2828,7 +2828,7 @@ ATURAN KETAT:
       }
 
       case 'getOldestPO': {
-        const sortedPOs = [...allPOs].sort(
+        const sortedPOs = [...allOrders].sort(
           (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         )
         const oldestPO = sortedPOs[0]
@@ -2848,7 +2848,7 @@ ATURAN KETAT:
 
       case 'getPOsByDateRange': {
         if (!aiDecision.param || !aiDecision.param.startDate || !aiDecision.param.endDate) {
-          return 'Maaf, saya tidak mengerti rentang tanggal yang Anda maksud. Coba sebutkan tanggalnya dengan lebih jelas (contoh: "po tanggal 1 nov 2025" atau "po dari 1-10 nov 2025").'
+          return 'Maaf, saya tidak mengerti rentang tanggal yang Anda maksud. Coba sebutkan tanggalnya dengan lebih jelas (contoh: "order tanggal 1 nov 2025" atau "order dari 1-10 nov 2025").'
         }
         const { startDate, endDate } = aiDecision.param
 
@@ -2868,9 +2868,9 @@ ATURAN KETAT:
           return 'Maaf, terjadi kesalahan saat memproses rentang tanggal.'
         }
 
-        const foundPOs = allPOs.filter((po: any) => {
+        const foundPOs = allOrders.filter((order: any) => {
           try {
-            const poDate = new Date(po.created_at).getTime()
+            const poDate = new Date(order.created_at).getTime()
             return !isNaN(poDate) && poDate >= start && poDate <= end
           } catch (e) {
             return false
@@ -2887,7 +2887,7 @@ ATURAN KETAT:
         }
 
         // Format tanggal & batasi data
-        const data = foundPOs.slice(0, 10).map(po => ({ ...po, created_at: formatDate(po.created_at) }));
+        const data = foundPOs.slice(0, 10).map(order => ({ ...order, created_at: formatDate(order.created_at) }));
 
         return await generateNaturalResponse(
           JSON.stringify({ results: data, totalFound: foundPOs.length, dateRange: dateRangeStr }),
@@ -2908,11 +2908,11 @@ ATURAN KETAT:
         }
         const requestedStatusLower = requestedStatus.toLowerCase()
         const displayStatus = requestedStatusLower === 'open' ? 'Open' : 'In Progress'
-        const count = allPOs.filter(
-          (po: any) =>
-            po.status?.toLowerCase() === requestedStatusLower &&
-            po.status !== 'Completed' &&
-            po.status !== 'Cancelled'
+        const count = allOrders.filter(
+          (order: any) =>
+            order.status?.toLowerCase() === requestedStatusLower &&
+            order.status !== 'Completed' &&
+            order.status !== 'Cancelled'
         ).length
 
         const data = { requestedStatus: displayStatus, count }
@@ -2953,7 +2953,7 @@ ATURAN KETAT:
 
         // --- [LOGIKA BARU] Cek Fitur DULU, LALU Cek Role di DALAMNYA ---
 
-        if (topic.includes('buat po') || topic.includes('input po') || topic.includes('revisi po')) {
+        if (topic.includes('buat order') || topic.includes('input order') || topic.includes('revisi order')) {
           // Cek apakah user boleh melakukan ini (manager/admin)
           if (userRole === 'manager' || userRole === 'admin') {
             // Ya, mereka boleh. Berikan instruksinya.
@@ -3244,7 +3244,7 @@ app.whenReady().then(async () => {
          console.error('[ENV Loader] GAGAL MEMUAT GROQ_API_KEY.');
     }
 
-  } catch (e) {
+  } catch (e : any) {
     console.error('[ENV Loader] Error saat memuat .env:', e.message);
   }
 
@@ -3252,24 +3252,24 @@ app.whenReady().then(async () => {
 
   // --- IPC Handlers ---
   ipcMain.handle('ping', () => 'pong')
-  ipcMain.handle('po:list', async (_event, user) => {
-    const data = await listPOs(user); // Kirim 'user'
+  ipcMain.handle('order:list', async (_event, user) => {
+    const data = await listOrders(user); // Kirim 'user'
     return JSON.parse(JSON.stringify(data));
   })
   ipcMain.handle('login-user', async (_event, loginData) => {
     return await handleLoginUser(loginData);
   })
-  ipcMain.handle('po:save', async (_event, data) => saveNewPO(data))
-  ipcMain.handle('po:delete', async (_event, poId) => deletePO(poId))
-  ipcMain.handle('po:update', async (_event, data) => updatePO(data))
-  ipcMain.handle('po:preview', async (_event, data) => previewPO(data))
-  ipcMain.handle('po:listItems', async (_event, poId) => listPOItems(poId))
-  ipcMain.handle('po:listRevisions', async (_event, poId) => listPORevisions(poId))
-  ipcMain.handle('po:listItemsByRevision', async (_event, poId, revisionNumber) =>
-    listPOItemsByRevision(poId, revisionNumber)
+  ipcMain.handle('order:save', async (_event, data) => saveNewOrder(data))
+  ipcMain.handle('order:delete', async (_event, orderId) => deletePO(orderId))
+  ipcMain.handle('order:update', async (_event, data) => updatePO(data))
+  ipcMain.handle('order:preview', async (_event, data) => previewPO(data))
+  ipcMain.handle('order:listItems', async (_event, orderId) => listorderItems(orderId))
+  ipcMain.handle('order:listRevisions', async (_event, orderId) => listPORevisions(orderId))
+  ipcMain.handle('order:listItemsByRevision', async (_event, orderId, revisionNumber) =>
+    listorderItemsByRevision(orderId, revisionNumber)
   )
   ipcMain.handle('commission:getData', async (_event, user) => getCommissionData(user))
-  ipcMain.handle('po:getRevisionHistory', async (_event, poId) => getRevisionHistory(poId))
+  ipcMain.handle('order:getRevisionHistory', async (_event, orderId) => getRevisionHistory(orderId))
   ipcMain.handle('product:get', () => getProducts())
   ipcMain.handle('app:open-external-link', (_event, url) => {
     if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
@@ -3291,8 +3291,8 @@ app.whenReady().then(async () => {
     return result.filePaths[0]
   })
 
-  ipcMain.handle('progress:getActivePOsWithProgress', (_event, user) => getActivePOsWithProgress(user))
-  ipcMain.handle('progress:getPOItemsWithDetails', (_event, poId) => getPOItemsWithDetails(poId))
+  ipcMain.handle('progress:getActiveOrdersWithProgress', (_event, user) => getActiveOrdersWithProgress(user))
+  ipcMain.handle('progress:getorderItemsWithDetails', (_event, orderId) => getorderItemsWithDetails(orderId))
   ipcMain.handle('progress:updateItem', (_event, data) => updateItemProgress(data))
   ipcMain.handle('progress:getRecentProgressUpdates', (_event, user) => getRecentProgressUpdates(user))
   ipcMain.handle('progress:getAttentionData', (_event, user) => getAttentionData(user))
@@ -3310,8 +3310,8 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('product:add', (_event, productData) => addNewProduct(productData))
   ipcMain.handle('progress:updateDeadline', (_event, data) => updateStageDeadline(data))
-ipcMain.handle('po:requestProject', async (_event, data) => requestProject(data))
-ipcMain.handle('po:confirmRequest', async (_event, data) => confirmRequest(data))
+ipcMain.handle('order:requestProject', async (_event, data) => requestProject(data))
+ipcMain.handle('order:confirmRequest', async (_event, data) => confirmRequest(data))
   ipcMain.handle('ai:ollamaChat', async (_event, prompt, user, history) => {
     return await handleGroqChat(prompt, user, history)
   })

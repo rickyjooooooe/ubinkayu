@@ -21,7 +21,7 @@ export type ProductionStage =
 
 export interface ProgressUpdate {
   id: string
-  purchase_order_item_id: string
+  order_item_id: string
   stage: ProductionStage
   notes: string
   photo_url: string | null
@@ -30,7 +30,7 @@ export interface ProgressUpdate {
 
 export interface POItem {
   id: number
-  purchase_order_id?: string
+  order_id?: string
   revision_id?: string
   product_id: string
   product_name: string
@@ -52,13 +52,13 @@ export interface POItem {
   progressHistory?: ProgressLog[]
   stageDeadlines?: { stageName: string; deadline: string }[]
   customer_name?: string
-  po_date?: string
+  order_date?: string
   created_at?: string
 }
 
 export interface POHeader {
   id: string
-  po_number: string
+  order_number: string
   project_name: string
   created_at: string
   status?: string
@@ -82,7 +82,7 @@ export interface POHeader {
 
 export interface PORevision {
   id: string
-  purchase_order_id: string
+  order_id: string
   revision_number: number
   project_name: string
   deadline: string | null

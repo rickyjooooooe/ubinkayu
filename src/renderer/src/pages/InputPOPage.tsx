@@ -125,8 +125,8 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
   // State
   // ---------------------------------------------------------------
   const [productList, setProductList] = useState<any[]>([])
-  const [poData, setPoData] = useState({
-    nomorPo: editingPO?.po_number || '',
+  const [orderData, setPoData] = useState({
+    nomorOrder: editingPO?.order_number || '',
     namaCustomer: editingPO?.project_name || '',
     tanggalMasuk: editingPO?.created_at ? editingPO.created_at.split('T')[0] : today,
     tanggalKirim: editingPO?.deadline || '',
@@ -204,7 +204,7 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
       fetchProducts()
       if (editingPO) {
         setPoData({
-          nomorPo: editingPO.po_number,
+          nomorOrder: editingPO.order_number,
           namaCustomer: editingPO.project_name,
           tanggalMasuk: editingPO.created_at ? editingPO.created_at.split('T')[0] : today,
           tanggalKirim: editingPO.deadline || '',
@@ -217,8 +217,8 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
         // Mode confirm: tampilkan info PO tapi items dimulai kosong untuk diisi admin
         if (!isConfirmMode) {
           try {
-            const poItems = await apiService.listPOItems(editingPO.id)
-            setItems(poItems.map((item: any) => ({
+            const orderItems = await apiService.listorderItems(editingPO.id)
+            setItems(orderItems.map((item: any) => ({
               ...item,
               kubikasi: Number(item.kubikasi) || 0,
               thickness_mm: Number(item.thickness_mm) || 0,
@@ -232,7 +232,7 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
           setItems([createEmptyItem()])
         }
       } else {
-        setPoData({ nomorPo: '', namaCustomer: '', tanggalMasuk: today, tanggalKirim: '', prioritas: 'Normal', alamatKirim: '', catatan: '', marketing: currentUser?.name || '', project_valuation: '' })
+        setPoData({ nomorOrder: '', namaCustomer: '', tanggalMasuk: today, tanggalKirim: '', prioritas: 'Normal', alamatKirim: '', catatan: '', marketing: currentUser?.name || '', project_valuation: '' })
         setItems([createEmptyItem()])
         setPoPhotoPath(null)
         setPoPhotoBase64(null)
@@ -317,7 +317,7 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
   const constructPayload = async () => {
     const itemsWithKubikasi = items.map((item) => ({ ...item, kubikasi: calculateKubikasi(item) }))
     const kubikasiTotal = itemsWithKubikasi.reduce((acc, item) => acc + (item.kubikasi || 0), 0)
-    const payload: any = { ...poData, items: itemsWithKubikasi, kubikasi_total: kubikasiTotal, poId: editingPO?.id }
+    const payload: any = { ...orderData, items: itemsWithKubikasi, kubikasi_total: kubikasiTotal, orderId: editingPO?.id }
     if (isElectron && poPhotoPath) {
       payload.poPhotoPath = poPhotoPath
       if (!poPhotoPath.startsWith('Foto referensi')) {
@@ -336,12 +336,12 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
 
   // Mode: marketing kirim request (tanpa items)
   const handleSendRequest = async () => {
-    if (!poData.nomorPo || !poData.namaCustomer)
+    if (!orderData.nomorOrder || !orderData.namaCustomer)
       return alert('Nomor Order dan Nama Customer harus diisi!')
 
     setIsSaving(true)
     try {
-      const payload: any = { ...poData }
+      const payload: any = { ...orderData }
       if (!isElectron && poPhotoBase64) payload.poPhotoBase64 = poPhotoBase64
       else if (isElectron && poPhotoPath && !poPhotoPath.startsWith('Foto')) {
         payload.poPhotoBase64 = await apiService.readFileAsBase64(poPhotoPath)
@@ -371,7 +371,7 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
       const itemsWithKubikasi = items.map((item) => ({ ...item, kubikasi: calculateKubikasi(item) }))
       const kubikasi_total = itemsWithKubikasi.reduce((acc, item) => acc + (item.kubikasi || 0), 0)
       const result = await (apiService as any).confirmRequest({
-        poId: editingPO?.id,
+        orderId: editingPO?.id,
         items: itemsWithKubikasi,
         kubikasi_total,
         revisedBy: reviserName,
@@ -390,14 +390,14 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
   }
 
   // Mode: new / edit (perilaku lama)
-  const handleSaveOrUpdatePO = async (reviserName?: string) => {
-    if (!poData.nomorPo || !poData.namaCustomer) return alert('Nomor Order dan Nama Customer harus diisi!')
+  const handleSaveOrUpdateOrder = async (reviserName?: string) => {
+    if (!orderData.nomorOrder || !orderData.namaCustomer) return alert('Nomor Order dan Nama Customer harus diisi!')
     if (items.length === 0) return alert('Tambahkan minimal satu item.')
     setIsSaving(true); setIsRevisionModalOpen(false)
     try {
       const payload = await constructPayload()
       if (reviserName) payload.revisedBy = reviserName
-      const result = editingPO ? await apiService.updatePO(payload) : await apiService.saveNewPO(payload)
+      const result = editingPO ? await apiService.updatePO(payload) : await apiService.saveNewOrder(payload)
       if (result.success) { alert(`PO berhasil ${editingPO ? 'diperbarui' : 'disimpan'}!`); onSaveSuccess() }
       else throw new Error(result.error || 'Terjadi kesalahan di backend.')
     } catch (error) {
@@ -407,7 +407,7 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
     }
   }
 
-  const handlePreviewPO = async () => {
+  const handlePreviewOrder = async () => {
     if (items.length === 0) return alert('Tambahkan minimal satu item untuk preview.')
     setIsPreviewing(true)
     try {
@@ -463,7 +463,7 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
 
           {/* Preview hanya di mode new/edit */}
           {!isRequestMode && !isConfirmMode && (
-            <Button variant="secondary" onClick={handlePreviewPO} disabled={isPreviewing}>
+            <Button variant="secondary" onClick={handlePreviewOrder} disabled={isPreviewing}>
               {isPreviewing ? 'Membuka...' : '◎ Preview'}
             </Button>
           )}
@@ -478,7 +478,7 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
               } else if (editingPO) {
                 setIsRevisionModalOpen(true)
               } else {
-                handleSaveOrUpdatePO()
+                handleSaveOrUpdateOrder()
               }
             }}
             disabled={isSaving}
@@ -502,8 +502,8 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
         <div className="form-grid">
           <Input
             label="Nomor Order *"
-            name="nomorPo"
-            value={poData.nomorPo}
+            name="nomorOrder"
+            value={orderData.nomorOrder}
             onChange={handleDataChange}
             placeholder="e.g., 2505.1127"
             disabled={!!editingPO || isConfirmMode}
@@ -511,7 +511,7 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
           <Input
             label="Nama Customer *"
             name="namaCustomer"
-            value={poData.namaCustomer}
+            value={orderData.namaCustomer}
             onChange={handleDataChange}
             placeholder="e.g., ELIE MAGDA SBY"
             disabled={isConfirmMode}
@@ -520,7 +520,7 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
             label="Tanggal Masuk"
             name="tanggalMasuk"
             type="date"
-            value={poData.tanggalMasuk}
+            value={orderData.tanggalMasuk}
             onChange={handleDataChange}
             disabled
           />
@@ -528,13 +528,13 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
             label="Target Tanggal Kirim *"
             name="tanggalKirim"
             type="date"
-            value={poData.tanggalKirim}
+            value={orderData.tanggalKirim}
             onChange={handleDataChange}
             disabled={isConfirmMode}
           />
           <div className="form-group">
             <label>Prioritas</label>
-            <select name="prioritas" value={poData.prioritas} onChange={handleDataChange} disabled={isConfirmMode}>
+            <select name="prioritas" value={orderData.prioritas} onChange={handleDataChange} disabled={isConfirmMode}>
               <option value="Normal">Normal</option>
               <option value="High">High</option>
               <option value="Urgent">Urgent</option>
@@ -543,7 +543,7 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
           <Input
             label="Alamat Kirim"
             name="alamatKirim"
-            value={poData.alamatKirim}
+            value={orderData.alamatKirim}
             onChange={handleDataChange}
             placeholder="e.g., Jl. Industri No. 10"
             disabled={isConfirmMode}
@@ -553,9 +553,9 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
             <input
               list="marketing-list"
               name="marketing"
-              value={poData.marketing}
+              value={orderData.marketing}
               onChange={handleDataChange}
-              onBlur={() => handleDataBlur('marketing', poData.marketing)}
+              onBlur={() => handleDataBlur('marketing', orderData.marketing)}
               placeholder="Pilih atau ketik nama"
               disabled={isConfirmMode || isRequestMode}
             />
@@ -569,7 +569,7 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
             label="Valuasi Project (Rp)"
             name="project_valuation"
             type="number"
-            value={poData.project_valuation}
+            value={orderData.project_valuation}
             onChange={handleDataChange}
             placeholder="e.g., 50000000"
             disabled={isConfirmMode}
@@ -579,7 +579,7 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
         <Textarea
           label="Catatan"
           name="catatan"
-          value={poData.catatan}
+          value={orderData.catatan}
           onChange={handleDataChange}
           placeholder="Catatan khusus untuk Order ini..."
           rows={3}
@@ -718,7 +718,7 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
       <RevisionConfirmModal
         isOpen={isRevisionModalOpen}
         onClose={() => setIsRevisionModalOpen(false)}
-        onConfirm={(name) => isConfirmMode ? handleConfirmRequest(name) : handleSaveOrUpdatePO(name)}
+        onConfirm={(name) => isConfirmMode ? handleConfirmRequest(name) : handleSaveOrUpdateOrder(name)}
       />
     </div>
   )

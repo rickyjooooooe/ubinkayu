@@ -6,7 +6,7 @@ import { Input } from './Input'
 interface FilterPanelProps {
   filters: any
   onFilterChange: (name: string, value: any) => void
-  poCount: { displayed: number; total: number }
+  orderCount: { displayed: number; total: number }
   availableWoodTypes?: string[]
   availableProductTypes?: string[]
   filteredWoodKubikasi?: number | null;
@@ -21,7 +21,7 @@ interface FilterPanelProps {
 const FilterPanel: React.FC<FilterPanelProps> = ({
   filters,
   onFilterChange,
-  poCount,
+  orderCount,
   availableWoodTypes = [],
   availableProductTypes = [],
   filteredWoodKubikasi,
@@ -41,7 +41,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
       <div className="filter-header">
         <h3>📊 Sort & Filter Purchase Order</h3>
         <span>
-          Menampilkan {poCount.displayed} dari {poCount.total} PO
+          Menampilkan {orderCount.displayed} dari {orderCount.total} PO
         </span>
       </div>
 

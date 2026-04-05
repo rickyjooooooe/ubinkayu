@@ -177,20 +177,20 @@ body {
 }
 /* Tambahkan kode ini di paling bawah main.css */
 
-.po-grid {
+.order-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 1.5rem;
 }
-.po-item-card {
+.order-item-card {
   border-left: 4px solid #4299E1;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
-.po-item-card:hover {
+.order-item-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 4px 12px rgba(0,0,0,0.08);
 }
-.po-card-header {
+.order-card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -211,14 +211,14 @@ body {
 .status-badge.high { background-color: #D69E2E; }
 .status-badge.urgent { background-color: #C53030; }
 .status-badge.baru { background-color: #3182CE; }
-.po-card-info {
+.order-card-info {
     display: flex;
     justify-content: space-between;
     font-size: 0.9rem;
     color: var(--text-secondary);
     margin-bottom: 1rem;
 }
-.po-card-footer {
+.order-card-footer {
     display: flex;
     gap: 0.5rem;
     border-top: 1px solid var(--border-color);
@@ -424,25 +424,25 @@ label {
   color: #4a5568;
 }
 
-/* Tambahkan di bawah bagian .po-item-card atau di akhir file */
+/* Tambahkan di bawah bagian .order-item-card atau di akhir file */
 
 /* ================================== */
 /* STYLING UNTUK PO DETAIL PAGE       */
 /* ================================== */
 
-.detail-po-info {
+.detail-order-info {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); /* Responsif, min 350px */
   gap: 1.5rem; /* Jarak antar kartu */
   margin-bottom: 2rem;
 }
 
-.po-summary-card {
+.order-summary-card {
   /* Border kiri untuk menonjolkan PO */
   border-left: 4px solid var(--primary-color);
 }
 
-.po-summary-header {
+.order-summary-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -451,21 +451,21 @@ label {
   border-bottom: 1px solid var(--border-color);
 }
 
-.po-summary-po-number {
+.order-summary-order-number {
   margin: 0;
   font-size: 1.5rem; /* Lebih besar dari h2 Card */
   font-weight: 700;
   color: var(--primary-color); /* Warna PO number */
 }
 
-.po-summary-customer {
+.order-summary-customer {
   font-size: 1.1rem;
   color: var(--text-primary);
   margin-top: 0;
   margin-bottom: 1.5rem;
 }
 
-.po-summary-grid {
+.order-summary-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 1rem;
@@ -593,7 +593,7 @@ label {
   align-items: center;
   gap: 1.5rem;
 }
-.attention-po-number {
+.attention-order-number {
   font-weight: 600;
 }
 .attention-customer, .attention-deadline {
@@ -613,36 +613,36 @@ label {
 
 
 /* --- Daftar PO Aktif --- */
-.active-po-list h3 {
+.active-order-list h3 {
   margin-top: 0;
   margin-bottom: 1rem;
 }
-.po-tracking-item-card {
+.order-tracking-item-card {
   margin-bottom: 1.5rem;
 }
-.po-tracking-header {
+.order-tracking-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 1rem;
 }
-.po-tracking-number {
+.order-tracking-number {
   font-size: 1.1rem;
   font-weight: 600;
 }
-.po-tracking-customer {
+.order-tracking-customer {
   margin: 0.1rem 0 0;
   font-size: 0.9rem;
   color: var(--text-secondary);
 }
-.po-tracking-progress {
+.order-tracking-progress {
   display: flex;
   justify-content: space-between;
   font-size: 0.85rem;
   color: var(--text-secondary);
   font-weight: 500;
 }
-.po-tracking-footer {
+.order-tracking-footer {
   margin-top: 1rem;
   padding-top: 1rem;
   border-top: 1px solid var(--border-color);
@@ -650,7 +650,7 @@ label {
   justify-content: space-between;
   align-items: center;
 }
-.po-tracking-deadline {
+.order-tracking-deadline {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -659,7 +659,7 @@ label {
 .status-badge.overdue {
   background-color: #E53E3E; /* Merah */
 }
-.po-tracking-actions {
+.order-tracking-actions {
   display: flex;
   gap: 0.5rem;
 }
@@ -716,7 +716,7 @@ label {
   box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
-.po-table-container {
+.order-table-container {
   width: 100%;
   overflow-x: auto;
   background-color: var(--card-bg);
@@ -724,19 +724,19 @@ label {
   border-radius: 8px;
 }
 
-.po-table {
+.order-table {
   width: 100%;
   border-collapse: collapse;
 }
 
-.po-table th, .po-table td {
+.order-table th, .order-table td {
   padding: 12px 15px;
   text-align: left;
   border-bottom: 1px solid var(--border-color);
 
 }
 
-.po-table th {
+.order-table th {
   background-color: var(--secondary-color);
   font-size: 0.85rem;
   font-weight: 600;
@@ -744,27 +744,27 @@ label {
   text-transform: uppercase;
 }
 
-.po-table tbody tr:hover {
+.order-table tbody tr:hover {
   background-color: #f9fafb;
 }
 
-.po-table tbody td {
+.order-table tbody td {
   font-size: 0.9rem;
 }
 
-.po-table-actions {
+.order-table-actions {
   display: flex;
   gap: 0.5rem;
 }
 
-.po-table-actions .button {
+.order-table-actions .button {
   padding: 0.25rem 0.75rem;
   font-size: 0.8rem;
 }
 
 
 
-.po-table td.no-wrap-cell {
+.order-table td.no-wrap-cell {
   white-space: nowrap; /* Terapkan nowrap hanya pada sel dengan kelas ini */
 }
 
@@ -1023,7 +1023,7 @@ label {
   font-size: 0.8rem;
   color: var(--text-secondary);
 }
-.po-card-footer-stacked {
+.order-card-footer-stacked {
   display: flex;
   flex-direction: column; /* Menyusun baris tombol secara vertikal */
   gap: 8px; /* Memberi jarak antar baris tombol */
@@ -1122,7 +1122,7 @@ label {
   background-color: #C53030; /* Merah lebih gelap */
 }
 
-.po-card-footer {
+.order-card-footer {
   display: flex;
   flex-direction: column; /* Membuat baris tombol tersusun vertikal */
   gap: 0.5rem; /* Jarak antar baris tombol */
@@ -1143,7 +1143,7 @@ label {
 }
 
 /* Styling untuk progress bar di halaman detail PO */
-.po-summary-progress {
+.order-summary-progress {
   margin-top: 1.5rem;
 }
 
@@ -1989,13 +1989,13 @@ label {
 
 /* 2. Grid Utama (Kartu Ringkasan & Kartu Catatan) */
 /* Di layar kecil, buat kartu-kartu ini menumpuk */
-.detail-po-info {
+.detail-order-info {
   grid-template-columns: 1fr; /* Paksa menjadi satu kolom */
 }
 
 /* 3. Grid di Dalam Kartu Ringkasan */
 /* Buat info (Tanggal, Target, Prioritas) menumpuk rapi di mobile */
-.po-summary-grid {
+.order-summary-grid {
   grid-template-columns: 1fr; /* Paksa menjadi satu kolom */
   gap: 1.25rem; /* Beri jarak vertikal yang lebih lega */
 }
@@ -2034,14 +2034,14 @@ label {
 
 @media (min-width: 992px) {
   /* Kembalikan layout grid utama untuk desktop */
-  .detail-po-info {
+  .detail-order-info {
     grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
   }
 }
 
 @media (min-width: 576px) {
   /* Kembalikan grid ringkasan internal untuk tablet ke atas */
-  .po-summary-grid {
+  .order-summary-grid {
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   }
 }
@@ -2081,14 +2081,14 @@ label {
 
 /* 4. Tampilan Tabel (Paling Penting) */
 /* Pastikan container tabel bisa di-scroll ke samping */
-.po-table-container {
+.order-table-container {
   overflow-x: auto;
   width: 100%;
   /* Efek bayangan untuk menandakan area bisa di-scroll */
   -webkit-mask-image: linear-gradient(to right, transparent, black 20px, black 98%, transparent);
   mask-image: linear-gradient(to right, transparent, black 20px, black 98%, transparent);
 }
-.po-table {
+.order-table {
   width: 100%;
   min-width: 1200px; /* Lebar minimum agar semua kolom tabel muat */
 }
@@ -2208,7 +2208,7 @@ label {
 
 /* 4. Tabel Item di Dalam Kartu */
 /* Ini bagian paling penting: buat tabel bisa di-scroll ke samping */
-.po-table-container {
+.order-table-container {
   overflow-x: auto;
   width: 100%;
   /* Efek bayangan halus untuk memberi petunjuk bisa di-scroll */
@@ -2353,7 +2353,7 @@ body {
 }
 
 /* Opsional: Buat tombol di dalam tabel sedikit lebih kecil agar lebih pas */
-.po-table .actions-cell .btn {
+.order-table .actions-cell .btn {
   padding: 0.3rem 0.8rem;
   font-size: 0.85rem;
   white-space: nowrap; /* Mencegah teks tombol terpotong */
@@ -2397,7 +2397,7 @@ body {
 }
 
 /* Perbarui lebar minimum tabel untuk mengakomodasi kolom baru */
-.po-table {
+.order-table {
   min-width: 1500px;
 }
 
@@ -2427,7 +2427,7 @@ body {
 
 /* Perluas grid di ringkasan PO agar muat 3 kolom di desktop */
 @media (min-width: 992px) {
-  .po-summary-grid {
+  .order-summary-grid {
     grid-template-columns: repeat(3, 1fr);
   }
 }
@@ -2967,13 +2967,13 @@ body {
 }
 
 /* Styling Warna Spesifik (Opsional - Contoh) */
-.total-po-card {
+.total-order-card {
   border-left-color: #4A90E2; /* Biru */
 }
-.active-po-card {
+.active-order-card {
   border-left-color: #F5A623; /* Oranye */
 }
-.completed-po-card {
+.completed-order-card {
   border-left-color: #7ED321; /* Hijau */
 }
 .gdrive-card {

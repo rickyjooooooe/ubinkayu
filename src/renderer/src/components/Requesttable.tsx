@@ -6,8 +6,8 @@ import { Button } from './Button'
 
 interface RequestTableProps {
   requestList: POHeader[]
-  onShowDetail: (po: POHeader) => void
-  onConfirmRequest: (po: POHeader) => void
+  onShowDetail: (order: POHeader) => void
+  onConfirmRequest: (order: POHeader) => void
   currentUserRole?: string | null
 }
 
@@ -45,8 +45,8 @@ const RequestTable: React.FC<RequestTableProps> = ({
   }
 
   return (
-    <div className="po-table-container">
-      <table className="po-table">
+    <div className="order-table-container">
+      <table className="order-table">
         <thead>
           <tr>
             <th>Nomor PO</th>
@@ -69,20 +69,20 @@ const RequestTable: React.FC<RequestTableProps> = ({
               </td>
             </tr>
           ) : (
-            requestList.map((po) => (
-              <tr key={po.id}>
+            requestList.map((order) => (
+              <tr key={order.id}>
                 {/* Nomor PO */}
                 <td>
                   <div className="customer-cell">
-                    <strong>{po.po_number}</strong>
-                    <span>ID: {po.id}</span>
+                    <strong>{order.order_number}</strong>
+                    <span>ID: {order.id}</span>
                   </div>
                 </td>
 
                 {/* Customer */}
                 <td>
                   <div className="customer-cell">
-                    <strong>{po.project_name}</strong>
+                    <strong>{order.project_name}</strong>
                   </div>
                 </td>
 
@@ -97,23 +97,23 @@ const RequestTable: React.FC<RequestTableProps> = ({
                     fontWeight: 500,
                     whiteSpace: 'nowrap'
                   }}>
-                    {po.acc_marketing || '-'}
+                    {order.acc_marketing || '-'}
                   </span>
                 </td>
 
                 {/* Target Kirim */}
-                <td>{formatDate(po.deadline)}</td>
+                <td>{formatDate(order.deadline)}</td>
 
                 {/* Prioritas */}
                 <td>
-                  <span className={`status-badge ${getPriorityClass(po.priority)}`}>
-                    {po.priority || 'Normal'}
+                  <span className={`status-badge ${getPriorityClass(order.priority)}`}>
+                    {order.priority || 'Normal'}
                   </span>
                 </td>
 
                 {/* Valuasi Project */}
                 <td>
-                  <strong>{formatRupiah((po as any).project_valuation)}</strong>
+                  <strong>{formatRupiah((order as any).project_valuation)}</strong>
                 </td>
 
                 {/* Alamat Kirim */}
@@ -126,7 +126,7 @@ const RequestTable: React.FC<RequestTableProps> = ({
                     color: 'var(--color-text-secondary)',
                     fontSize: '13px'
                   } as React.CSSProperties}>
-                    {po.alamat_kirim || '-'}
+                    {order.alamat_kirim || '-'}
                   </span>
                 </td>
 
@@ -140,21 +140,21 @@ const RequestTable: React.FC<RequestTableProps> = ({
                     color: 'var(--color-text-secondary)',
                     fontSize: '13px'
                   } as React.CSSProperties}>
-                    {po.notes || '-'}
+                    {order.notes || '-'}
                   </span>
                 </td>
 
                 {/* Tgl Request */}
-                <td>{formatDate(po.created_at)}</td>
+                <td>{formatDate(order.created_at)}</td>
 
                 {/* Aksi */}
                 <td>
                   <div className="actions-cell">
-                    <Button variant="secondary" onClick={() => onShowDetail(po)}>
+                    <Button variant="secondary" onClick={() => onShowDetail(order)}>
                       Detail
                     </Button>
                     {(currentUserRole === 'admin' || currentUserRole === 'manager') && (
-                      <Button onClick={() => onConfirmRequest(po)}>
+                      <Button onClick={() => onConfirmRequest(order)}>
                         + Buat Order
                       </Button>
                     )}

@@ -14,27 +14,27 @@ const api = {
   loginUser: (loginData) => ipcRenderer.invoke('login-user', loginData),
 
   // --- Fungsi CRUD untuk Purchase Order (PO) ---
-  saveNewPO: (data) => ipcRenderer.invoke('po:save', data),
-  listPOs: (user) => ipcRenderer.invoke('po:list', user),
-  updatePO: (data) => ipcRenderer.invoke('po:update', data),
-  deletePO: (poId) => ipcRenderer.invoke('po:delete', poId),
-  listPOItems: (poId) => ipcRenderer.invoke('po:listItems', poId),
+  saveNewOrder: (data) => ipcRenderer.invoke('order:save', data),
+  listOrders: (user) => ipcRenderer.invoke('order:list', user),
+  updatePO: (data) => ipcRenderer.invoke('order:update', data),
+  deletePO: (orderId) => ipcRenderer.invoke('order:delete', orderId),
+  listorderItems: (orderId) => ipcRenderer.invoke('order:listItems', orderId),
 // [BARU] Request Project
-requestProject: (data) => ipcRenderer.invoke('po:requestProject', data),
-confirmRequest: (data) => ipcRenderer.invoke('po:confirmRequest', data),
+requestProject: (data) => ipcRenderer.invoke('order:requestProject', data),
+confirmRequest: (data) => ipcRenderer.invoke('order:confirmRequest', data),
 getCommissionData: (user) => ipcRenderer.invoke('commission:getData', user),
   // --- Fungsi untuk Revisi & Histori ---
-  listPORevisions: (poId) => ipcRenderer.invoke('po:listRevisions', poId),
-  listPOItemsByRevision: (revId) => ipcRenderer.invoke('po:listItemsByRevision', revId),
-  getRevisionHistory: (poId) => ipcRenderer.invoke('po:getRevisionHistory', poId),
+  listPORevisions: (orderId) => ipcRenderer.invoke('order:listRevisions', orderId),
+  listorderItemsByRevision: (revId) => ipcRenderer.invoke('order:listItemsByRevision', revId),
+  getRevisionHistory: (orderId) => ipcRenderer.invoke('order:getRevisionHistory', orderId),
 
   // --- Fungsi untuk PDF & Link ---
-  previewPO: (data) => ipcRenderer.invoke('po:preview', data),
+  previewPO: (data) => ipcRenderer.invoke('order:preview', data),
   openExternalLink: (url) => ipcRenderer.invoke('app:open-external-link', url),
 
   // --- Fungsi untuk Progress, Analisis & Lainnya ---
-  getActivePOsWithProgress: (user) => ipcRenderer.invoke('progress:getActivePOsWithProgress', user), // <-- PERBAIKAN 1
-  getPOItemsWithDetails: (poId) => ipcRenderer.invoke('progress:getPOItemsWithDetails', poId), // <-- PERBAIKAN 2
+  getActiveOrdersWithProgress: (user) => ipcRenderer.invoke('progress:getActiveOrdersWithProgress', user), // <-- PERBAIKAN 1
+  getorderItemsWithDetails: (orderId) => ipcRenderer.invoke('progress:getorderItemsWithDetails', orderId), // <-- PERBAIKAN 2
   updateItemProgress: (data) => ipcRenderer.invoke('progress:updateItem', data),
   getRecentProgressUpdates: (user) => ipcRenderer.invoke('progress:getRecentProgressUpdates', user), // <-- PERBAIKAN 3
   getAttentionData: (user) => ipcRenderer.invoke('progress:getAttentionData', user),

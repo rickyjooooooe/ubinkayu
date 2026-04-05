@@ -77,7 +77,7 @@ const compareRevisions = (
   const headerChanges = findHeaderChanges(current.revision, previous.revision);
 
   // Gunakan ID item jika konsisten antar revisi, jika tidak gunakan generateItemKey
-  // Asumsi ID item unik per baris di sheet `purchase_order_items`
+  // Asumsi ID item unik per baris di sheet `order_items`
   const currentItemsMap = new Map(current.items.map(item => [item.id, item]));
   const previousItemsMap = new Map(previous.items.map(item => [item.id, item]));
 
@@ -167,11 +167,11 @@ const PRODUCTION_STAGES: ProductionStage[] = [
 // --- Komponen Utama ---
 
 interface PODetailPageProps {
-  po: POHeader | null; // PO Header TERBARU yang diterima dari App.tsx
+  order: POHeader | null; // PO Header TERBARU yang diterima dari App.tsx
   onBackToList: () => void;
 }
 
-const PODetailPage: React.FC<PODetailPageProps> = ({ po, onBackToList }) => {
+const PODetailPage: React.FC<PODetailPageProps> = ({ order, onBackToList }) => {
   // State untuk item detail dari revisi TERBARU
   const [items, setItems] = useState<POItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -187,13 +187,13 @@ const PODetailPage: React.FC<PODetailPageProps> = ({ po, onBackToList }) => {
     setIsLoading(true);
     setIsHistoryLoading(true);
 
-    if (po?.id) {
+    if (order?.id) {
       const fetchAllDetails = async () => {
         try {
           // Ambil data item terbaru (dengan progress & deadline) dan data histori revisi
           const [latestItemsData, historyData] = await Promise.all([
-            apiService.getPOItemsWithDetails(po.id),
-            apiService.getRevisionHistory(po.id)
+            apiService.getorderItemsWithDetails(order.id),
+            apiService.getRevisionHistory(order.id)
           ]);
 
           // Validasi data (pastikan array)
@@ -201,7 +201,7 @@ const PODetailPage: React.FC<PODetailPageProps> = ({ po, onBackToList }) => {
           setHistory(Array.isArray(historyData) ? historyData : []);
 
         } catch (error) {
-          console.error(`Gagal memuat detail & histori PO ${po.id}:`, error);
+          console.error(`Gagal memuat detail & histori PO ${order.id}:`, error);
           setItems([]); // Set kosong jika error
           setHistory([]); // Set kosong jika error
         } finally {
@@ -211,16 +211,16 @@ const PODetailPage: React.FC<PODetailPageProps> = ({ po, onBackToList }) => {
       };
       fetchAllDetails();
     } else {
-      // Jika po null, langsung set loading selesai
+      // Jika order null, langsung set loading selesai
       setIsLoading(false);
       setIsHistoryLoading(false);
     }
-  }, [po]); // Efek hanya bergantung pada objek 'po'
+  }, [order]); // Efek hanya bergantung pada objek 'order'
 
   // Fungsi untuk membuka link eksternal (PDF)
   const handleOpenFile = async (url?: string | null) => {
     // Gunakan URL yang diberikan (untuk revisi lama) atau URL dari PO terbaru
-    const targetUrl = url || po?.pdf_link;
+    const targetUrl = url || order?.pdf_link;
     if (!targetUrl) {
       alert('Link file PDF tidak ditemukan.');
       return;
@@ -245,7 +245,7 @@ const PODetailPage: React.FC<PODetailPageProps> = ({ po, onBackToList }) => {
   // --- Render ---
 
   // Tampilan jika data PO utama tidak ada
-  if (!po) {
+  if (!order) {
      return (
        <div className="page-container">
          <p>Data Order tidak ditemukan atau belum dipilih.</p>
@@ -260,7 +260,7 @@ const PODetailPage: React.FC<PODetailPageProps> = ({ po, onBackToList }) => {
       {/* Header Halaman */}
       <div className="page-header">
         <div>
-          <h1>Detail Order: {po.po_number || 'N/A'}</h1>
+          <h1>Detail Order: {order.order_number || 'N/A'}</h1>
           <p>Menampilkan informasi terbaru dan riwayat revisi.</p>
         </div>
         <div className="header-actions">
@@ -270,35 +270,35 @@ const PODetailPage: React.FC<PODetailPageProps> = ({ po, onBackToList }) => {
       </div>
 
       {/* --- Bagian Detail Order Terbaru --- */}
-      <div className="detail-po-info">
+      <div className="detail-order-info">
         {/* Card Ringkasan PO Terbaru */}
-        <Card className="po-summary-card">
-           <div className="po-summary-header">
-             <h3 className="po-summary-po-number">PO: {po.po_number || 'N/A'}</h3>
-             <span className={getStatusBadgeClass(po.status)}>{po.status || 'Open'}</span>
+        <Card className="order-summary-card">
+           <div className="order-summary-header">
+             <h3 className="order-summary-order-number">PO: {order.order_number || 'N/A'}</h3>
+             <span className={getStatusBadgeClass(order.status)}>{order.status || 'Open'}</span>
            </div>
-           <p className="po-summary-customer">
-             <strong>Customer:</strong> {po.project_name || 'N/A'}
+           <p className="order-summary-customer">
+             <strong>Customer:</strong> {order.project_name || 'N/A'}
            </p>
-           <div className="po-summary-grid">
-             <div className="info-item"> <label>Tgl Revisi Terbaru</label> <span>{formatDateTime(po.lastRevisedDate)}</span> </div>
-             <div className="info-item"> <label>Direvisi Oleh</label> <span>{po.lastRevisedBy || '-'}</span> </div>
-             <div className="info-item"> <label>Target Kirim</label> <span>{formatDate(po.deadline)}</span> </div>
-             <div className="info-item"> <label>Prioritas</label> <span className={getPriorityBadgeClass(po.priority)}>{po.priority || '-'}</span> </div>
-             <div className="info-item"> <label>Total Kubikasi</label> <span>{po.kubikasi_total ? `${Number(po.kubikasi_total).toFixed(3)} m³` : '0.000 m³'}</span> </div>
-             <div className="info-item"> <label>Marketing</label> <span>{po.acc_marketing || '-'}</span> </div>
-             {/* <div className="info-item"> <label>Alamat Kirim</label> <span>{po.alamat_kirim || '-'}</span> </div> */}
+           <div className="order-summary-grid">
+             <div className="info-item"> <label>Tgl Revisi Terbaru</label> <span>{formatDateTime(order.lastRevisedDate)}</span> </div>
+             <div className="info-item"> <label>Direvisi Oleh</label> <span>{order.lastRevisedBy || '-'}</span> </div>
+             <div className="info-item"> <label>Target Kirim</label> <span>{formatDate(order.deadline)}</span> </div>
+             <div className="info-item"> <label>Prioritas</label> <span className={getPriorityBadgeClass(order.priority)}>{order.priority || '-'}</span> </div>
+             <div className="info-item"> <label>Total Kubikasi</label> <span>{order.kubikasi_total ? `${Number(order.kubikasi_total).toFixed(3)} m³` : '0.000 m³'}</span> </div>
+             <div className="info-item"> <label>Marketing</label> <span>{order.acc_marketing || '-'}</span> </div>
+             {/* <div className="info-item"> <label>Alamat Kirim</label> <span>{order.alamat_kirim || '-'}</span> </div> */}
            </div>
-           <div className="po-summary-progress">
-             <div className="progress-info"> <label>Progress Produksi Keseluruhan</label> <span>{po.progress?.toFixed(0) || 0}%</span> </div>
-             <ProgressBar value={po.progress || 0} />
+           <div className="order-summary-progress">
+             <div className="progress-info"> <label>Progress Produksi Keseluruhan</label> <span>{order.progress?.toFixed(0) || 0}%</span> </div>
+             <ProgressBar value={order.progress || 0} />
            </div>
         </Card>
         {/* Card Catatan PO Terbaru */}
-        {po.notes && (
+        {order.notes && (
           <Card className="notes-card">
             <h4>Catatan PO (Terbaru)</h4>
-            <p style={{ whiteSpace: 'pre-wrap' }}>{po.notes}</p> {/* pre-wrap untuk menjaga format spasi/baris baru */}
+            <p style={{ whiteSpace: 'pre-wrap' }}>{order.notes}</p> {/* pre-wrap untuk menjaga format spasi/baris baru */}
           </Card>
         )}
       </div>

@@ -27,7 +27,7 @@ import { User } from '../types'
 interface SalesByMarketing {
   name: string
   totalKubikasi: number
-  poCount: number
+  orderCount: number
 }
 interface MonthlyChartData {
   month: string // Format YYYY-MM
@@ -181,7 +181,7 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ currentUser }) => {
               />
               <Legend />
               <Bar dataKey="totalKubikasi" name="Total m³" fill={COLORS[0]} />
-              <Bar dataKey="poCount" name="Jumlah Order" fill={COLORS[1]} />
+              <Bar dataKey="orderCount" name="Jumlah Order" fill={COLORS[1]} />
             </BarChart>
           </ResponsiveContainer>
         ) : (

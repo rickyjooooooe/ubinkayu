@@ -105,25 +105,25 @@ export async function loginUser(username, password) {
 // --- Fungsi CRUD untuk Purchase Order (PO) ---
 
 
-export function listPOs(user) {
+export function listOrders(user) {
   if (window.api) {
     console.log(
-      '%cELECTRON MODE: Using window.api (IPC) for listPOs',
+      '%cELECTRON MODE: Using window.api (IPC) for listOrders',
       'color: green; font-weight: bold;'
     ) // <-- TAMBAHKAN INI
-    return window.api.listPOs(user)
+    return window.api.listOrders(user)
   }
-  console.log('%cWEB MODE: Using fetch() for listPOs', 'color: orange; font-weight: bold;') // <-- TAMBAHKAN INI
-  return fetchAPI(createApiEndpoint('listPOs'), {
+  console.log('%cWEB MODE: Using fetch() for listOrders', 'color: orange; font-weight: bold;') // <-- TAMBAHKAN INI
+  return fetchAPI(createApiEndpoint('listOrders'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user }) // <-- Kirim user di body
   })
 }
 
-export function saveNewPO(data) {
-  if (window.api) return window.api.saveNewPO(data)
-  return fetchAPI(createApiEndpoint('saveNewPO'), {
+export function saveNewOrder(data) {
+  if (window.api) return window.api.saveNewOrder(data)
+  return fetchAPI(createApiEndpoint('saveNewOrder'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
@@ -139,9 +139,9 @@ export function updatePO(data) {
   })
 }
 
-export function deletePO(poId) {
-  if (window.api) return window.api.deletePO(poId)
-  return fetchAPI(createApiEndpoint('deletePO', { poId }), {
+export function deletePO(orderId) {
+  if (window.api) return window.api.deletePO(orderId)
+  return fetchAPI(createApiEndpoint('deletePO', { orderId }), {
     method: 'DELETE'
   })
 }
@@ -155,24 +155,24 @@ export function getProducts() {
 
 // --- Fungsi Detail PO & Revisi ---
 
-export function listPOItems(poId) {
-  if (window.api) return window.api.listPOItems(poId)
-  return fetchAPI(createApiEndpoint('listPOItems', { poId }))
+export function listorderItems(orderId) {
+  if (window.api) return window.api.listorderItems(orderId)
+  return fetchAPI(createApiEndpoint('listorderItems', { orderId }))
 }
 
-export function getRevisionHistory(poId) {
-  if (window.api) return window.api.getRevisionHistory(poId)
-  return fetchAPI(createApiEndpoint('getRevisionHistory', { poId }))
+export function getRevisionHistory(orderId) {
+  if (window.api) return window.api.getRevisionHistory(orderId)
+  return fetchAPI(createApiEndpoint('getRevisionHistory', { orderId }))
 }
 
-export function listPORevisions(poId) {
-  if (window.api) return window.api.listPORevisions(poId)
-  return fetchAPI(createApiEndpoint('listPORevisions', { poId }))
+export function listPORevisions(orderId) {
+  if (window.api) return window.api.listPORevisions(orderId)
+  return fetchAPI(createApiEndpoint('listPORevisions', { orderId }))
 }
 
-export function listPOItemsByRevision(poId, revisionNumber) {
-  if (window.api) return window.api.listPOItemsByRevision(poId, revisionNumber)
-  return fetchAPI(createApiEndpoint('listPOItemsByRevision', { poId, revisionNumber }))
+export function listorderItemsByRevision(orderId, revisionNumber) {
+  if (window.api) return window.api.listorderItemsByRevision(orderId, revisionNumber)
+  return fetchAPI(createApiEndpoint('listorderItemsByRevision', { orderId, revisionNumber }))
 }
 
 // --- Fungsi Pratinjau (Preview) ---
@@ -197,10 +197,10 @@ export function updateItemProgress(data) {
   })
 }
 
-export function getActivePOsWithProgress(user) {
+export function getActiveOrdersWithProgress(user) {
   // <-- [UBAH]
-  if (window.api) return window.api.getActivePOsWithProgress(user) // <-- [UBAH]
-  return fetchAPI(createApiEndpoint('getActivePOsWithProgress'), {
+  if (window.api) return window.api.getActiveOrdersWithProgress(user) // <-- [UBAH]
+  return fetchAPI(createApiEndpoint('getActiveOrdersWithProgress'), {
     // <-- [UBAH]
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -208,10 +208,10 @@ export function getActivePOsWithProgress(user) {
   })
 }
 
-export function getPOItemsWithDetails(poId) {
-  // SEBELUMNYA: window.api.getPOItemsDetails (kurang "With")
-  if (window.api) return window.api.getPOItemsWithDetails(poId) // <-- PERBAIKI INI
-  return fetchAPI(createApiEndpoint('getPOItemsWithDetails', { poId }))
+export function getorderItemsWithDetails(orderId) {
+  // SEBELUMNYA: window.api.getorderItemsDetails (kurang "With")
+  if (window.api) return window.api.getorderItemsWithDetails(orderId) // <-- PERBAIKI INI
+  return fetchAPI(createApiEndpoint('getorderItemsWithDetails', { orderId }))
 }
 
 export function getRecentProgressUpdates(user) {

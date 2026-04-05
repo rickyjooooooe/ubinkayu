@@ -105,10 +105,10 @@ export async function openUserDoc() {
 }
 
 const ALIASES = {
-  purchase_orders: ['purchase_orders', 'purchase_order'],
-  purchase_order_items: ['purchase_order_items', 'po_items'],
+  orders: ['orders', 'purchase_order'],
+  order_items: ['order_items', 'po_items'],
   product_master: ['product_master', 'products'],
-  progress_tracking: ['purchase_order_items_progress', 'progress'],
+  progress_tracking: ['order_items_progress', 'progress'],
   users: ['users_credentials', 'users']
 }
 
@@ -142,7 +142,7 @@ export async function getNextIdFromSheet(sheet) {
 
 // Fungsi untuk membersihkan payload item
 export function scrubItemPayload(item) {
-  const { id, purchase_order_id, revision_id, revision_number, ...rest } = item || {}
+  const { id, order_id, revision_id, revision_number, ...rest } = item || {}
   return rest
 }
 
@@ -174,7 +174,7 @@ export async function deleteGoogleDriveFile(fileId) {
 // GENERATOR JPEG (Disalin dari jpegGenerator.js)
 // =================================================================
 
-export async function generatePOJpeg(poData, revisionNumber = 0) {
+export async function generateOrderJpeg(orderData, revisionNumber = 0) {
   try {
     // --- 1. DYNAMIC IMPORT ---
     const { createCanvas, loadImage, registerFont } = await import('canvas')
@@ -263,12 +263,12 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
     totalHeight += 70 * scaleFactor
     totalHeight += 60 * scaleFactor
 
-    const items = poData.items || []
+    const items = orderData.items || []
     items.forEach((item) => {
       ctx.font = `${10 * scaleFactor}px ${baseFont}` // [DIUBAH]
       const poLines = calculateLineCount(
         ctx,
-        `${poData.po_number || 'N/A'}\n${poData.project_name || 'N/A'}`,
+        `${orderData.order_number || 'N/A'}\n${orderData.project_name || 'N/A'}`,
         130 * scaleFactor - rowPadding * 2 // [DIUBAH]
       )
       const produkText = `${item.product_name || ''}\n${item.wood_type || ''} ${item.profile || ''}`
@@ -298,7 +298,7 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
     totalHeight += 30 * scaleFactor // [DIUBAH]
 
     ctx.font = `${10 * scaleFactor}px ${baseFont}` // [DIUBAH]
-    const notesText = poData.notes || '-'
+    const notesText = orderData.notes || '-'
     const noteLineCount = calculateLineCount(ctx, notesText, tableWidth - 20 * scaleFactor) // [DIUBAH]
     // [DIUBAH]
     const notesSectionHeight =
@@ -308,9 +308,9 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
     totalHeight += 80 * scaleFactor // [DIUBAH]
 
     let photoDrawHeight = 0
-    if (poData.poPhotoBase64) {
+    if (orderData.poPhotoBase64) {
       try {
-        const imageBuffer = Buffer.from(poData.poPhotoBase64, 'base64')
+        const imageBuffer = Buffer.from(orderData.poPhotoBase64, 'base64')
         const userImage = await loadImage(imageBuffer)
         const aspectRatio = userImage.height / userImage.width
         photoDrawHeight = tableWidth * aspectRatio // tableWidth sudah di-scale
@@ -340,13 +340,13 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
     let currentY = 40 * scaleFactor // [DIUBAH]
     finalCtx.font = `bold ${24 * scaleFactor}px ${baseFont}` // [DIUBAH]
     finalCtx.fillStyle = redColor
-    const headerText = `${poData.po_number || 'N/A'} ${poData.project_name || 'N/A'}`
+    const headerText = `${orderData.order_number || 'N/A'} ${orderData.project_name || 'N/A'}`
     finalCtx.textAlign = 'center'
     finalCtx.fillText(headerText, width / 2, currentY)
 
     finalCtx.font = `bold ${16 * scaleFactor}px ${baseFont}` // [DIUBAH]
     finalCtx.fillStyle = blackColor
-    const date = poData.created_at ? new Date(poData.created_at) : new Date()
+    const date = orderData.created_at ? new Date(orderData.created_at) : new Date()
     const year = date.getFullYear()
     const month = date.getMonth() + 1
     const day = date.getDate()
@@ -460,7 +460,7 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
       // (calculateLineCount widths sudah di-scale)
       const poLines = calculateLineCount(
         finalCtx,
-        `${poData.po_number || 'N/A'}\n${poData.project_name || 'N/A'}`,
+        `${orderData.order_number || 'N/A'}\n${orderData.project_name || 'N/A'}`,
         cols.noPo.width - rowPadding * 2
       )
       const produkText = `${item.product_name || ''}\n${item.wood_type || ''} ${item.profile || ''}`
@@ -487,11 +487,11 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
       const rowHeight = maxLines * itemLineHeight + rowPadding * 2
 
       finalCtx.textAlign = 'center'
-      const deadline = poData.deadline
-        ? new Date(poData.deadline).toLocaleDateString('id-ID')
+      const deadline = orderData.deadline
+        ? new Date(orderData.deadline).toLocaleDateString('id-ID')
         : 'N/A'
-      const poDate = poData.created_at
-        ? new Date(poData.created_at).toLocaleDateString('id-ID')
+      const poDate = orderData.created_at
+        ? new Date(orderData.created_at).toLocaleDateString('id-ID')
         : 'N/A'
       finalCtx.fillStyle = blueColor
       finalCtx.fillText(
@@ -509,7 +509,7 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
       finalCtx.textAlign = 'left'
       wrapText(
         finalCtx,
-        `${poData.po_number || 'N/A'}\n${poData.project_name || 'N/A'}`,
+        `${orderData.order_number || 'N/A'}\n${orderData.project_name || 'N/A'}`,
         tableLeft + cols.noPo.x + rowPadding,
         currentY + rowPadding + 10 * scaleFactor, // [DIUBAH]
         cols.noPo.width - rowPadding * 2,
@@ -617,7 +617,7 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
       currentY + 20 * scaleFactor // [DIUBAH]
     )
     finalCtx.textAlign = 'center'
-    const totalKubikasi = toNum(poData.kubikasi_total, 0).toFixed(4) + ' m³'
+    const totalKubikasi = toNum(orderData.kubikasi_total, 0).toFixed(4) + ' m³'
     finalCtx.fillText(
       totalKubikasi,
       tableLeft + cols.kubikasi.x + cols.kubikasi.width / 2,
@@ -701,9 +701,9 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
     finalCtx.fillText('Lampiran: Foto Referensi', tableLeft, currentY)
     currentY += 30 * scaleFactor // [DIUBAH]
 
-    if (poData.poPhotoBase64) {
+    if (orderData.poPhotoBase64) {
       try {
-        const imageBuffer = Buffer.from(poData.poPhotoBase64, 'base64')
+        const imageBuffer = Buffer.from(orderData.poPhotoBase64, 'base64')
         const userImage = await loadImage(imageBuffer)
         finalCtx.drawImage(
           userImage,
@@ -717,7 +717,7 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
         finalCtx.fillStyle = redColor
         finalCtx.font = `${12 * scaleFactor}px ${baseFont}` // [DIUBAH]
         finalCtx.textAlign = 'left'
-        finalCtx.fillText(`Gagal memuat file gambar: ${poData.poPhotoPath}`, tableLeft, currentY)
+        finalCtx.fillText(`Gagal memuat file gambar: ${orderData.poPhotoPath}`, tableLeft, currentY)
       }
     } else {
       finalCtx.font = `${12 * scaleFactor}px ${baseFont}` // [DIUBAH]
@@ -728,7 +728,7 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
 
     // --- [DIUBAH] Kualitas Output ---
     const buffer = canvas.toBuffer('image/jpeg', { quality: 1, progressive: true }) // Kualitas 100%
-    const fileName = `PO-${String(poData.po_number).replace(/[/\\?%*:|"<>]/g, '-')}-Rev${revisionNumber}.jpeg`
+    const fileName = `PO-${String(orderData.order_number).replace(/[/\\?%*:|"<>]/g, '-')}-Rev${revisionNumber}.jpeg`
 
     return { success: true, buffer: buffer, fileName: fileName }
   } catch (error) {
@@ -738,9 +738,9 @@ export async function generatePOJpeg(poData, revisionNumber = 0) {
 }
 
 // Fungsi untuk generate JPEG dan upload ke Drive
-export async function generateAndUploadPO(poData, revisionNumber) {
+export async function generateAndUploadOrder(orderData, revisionNumber) {
   try {
-    const jpegResult = await generatePOJpeg(poData, revisionNumber)
+    const jpegResult = await generateOrderJpeg(orderData, revisionNumber)
     if (!jpegResult.success) throw new Error('Gagal membuat buffer JPEG.')
 
     const auth = getAuth()
@@ -791,25 +791,25 @@ export async function processBatch(items, processor, batchSize = 5) {
  * [VERCEL VERSION] Mengunggah foto referensi PO dari data Base64 ke Google Drive.
  * Mengunggah ke folder FOTO PROGRESS sesuai logika sheet.js.
  * @param {string} photoBase64 Data gambar dalam format Base64.
- * @param {string} poNumber Nomor PO untuk penamaan file.
+ * @param {string} orderNumber Nomor PO untuk penamaan file.
  * @param {string} customerName Nama customer untuk penamaan file.
  * @returns {Promise<{success: boolean, link?: string, size?: number, error?: string}>}
  */
-export async function uploadPoPhoto(photoBase64, poNumber, customerName) {
+export async function UploadOrderPhoto(photoBase64, orderNumber, customerName) {
   if (!photoBase64) {
     return { success: false, error: 'Tidak ada data Base64 foto.', size: 0 }
   }
   console.log(
-    `⏳ [Vercel Drive] Uploading PO Reference Photo for PO ${poNumber} to PROGRESS FOLDER...`
+    `⏳ [Vercel Drive] Uploading PO Reference Photo for PO ${orderNumber} to PROGRESS FOLDER...`
   ) // Log diubah
   try {
     const auth = getAuth()
 
     const imageBuffer = Buffer.from(photoBase64, 'base64')
     const safeCustomerName = (customerName || 'Customer').replace(/[/\\?%*:|"<>]/g, '-')
-    const safePoNumber = (poNumber || 'NoPO').replace(/[/\\?%*:|"<>]/g, '-')
+    const safeorderNumber = (orderNumber || 'NoPO').replace(/[/\\?%*:|"<>]/g, '-')
     // Penamaan file sama persis dengan sheet.js
-    const fileName = `PO-${safePoNumber}-${safeCustomerName.replace(/[/\\?%*:|"<>]/g, '-')}.jpg`
+    const fileName = `PO-${safeorderNumber}-${safeCustomerName.replace(/[/\\?%*:|"<>]/g, '-')}.jpg`
     const mimeType = 'image/jpeg'
 
     // Upload via auth.request

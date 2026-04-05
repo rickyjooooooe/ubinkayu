@@ -7,11 +7,11 @@ import { ProgressBar } from './ProgressBar'
 
 interface POTableProps {
   poList: POHeader[]
-  // onDeletePO now accepts poInfo string
-  onDeletePO: (poId: string, poInfo: string) => Promise<void>
-  onEditPO: (po: POHeader) => void
-  onShowDetail: (po: POHeader) => void
-  onShowProgress: (po: POHeader) => void
+  // onDeletePO now accepts OrderInfo string
+  onDeletePO: (orderId: string, OrderInfo: string) => Promise<void>
+  onEditPO: (order: POHeader) => void
+  onShowDetail: (order: POHeader) => void
+  onShowProgress: (order: POHeader) => void
   currentUserRole?: string | null
 }
 
@@ -63,8 +63,8 @@ const POTable: React.FC<POTableProps> = ({
   }
 
   return (
-    <div className="po-table-container">
-      <table className="po-table">
+    <div className="order-table-container">
+      <table className="order-table">
         <thead>
           <tr>
             <th>Customer</th>
@@ -85,24 +85,24 @@ const POTable: React.FC<POTableProps> = ({
           </tr>
         </thead>
         <tbody>
-          {poList.map((po) => (
-            <tr key={po.id}>
+          {poList.map((order) => (
+            <tr key={order.id}>
               <td>
                 <div className="customer-cell">
-                  <strong>{po.project_name}</strong>
-                  <span>PO: {po.po_number}</span>
+                  <strong>{order.project_name}</strong>
+                  <span>PO: {order.order_number}</span>
                 </div>
               </td>
-              <td>{po.lastRevisedBy || '-'}</td>
-              <td>{formatLastRevisedDate(po.lastRevisedDate)}</td>
-              <td>{formatDate(po.created_at)}</td>
-              <td>{formatDate(po.deadline)}</td>
+              <td>{order.lastRevisedBy || '-'}</td>
+              <td>{formatLastRevisedDate(order.lastRevisedDate)}</td>
+              <td>{formatDate(order.created_at)}</td>
+              <td>{formatDate(order.deadline)}</td>
               {/* Jenis Kayu & Produk (Including Kubikasi per item) */}
               <td className="product-list-cell">
-                {po.items && po.items.length > 0 ? (
+                {order.items && order.items.length > 0 ? (
                   <ul>
-                    {po.items.map((item) => (
-                      <li key={item.id || `${po.id}-${item.product_name}`}>
+                    {order.items.map((item) => (
+                      <li key={item.id || `${order.id}-${item.product_name}`}>
                         <span>
                           {item.product_name} ({item.wood_type || 'N/A'})
                         </span>
@@ -114,28 +114,28 @@ const POTable: React.FC<POTableProps> = ({
                   <span>-</span>
                 )}
               </td>
-              <td>{Number(po.kubikasi_total || 0).toFixed(3)} m³</td>
+              <td>{Number(order.kubikasi_total || 0).toFixed(3)} m³</td>
               {/* New Columns */}
-              <td className="product-list-cell">{renderItemList(po.items, 'finishing')}</td>
-              <td className="product-list-cell">{renderItemList(po.items, 'sample')}</td>
+              <td className="product-list-cell">{renderItemList(order.items, 'finishing')}</td>
+              <td className="product-list-cell">{renderItemList(order.items, 'sample')}</td>
               <td>
-                {po.acc_marketing || '-'} {/* <-- Tampilkan langsung dari po.acc_marketing */}
+                {order.acc_marketing || '-'} {/* <-- Tampilkan langsung dari order.acc_marketing */}
               </td>
-              <td className="product-list-cell">{renderItemList(po.items, 'location')}</td>
+              <td className="product-list-cell">{renderItemList(order.items, 'location')}</td>
               {/* End of New Columns */}
 
               <td>
-                <span className={`status-badge ${(po.priority || 'Normal').toLowerCase()}`}>
-                  {po.priority || 'Normal'}
+                <span className={`status-badge ${(order.priority || 'Normal').toLowerCase()}`}>
+                  {order.priority || 'Normal'}
                 </span>
               </td>
               <td>
-                <span className={getStatusBadgeClass(po.status)}>{po.status || 'Open'}</span>
+                <span className={getStatusBadgeClass(order.status)}>{order.status || 'Open'}</span>
               </td>
               <td>
                 <div className="progress-cell">
-                  <span>{po.progress?.toFixed(0) || 0}%</span>
-                  <ProgressBar value={po.progress || 0} />
+                  <span>{order.progress?.toFixed(0) || 0}%</span>
+                  <ProgressBar value={order.progress || 0} />
                 </div>
               </td>
               <td>
@@ -143,18 +143,18 @@ const POTable: React.FC<POTableProps> = ({
                   {/* --- [PERUBAHAN LOGIKA DI SINI] --- */}
 
                   {/* Tombol Detail: Tampil untuk semua */}
-                  <Button variant="secondary" onClick={() => onShowDetail(po)}>
+                  <Button variant="secondary" onClick={() => onShowDetail(order)}>
                     Detail
                   </Button>
 
                   {/* Tombol Revisi: Hanya manager & admin */}
                   {(currentUserRole === 'manager' || currentUserRole === 'admin') && (
-                    <Button onClick={() => onEditPO(po)}>Revisi</Button>
+                    <Button onClick={() => onEditPO(order)}>Revisi</Button>
                   )}
 
                   {/* Tombol Update: Hanya manager & orang pabrik */}
                   {(currentUserRole === 'manager' || currentUserRole === 'orang pabrik') && (
-                    <Button variant="primary" onClick={() => onShowProgress(po)}>
+                    <Button variant="primary" onClick={() => onShowProgress(order)}>
                       Update
                     </Button>
                   )}
@@ -163,7 +163,7 @@ const POTable: React.FC<POTableProps> = ({
                   {(currentUserRole === 'manager' || currentUserRole === 'admin') && (
                     <Button
                       variant="danger"
-                      onClick={() => onDeletePO(po.id, `${po.po_number} - ${po.project_name}`)}
+                      onClick={() => onDeletePO(order.id, `${order.order_number} - ${order.project_name}`)}
                     >
                       Hapus
                     </Button>

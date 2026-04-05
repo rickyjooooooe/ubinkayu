@@ -2,8 +2,8 @@
 
 // Deklarasikan tipe untuk objek API kita
 interface ICustomAPI {
-  saveNewPO: (data: any) => Promise<{ success: boolean; poId?: string; error?: string }>;
-  listPOs: () => Promise<any[]>;
+  saveNewOrder: (data: any) => Promise<{ success: boolean; orderId?: string; error?: string }>;
+  listOrders: () => Promise<any[]>;
 }
 
 // Perluas tipe 'Window' global

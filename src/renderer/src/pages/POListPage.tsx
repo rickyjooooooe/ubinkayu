@@ -12,11 +12,11 @@ import RequestTable from '../components/Requesttable';
 interface POListPageProps {
   poList: POHeader[];
   onAddPO: () => void;
-  onDeletePO: (poId: string, poInfo: string) => Promise<void>;
-  onEditPO: (po: POHeader) => void;
-  onShowDetail: (po: POHeader) => void;
-  onShowProgress: (po: POHeader) => void;
-  onConfirmRequest: (po: POHeader) => void; // [BARU] callback untuk admin konfirmasi request
+  onDeletePO: (orderId: string, OrderInfo: string) => Promise<void>;
+  onEditPO: (order: POHeader) => void;
+  onShowDetail: (order: POHeader) => void;
+  onShowProgress: (order: POHeader) => void;
+  onConfirmRequest: (order: POHeader) => void; // [BARU] callback untuk admin konfirmasi request
   isLoading: boolean;
   currentUser: User | null;
 }
@@ -56,17 +56,17 @@ const POListPage: React.FC<POListPageProps> = ({
   const { requestedPOs, regularPOs } = useMemo(() => {
     if (!poList) return { requestedPOs: [], regularPOs: [] }
     return {
-      requestedPOs: poList.filter((po) => po.status === 'Requested'),
-      regularPOs: poList.filter((po) => po.status !== 'Requested'),
+      requestedPOs: poList.filter((order) => order.status === 'Requested'),
+      regularPOs: poList.filter((order) => order.status !== 'Requested'),
     }
   }, [poList])
 
   // Pisahkan PO berdasarkan tab aktif (hanya dari regularPOs)
   const listByTab = useMemo(() => {
     if (activeTab === 'active') {
-      return regularPOs.filter((po) => po.status !== 'Completed' && po.status !== 'Cancelled');
+      return regularPOs.filter((order) => order.status !== 'Completed' && order.status !== 'Cancelled');
     }
-    return regularPOs.filter((po) => po.status === 'Completed');
+    return regularPOs.filter((order) => order.status === 'Completed');
   }, [regularPOs, activeTab]);
 
   const {
@@ -76,10 +76,10 @@ const POListPage: React.FC<POListPageProps> = ({
     const woodTypes = new Set<string>(), productTypes = new Set<string>(),
       marketingNames = new Set<string>(), reviserNames = new Set<string>(),
       finishingNames = new Set<string>(), sampleNames = new Set<string>();
-    (regularPOs || []).forEach((po) => {
-      if (po.acc_marketing) marketingNames.add(po.acc_marketing);
-      if (po.lastRevisedBy && po.lastRevisedBy !== 'N/A') reviserNames.add(po.lastRevisedBy);
-      (po.items || []).forEach((item) => {
+    (regularPOs || []).forEach((order) => {
+      if (order.acc_marketing) marketingNames.add(order.acc_marketing);
+      if (order.lastRevisedBy && order.lastRevisedBy !== 'N/A') reviserNames.add(order.lastRevisedBy);
+      (order.items || []).forEach((item) => {
         if (item.wood_type) woodTypes.add(item.wood_type);
         if (item.product_name) productTypes.add(item.product_name);
         if (item.finishing) finishingNames.add(item.finishing);
@@ -104,24 +104,24 @@ const POListPage: React.FC<POListPageProps> = ({
     let processedPOs = [...listByTab];
     if (filters.searchQuery) {
       const query = filters.searchQuery.toLowerCase();
-      processedPOs = processedPOs.filter((po) =>
-        po.po_number?.toLowerCase().includes(query) || po.project_name?.toLowerCase().includes(query)
+      processedPOs = processedPOs.filter((order) =>
+        order.order_number?.toLowerCase().includes(query) || order.project_name?.toLowerCase().includes(query)
       );
     }
-    if (filters.status !== 'all') processedPOs = processedPOs.filter((po) => (po.status || 'Open').toLowerCase() === filters.status.toLowerCase());
-    if (filters.priority !== 'all') processedPOs = processedPOs.filter((po) => (po.priority || 'Normal').toLowerCase() === filters.priority.toLowerCase());
-    if (filters.dateFrom) { try { const d = new Date(filters.dateFrom); processedPOs = processedPOs.filter(po => { try { return new Date(po.created_at) >= d } catch { return false } }) } catch { } }
-    if (filters.dateTo) { try { const d = new Date(filters.dateTo); d.setDate(d.getDate() + 1); processedPOs = processedPOs.filter(po => { try { return new Date(po.created_at) < d } catch { return false } }) } catch { } }
-    if (filters.deadlineDate) { try { processedPOs = processedPOs.filter((po) => { if (!po.deadline) return false; try { return new Date(po.deadline).toISOString().split('T')[0] === filters.deadlineDate } catch { return false } }) } catch { } }
-    if (filters.marketing !== 'all') processedPOs = processedPOs.filter((po) => po.acc_marketing === filters.marketing);
+    if (filters.status !== 'all') processedPOs = processedPOs.filter((order) => (order.status || 'Open').toLowerCase() === filters.status.toLowerCase());
+    if (filters.priority !== 'all') processedPOs = processedPOs.filter((order) => (order.priority || 'Normal').toLowerCase() === filters.priority.toLowerCase());
+    if (filters.dateFrom) { try { const d = new Date(filters.dateFrom); processedPOs = processedPOs.filter(order => { try { return new Date(order.created_at) >= d } catch { return false } }) } catch { } }
+    if (filters.dateTo) { try { const d = new Date(filters.dateTo); d.setDate(d.getDate() + 1); processedPOs = processedPOs.filter(order => { try { return new Date(order.created_at) < d } catch { return false } }) } catch { } }
+    if (filters.deadlineDate) { try { processedPOs = processedPOs.filter((order) => { if (!order.deadline) return false; try { return new Date(order.deadline).toISOString().split('T')[0] === filters.deadlineDate } catch { return false } }) } catch { } }
+    if (filters.marketing !== 'all') processedPOs = processedPOs.filter((order) => order.acc_marketing === filters.marketing);
     if (filters.lastRevisedBy !== 'all') {
-      if (filters.lastRevisedBy === 'N/A') processedPOs = processedPOs.filter(po => !po.lastRevisedBy || po.lastRevisedBy === 'N/A');
-      else processedPOs = processedPOs.filter(po => po.lastRevisedBy === filters.lastRevisedBy);
+      if (filters.lastRevisedBy === 'N/A') processedPOs = processedPOs.filter(order => !order.lastRevisedBy || order.lastRevisedBy === 'N/A');
+      else processedPOs = processedPOs.filter(order => order.lastRevisedBy === filters.lastRevisedBy);
     }
     const itemFiltersActive = filters.woodType !== 'all' || filters.productType !== 'all' || filters.finishing !== 'all' || filters.sample !== 'all';
     if (itemFiltersActive) {
-      processedPOs = processedPOs.filter(po =>
-        (po.items || []).some(item =>
+      processedPOs = processedPOs.filter(order =>
+        (order.items || []).some(item =>
           (filters.woodType === 'all' || item.wood_type === filters.woodType) &&
           (filters.productType === 'all' || item.product_name === filters.productType) &&
           (filters.finishing === 'all' || item.finishing === filters.finishing) &&
@@ -148,7 +148,7 @@ const POListPage: React.FC<POListPageProps> = ({
   const filteredWoodKubikasi = useMemo(() => {
     if (filters.woodType === 'all') return null;
     let total = 0;
-    filteredAndSortedPOs.forEach(po => (po.items || []).forEach(item => { if (item.wood_type === filters.woodType) total += Number(item.kubikasi || 0) }));
+    filteredAndSortedPOs.forEach(order => (order.items || []).forEach(item => { if (item.wood_type === filters.woodType) total += Number(item.kubikasi || 0) }));
     return total;
   }, [filteredAndSortedPOs, filters.woodType]);
 
@@ -214,8 +214,8 @@ const POListPage: React.FC<POListPageProps> = ({
     }
     if (activeTab === 'completed') {
       return (
-        <div className="po-table-container">
-          <table className="po-table">
+        <div className="order-table-container">
+          <table className="order-table">
             <thead>
               <tr>
                 <th>Customer</th><th>Revisi Oleh</th><th>Tgl Revisi</th>
@@ -225,31 +225,31 @@ const POListPage: React.FC<POListPageProps> = ({
               </tr>
             </thead>
             <tbody>
-              {filteredAndSortedPOs.map((po) => (
-                <tr key={po.id}>
-                  <td><div className="customer-cell"><strong>{po.project_name}</strong><span>No: {po.po_number}</span></div></td>
-                  <td>{po.lastRevisedBy && po.lastRevisedBy !== 'N/A' ? po.lastRevisedBy : '-'}</td>
-                  <td>{formatDateTime(po.lastRevisedDate)}</td>
-                  <td>{formatDate(po.created_at)}</td>
-                  <td>{formatDate(po.deadline)}</td>
+              {filteredAndSortedPOs.map((order) => (
+                <tr key={order.id}>
+                  <td><div className="customer-cell"><strong>{order.project_name}</strong><span>No: {order.order_number}</span></div></td>
+                  <td>{order.lastRevisedBy && order.lastRevisedBy !== 'N/A' ? order.lastRevisedBy : '-'}</td>
+                  <td>{formatDateTime(order.lastRevisedDate)}</td>
+                  <td>{formatDate(order.created_at)}</td>
+                  <td>{formatDate(order.deadline)}</td>
                   <td className="product-list-cell">
-                    {po.items && po.items.length > 0 ? (
-                      <ul>{po.items.map((item) => (
-                        <li key={item.id || `${po.id}-${item.product_name}`}>
+                    {order.items && order.items.length > 0 ? (
+                      <ul>{order.items.map((item) => (
+                        <li key={item.id || `${order.id}-${item.product_name}`}>
                           <span>{item.product_name} ({item.wood_type || 'N/A'})</span>
                           <strong>{Number(item.kubikasi || 0).toFixed(4)} m³</strong>
                         </li>
                       ))}</ul>
                     ) : <span>-</span>}
                   </td>
-                  <td>{Number(po.kubikasi_total || 0).toFixed(3)} m³</td>
-                  <td>{po.acc_marketing || '-'}</td>
+                  <td>{Number(order.kubikasi_total || 0).toFixed(3)} m³</td>
+                  <td>{order.acc_marketing || '-'}</td>
                   <td>
                     <div className="actions-cell">
-                      <Button variant="secondary" onClick={() => onShowDetail(po)}>Detail</Button>
-                      {po.pdf_link && (
+                      <Button variant="secondary" onClick={() => onShowDetail(order)}>Detail</Button>
+                      {order.pdf_link && (
                         // @ts-ignore
-                        <Button variant="secondary" onClick={() => window.api?.openExternalLink(po.pdf_link)}>PDF</Button>
+                        <Button variant="secondary" onClick={() => window.api?.openExternalLink(order.pdf_link)}>PDF</Button>
                       )}
                     </div>
                   </td>
@@ -265,10 +265,10 @@ const POListPage: React.FC<POListPageProps> = ({
           poList={filteredAndSortedPOs}
           onShowDetail={onShowDetail}
           onEditPO={onEditPO}
-          onDeletePO={(poId) => {
-            const poInfo = regularPOs?.find(p => p.id === poId);
-            const infoString = poInfo ? `${poInfo.po_number} - ${poInfo.project_name}` : poId;
-            return onDeletePO(poId, infoString);
+          onDeletePO={(orderId) => {
+            const OrderInfo = regularPOs?.find(p => p.id === orderId);
+            const infoString = OrderInfo ? `${OrderInfo.order_number} - ${OrderInfo.project_name}` : orderId;
+            return onDeletePO(orderId, infoString);
           }}
           onShowProgress={onShowProgress}
           currentUserRole={userRole}
@@ -302,7 +302,7 @@ const POListPage: React.FC<POListPageProps> = ({
       <FilterPanel
         filters={filters}
         onFilterChange={handleFilterChange}
-        poCount={{ displayed: filteredAndSortedPOs.length, total: listByTab.length }}
+        orderCount={{ displayed: filteredAndSortedPOs.length, total: listByTab.length }}
         availableWoodTypes={availableWoodTypes}
         availableProductTypes={availableProductTypes}
         availableMarketing={availableMarketing}
@@ -315,10 +315,10 @@ const POListPage: React.FC<POListPageProps> = ({
 
       <div className="view-switcher">
         <button className={`view-switcher-btn ${activeTab === 'active' ? 'active' : ''}`} onClick={() => setActiveTab('active')}>
-          Order Aktif ({activeTab === 'active' ? filteredAndSortedPOs.length : listByTab.filter(po => po.status !== 'Completed' && po.status !== 'Cancelled').length})
+          Order Aktif ({activeTab === 'active' ? filteredAndSortedPOs.length : listByTab.filter(order => order.status !== 'Completed' && order.status !== 'Cancelled').length})
         </button>
         <button className={`view-switcher-btn ${activeTab === 'completed' ? 'active' : ''}`} onClick={() => setActiveTab('completed')}>
-          Order Selesai ({activeTab === 'completed' ? filteredAndSortedPOs.length : listByTab.filter(po => po.status === 'Completed').length})
+          Order Selesai ({activeTab === 'completed' ? filteredAndSortedPOs.length : listByTab.filter(order => order.status === 'Completed').length})
         </button>
       </div>
 

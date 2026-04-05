@@ -12,11 +12,11 @@ import {
   deleteGoogleDriveFile,
   processBatch,
   PRODUCTION_STAGES,
-  generatePOJpeg,
+  generateOrderJpeg,
   getAuth,
   PO_ARCHIVE_FOLDER_ID,
   PROGRESS_PHOTOS_FOLDER_ID,
-  uploadPoPhoto,
+  UploadOrderPhoto,
   DEFAULT_STAGE_DURATIONS
 } from './_helpers.js'
 import { google } from 'googleapis'
@@ -50,19 +50,19 @@ const getYearMonth = (dateString) => {
 }
 
 // --- [BARU] Helper untuk filter PO berdasarkan marketing ---
-function filterPOsByMarketing(poList, user) {
+function filterOrdersByMarketing(poList, user) {
   if (!user || user.role !== 'marketing') {
     return poList
   }
   const marketingName = user.name.toLowerCase()
   console.log(`[Vercel Filter] Menerapkan filter Marketing untuk: ${user.name}`)
-  return poList.filter((po) => {
+  return poList.filter((order) => {
     let poMarketing = ''
-    // Handle jika 'po' adalah GoogleSpreadsheetRow atau plain object
-    if (typeof po.get === 'function') {
-      poMarketing = po.get('acc_marketing')
+    // Handle jika 'order' adalah GoogleSpreadsheetRow atau plain object
+    if (typeof order.get === 'function') {
+      poMarketing = order.get('acc_marketing')
     } else {
-      poMarketing = po.acc_marketing
+      poMarketing = order.acc_marketing
     }
     return poMarketing?.toLowerCase() === marketingName
   })
@@ -146,32 +146,32 @@ export async function handleLoginUser(req, res) {
   }
 }
 
-async function latestRevisionNumberForPO(poId, doc) {
-  const sh = await getSheet(doc, 'purchase_orders')
+async function latestRevisionNumberForOrder(orderId, doc) {
+  const sh = await getSheet(doc, 'orders')
   const rows = await sh.getRows()
   const nums = rows
-    .filter((r) => String(r.get('id')).trim() === String(poId).trim())
+    .filter((r) => String(r.get('id')).trim() === String(orderId).trim())
     .map((r) => toNum(r.get('revision_number'), -1))
   return nums.length ? Math.max(...nums) : -1
 }
-async function getHeaderForRevision(poId, rev, doc) {
-  const sh = await getSheet(doc, 'purchase_orders')
+async function getHeaderForRevision(orderId, rev, doc) {
+  const sh = await getSheet(doc, 'orders')
   const rows = await sh.getRows()
   return (
     rows.find(
       (r) =>
-        String(r.get('id')).trim() === String(poId).trim() &&
+        String(r.get('id')).trim() === String(orderId).trim() &&
         toNum(r.get('revision_number'), -1) === toNum(rev, -1)
     ) || null
   )
 }
-async function getItemsByRevision(poId, rev, doc) {
-  const sh = await getSheet(doc, 'purchase_order_items')
+async function getItemsByRevision(orderId, rev, doc) {
+  const sh = await getSheet(doc, 'order_items')
   const rows = await sh.getRows()
   return rows
     .filter(
       (r) =>
-        String(r.get('purchase_order_id')).trim() === String(poId).trim() &&
+        String(r.get('order_id')).trim() === String(orderId).trim() &&
         toNum(r.get('revision_number'), -1) === toNum(rev, -1)
     )
     .map((r) => r.toObject())
@@ -181,24 +181,24 @@ async function getItemsByRevision(poId, rev, doc) {
 // KUMPULAN SEMUA LOGIKA API
 // =================================================================
 
-export async function handleListPOs(req, res) {
-  console.log('🏁 [Vercel] handleListPOs function started!')
+export async function handleListOrders(req, res) {
+  console.log('🏁 [Vercel] handleListOrders function started!')
   const { user } = req.body // [TERIMA USER]
 
   try {
     const doc = await openDoc()
-    const poSheet = getSheet(doc, 'purchase_orders')
-    const itemSheet = getSheet(doc, 'purchase_order_items')
+    const Sheet = getSheet(doc, 'orders')
+    const itemSheet = getSheet(doc, 'order_items')
     const progressSheet = getSheet(doc, 'progress_tracking')
 
-    const [poRows, itemRows, progressRows] = await Promise.all([
-      poSheet.getRows(),
+    const [orderRows, itemRows, progressRows] = await Promise.all([
+      Sheet.getRows(),
       itemSheet.getRows(),
       progressSheet.getRows()
     ])
 
     const byId = new Map()
-    for (const r of poRows) {
+    for (const r of orderRows) {
       const id = String(r.get('id')).trim()
       const rev = toNum(r.get('revision_number'), -1)
       const keep = byId.get(id)
@@ -206,12 +206,12 @@ export async function handleListPOs(req, res) {
         byId.set(id, { rev, row: r })
       }
     }
-    const latestPoRows = Array.from(byId.values()).map(({ row }) => row)
+    const latestOrderRows = Array.from(byId.values()).map(({ row }) => row)
 
     const progressByCompositeKey = progressRows.reduce((acc, row) => {
-      const poId = row.get('purchase_order_id')
-      const itemId = row.get('purchase_order_item_id')
-      const key = `${poId}-${itemId}`
+      const orderId = row.get('order_id')
+      const itemId = row.get('order_item_id')
+      const key = `${orderId}-${itemId}`
       if (!acc[key]) acc[key] = []
       acc[key].push({ stage: row.get('stage'), created_at: row.get('created_at') })
       return acc
@@ -219,39 +219,39 @@ export async function handleListPOs(req, res) {
 
     const itemObjects = itemRows.map((item) => item.toObject())
 
-    const itemsByPoId = itemObjects.reduce((acc, item) => {
-      const poId = item.purchase_order_id
-      if (!acc[poId]) acc[poId] = []
-      acc[poId].push(item)
+    const itemsByOrderId = itemObjects.reduce((acc, item) => {
+      const orderId = item.order_id
+      if (!acc[orderId]) acc[orderId] = []
+      acc[orderId].push(item)
       return acc
     }, {})
 
     const latestItemRevisions = new Map()
     itemObjects.forEach((item) => {
-      const poId = item.purchase_order_id
+      const orderId = item.order_id
       const rev = toNum(item.revision_number, -1)
-      const current = latestItemRevisions.get(poId)
+      const current = latestItemRevisions.get(orderId)
       if (current === undefined || rev > current) {
-        latestItemRevisions.set(poId, rev)
+        latestItemRevisions.set(orderId, rev)
       }
     })
 
-    const result = latestPoRows.map((po) => {
-      const poObject = po.toObject()
-      const poId = poObject.id
-      const latestRev = latestItemRevisions.get(poId) ?? -1
+    const result = latestOrderRows.map((order) => {
+      const orderObject = order.toObject()
+      const orderId = orderObject.id
+      const latestRev = latestItemRevisions.get(orderId) ?? -1
 
-      const poItems = (itemsByPoId[poId] || []).filter(
+      const orderItems = (itemsByOrderId[orderId] || []).filter(
         (item) => toNum(item.revision_number, -1) === latestRev
       )
 
-      let poProgress = 0
-      if (poItems.length > 0) {
+      let orderProgress = 0
+      if (orderItems.length > 0) {
         let totalPercentage = 0
-        poItems.forEach((item) => {
+        orderItems.forEach((item) => {
           const itemId = item.id
           const stages = PRODUCTION_STAGES
-          const compositeKey = `${poId}-${itemId}`
+          const compositeKey = `${orderId}-${itemId}`
           const itemProgressHistory = progressByCompositeKey[compositeKey] || []
           let latestStageIndex = -1
           if (itemProgressHistory.length > 0) {
@@ -264,17 +264,17 @@ export async function handleListPOs(req, res) {
             latestStageIndex >= 0 ? ((latestStageIndex + 1) / stages.length) * 100 : 0
           totalPercentage += itemPercentage
         })
-        poProgress = totalPercentage / poItems.length
+        orderProgress = totalPercentage / orderItems.length
       }
 
-      let finalStatus = poObject.status
+      let finalStatus = orderObject.status
       let completed_at = null
       if (finalStatus !== 'Cancelled') {
-        const roundedProgress = Math.round(poProgress)
+        const roundedProgress = Math.round(orderProgress)
         if (roundedProgress >= 100) {
           finalStatus = 'Completed'
-          const allProgressForPO = progressRows
-            .filter((row) => row.get('purchase_order_id') === poId)
+          const allProgressForOrder = progressRows
+            .filter((row) => row.get('order_id') === orderId)
             .map((row) => {
               try {
                 return new Date(row.get('created_at')).getTime()
@@ -284,8 +284,8 @@ export async function handleListPOs(req, res) {
             })
             .filter((time) => time > 0)
 
-          if (allProgressForPO.length > 0) {
-            completed_at = new Date(Math.max(...allProgressForPO)).toISOString()
+          if (allProgressForOrder.length > 0) {
+            completed_at = new Date(Math.max(...allProgressForOrder)).toISOString()
           }
         } else if (roundedProgress > 0) {
           finalStatus = 'In Progress'
@@ -294,42 +294,42 @@ export async function handleListPOs(req, res) {
         }
       }
 
-      const lastRevisedBy = poObject.revised_by || 'N/A'
-      const lastRevisedDate = poObject.created_at
+      const lastRevisedBy = orderObject.revised_by || 'N/A'
+      const lastRevisedDate = orderObject.created_at
 
       return {
-        ...poObject,
-        items: poItems,
-        progress: Math.round(poProgress),
+        ...orderObject,
+        items: orderItems,
+        progress: Math.round(orderProgress),
         status: finalStatus,
         completed_at: completed_at,
-        pdf_link: poObject.pdf_link || null,
-        acc_marketing: poObject.acc_marketing || '',
-        alamat_kirim: poObject.alamat_kirim || '',
+        pdf_link: orderObject.pdf_link || null,
+        acc_marketing: orderObject.acc_marketing || '',
+        alamat_kirim: orderObject.alamat_kirim || '',
         lastRevisedBy: lastRevisedBy,
         lastRevisedDate: lastRevisedDate
       }
     })
 
     // [FILTER MARKETING]
-    const filteredResult = filterPOsByMarketing(result, user)
+    const filteredResult = filterOrdersByMarketing(result, user)
 
     return res.status(200).json(filteredResult)
   } catch (err) {
-    console.error('💥 [Vercel] ERROR in handleListPOs:', err.message, err.stack)
+    console.error('💥 [Vercel] ERROR in handleListOrders:', err.message, err.stack)
     return res.status(500).json({
       success: false,
-      error: 'Internal Server Error processing listPOs',
+      error: 'Internal Server Error processing listOrders',
       details: err.message
     })
   }
 }
 
-async function generateAndUploadPO(poData, revisionNumber) {
+async function generateAndUploadOrder(orderData, revisionNumber) {
   let auth
   try {
     console.log('⏳ [Vercel] Generating JPEG buffer...')
-    const jpegResult = await generatePOJpeg(poData, revisionNumber)
+    const jpegResult = await generateOrderJpeg(orderData, revisionNumber)
     if (!jpegResult.success || !jpegResult.buffer) {
       throw new Error(jpegResult.error || 'Gagal membuat buffer JPEG.')
     }
@@ -408,10 +408,10 @@ async function generateAndUploadPO(poData, revisionNumber) {
   }
 }
 
-export async function handleSaveNewPO(req, res) {
-  console.log('🏁 [Vercel] handleSaveNewPO started!')
+export async function handleSaveNewOrder(req, res) {
+  console.log('🏁 [Vercel] handleSaveNewOrder started!')
   const data = req.body
-  let doc, newPoRow
+  let doc, NewOrderRow
   let totalFileSize = 0
   let fotoLink = 'Tidak ada foto'
   let photoSize = 0
@@ -419,15 +419,15 @@ export async function handleSaveNewPO(req, res) {
   try {
     doc = await openDoc()
     const now = new Date().toISOString()
-    const poSheet = getSheet(doc, 'purchase_orders')
-    const itemSheet = getSheet(doc, 'purchase_order_items')
-    const poId = await getNextIdFromSheet(poSheet)
+    const Sheet = getSheet(doc, 'orders')
+    const itemSheet = getSheet(doc, 'order_items')
+    const orderId = await getNextIdFromSheet(Sheet)
 
     if (data.poPhotoBase64) {
       console.log('  -> Uploading PO Reference Photo...')
-      const photoResult = await uploadPoPhoto(
+      const photoResult = await UploadOrderPhoto(
         data.poPhotoBase64,
-        data.nomorPo || `PO-${poId}`,
+        data.nomorOrder || `PO-${orderId}`,
         data.namaCustomer || 'Customer'
       )
       if (photoResult.success) {
@@ -438,10 +438,10 @@ export async function handleSaveNewPO(req, res) {
       }
     }
 
-    const newPoRowData = {
-      id: poId,
+    const NewOrderRowData = {
+      id: orderId,
       revision_number: 0,
-      po_number: data.nomorPo || `PO-${poId}`,
+      order_number: data.nomorOrder || `PO-${orderId}`,
       project_name: data.namaCustomer || 'N/A',
       deadline: data.tanggalKirim || null,
       status: 'Open',
@@ -457,8 +457,8 @@ export async function handleSaveNewPO(req, res) {
       revised_by: 'N/A'
     }
 
-    console.log('📝 [Vercel] Adding new PO row to sheet:', newPoRowData.po_number)
-    newPoRow = await poSheet.addRow(newPoRowData)
+    console.log('📝 [Vercel] Adding new PO row to sheet:', NewOrderRowData.order_number)
+    NewOrderRow = await Sheet.addRow(NewOrderRowData)
 
     const itemsWithIds = []
     let nextItemId = parseInt(await getNextIdFromSheet(itemSheet), 10)
@@ -467,7 +467,7 @@ export async function handleSaveNewPO(req, res) {
       const kubikasiItem = toNum(raw.kubikasi, 0)
       const newItem = {
         id: nextItemId,
-        purchase_order_id: poId,
+        order_id: orderId,
         revision_number: 0,
         kubikasi: kubikasiItem,
         ...clean
@@ -478,29 +478,29 @@ export async function handleSaveNewPO(req, res) {
     })
 
     if (itemsToAdd.length > 0) {
-      console.log(`➕ [Vercel] Adding ${itemsToAdd.length} items to sheet for PO ${poId}`)
+      console.log(`➕ [Vercel] Adding ${itemsToAdd.length} items to sheet for PO ${orderId}`)
       await itemSheet.addRows(itemsToAdd)
     } else {
-      console.warn(`⚠️ [Vercel] No items provided for new PO ${poId}`)
+      console.warn(`⚠️ [Vercel] No items provided for new PO ${orderId}`)
     }
 
-    const poDataForUpload = {
-      po_number: newPoRowData.po_number,
-      project_name: newPoRowData.project_name,
-      deadline: newPoRowData.deadline,
-      priority: newPoRowData.priority,
-      notes: newPoRowData.notes,
-      created_at: newPoRowData.created_at,
-      kubikasi_total: newPoRowData.kubikasi_total,
-      acc_marketing: newPoRowData.acc_marketing,
-      alamat_kirim: newPoRowData.alamat_kirim,
+    const orderDataForUpload = {
+      order_number: NewOrderRowData.order_number,
+      project_name: NewOrderRowData.project_name,
+      deadline: NewOrderRowData.deadline,
+      priority: NewOrderRowData.priority,
+      notes: NewOrderRowData.notes,
+      created_at: NewOrderRowData.created_at,
+      kubikasi_total: NewOrderRowData.kubikasi_total,
+      acc_marketing: NewOrderRowData.acc_marketing,
+      alamat_kirim: NewOrderRowData.alamat_kirim,
       foto_link: fotoLink,
       items: itemsWithIds,
       poPhotoBase64: data.poPhotoBase64
     }
 
-    console.log(`⏳ [Vercel] Calling generateAndUploadPO for PO ${poId}...`)
-    const uploadResult = await generateAndUploadPO(poDataForUpload, 0)
+    console.log(`⏳ [Vercel] Calling generateAndUploadOrder for PO ${orderId}...`)
+    const uploadResult = await generateAndUploadOrder(orderDataForUpload, 0)
 
     let jpegSize = 0
     if (uploadResult.success) {
@@ -508,22 +508,22 @@ export async function handleSaveNewPO(req, res) {
     }
     totalFileSize = photoSize + jpegSize
 
-    console.log(`🔄 [Vercel] Updating pdf_link & file_size_bytes for PO ${poId}...`)
-    newPoRow.set(
+    console.log(`🔄 [Vercel] Updating pdf_link & file_size_bytes for PO ${orderId}...`)
+    NewOrderRow.set(
       'pdf_link',
       uploadResult.success ? uploadResult.link : `ERROR: ${uploadResult.error || 'Unknown'}`
     )
-    newPoRow.set('file_size_bytes', totalFileSize)
-    await newPoRow.save({ raw: false })
+    NewOrderRow.set('file_size_bytes', totalFileSize)
+    await NewOrderRow.save({ raw: false })
     console.log(`✅ [Vercel] pdf_link & file_size_bytes updated.`)
 
-    return res.status(200).json({ success: true, poId, revision_number: 0 })
+    return res.status(200).json({ success: true, orderId, revision_number: 0 })
   } catch (err) {
-    console.error('💥 [Vercel] ERROR in handleSaveNewPO:', err.message, err.stack)
-    if (newPoRow && !newPoRow.get('pdf_link')?.startsWith('http')) {
+    console.error('💥 [Vercel] ERROR in handleSaveNewOrder:', err.message, err.stack)
+    if (NewOrderRow && !NewOrderRow.get('pdf_link')?.startsWith('http')) {
       try {
-        newPoRow.set('pdf_link', `ERROR: ${err.message}`)
-        await newPoRow.save()
+        NewOrderRow.set('pdf_link', `ERROR: ${err.message}`)
+        await NewOrderRow.save()
       } catch (saveErr) {
         console.error('  -> Failed to save error link back to sheet:', saveErr.message)
       }
@@ -545,20 +545,20 @@ export async function handleRequestProject(req, res) {
   console.log('🏁 [Vercel] handleRequestProject started!')
   const data = req.body
   // Validasi minimal
-  if (!data.nomorPo || !data.namaCustomer) {
+  if (!data.nomorOrder || !data.namaCustomer) {
     return res.status(400).json({ success: false, error: 'Nomor PO dan Nama Customer harus diisi.' })
   }
 
   try {
     const doc = await openDoc()
     const now = new Date().toISOString()
-    const poSheet = getSheet(doc, 'purchase_orders')
-    const poId = await getNextIdFromSheet(poSheet)
+    const Sheet = getSheet(doc, 'orders')
+    const orderId = await getNextIdFromSheet(Sheet)
 
-    const newPoRowData = {
-      id: poId,
+    const NewOrderRowData = {
+      id: orderId,
       revision_number: 0,
-      po_number: data.nomorPo,
+      order_number: data.nomorOrder,
       project_name: data.namaCustomer,
       deadline: data.tanggalKirim || null,
       status: 'Requested',           // <-- Status khusus request
@@ -575,24 +575,24 @@ export async function handleRequestProject(req, res) {
       project_valuation: toNum(data.project_valuation, 0), // <-- Kolom baru
     }
 
-    console.log(`📝 [Vercel] Adding new Request row: ${newPoRowData.po_number}`)
-    let newPoRow = await poSheet.addRow(newPoRowData)
+    console.log(`📝 [Vercel] Adding new Request row: ${NewOrderRowData.order_number}`)
+    let NewOrderRow = await Sheet.addRow(NewOrderRowData)
 
     // Upload foto referensi jika ada
     if (data.poPhotoBase64) {
       console.log('  -> Uploading reference photo for request...')
-      const photoResult = await uploadPoPhoto(
+      const photoResult = await UploadOrderPhoto(
         data.poPhotoBase64,
-        data.nomorPo,
+        data.nomorOrder,
         data.namaCustomer
       )
       if (photoResult.success) {
-        newPoRow.set('foto_link', photoResult.link)
-        await newPoRow.save({ raw: false })
+        NewOrderRow.set('foto_link', photoResult.link)
+        await NewOrderRow.save({ raw: false })
       }
     }
 
-    return res.status(200).json({ success: true, poId, message: 'Request project berhasil dikirim.' })
+    return res.status(200).json({ success: true, orderId, message: 'Request project berhasil dikirim.' })
   } catch (err) {
     console.error('💥 [Vercel] ERROR in handleRequestProject:', err.message, err.stack)
     return res.status(500).json({ success: false, error: 'Gagal menyimpan request project.', details: err.message })
@@ -602,32 +602,32 @@ export async function handleRequestProject(req, res) {
 // ---------------------------------------------------------------
 // HANDLER 2: Admin konfirmasi request → isi items → jadi PO resmi
 // Endpoint: POST /api/confirm-request
-// Body: { poId, items, revisedBy, kubikasi_total }
+// Body: { orderId, items, revisedBy, kubikasi_total }
 // ---------------------------------------------------------------
 export async function handleConfirmRequest(req, res) {
   console.log('🏁 [Vercel] handleConfirmRequest started!')
   const data = req.body
-  const { poId, items, revisedBy } = data
+  const { orderId, items, revisedBy } = data
 
-  if (!poId) return res.status(400).json({ success: false, error: 'PO ID harus diisi.' })
+  if (!orderId) return res.status(400).json({ success: false, error: 'PO ID harus diisi.' })
   if (!items || items.length === 0) return res.status(400).json({ success: false, error: 'Minimal satu item harus diisi.' })
 
   let doc, targetRow
   try {
     doc = await openDoc()
-    const poSheet = getSheet(doc, 'purchase_orders')
-    const itemSheet = getSheet(doc, 'purchase_order_items')
+    const Sheet = getSheet(doc, 'orders')
+    const itemSheet = getSheet(doc, 'order_items')
 
     // Ambil row PO yang berstatus Requested
-    const allPoRows = await poSheet.getRows()
-    targetRow = allPoRows.find(
+    const allOrderRows = await Sheet.getRows()
+    targetRow = allOrderRows.find(
       (r) =>
-        String(r.get('id')).trim() === String(poId).trim() &&
+        String(r.get('id')).trim() === String(orderId).trim() &&
         toNum(r.get('revision_number'), -1) === 0
     )
 
     if (!targetRow) {
-      return res.status(404).json({ success: false, error: `PO dengan ID ${poId} tidak ditemukan.` })
+      return res.status(404).json({ success: false, error: `PO dengan ID ${orderId} tidak ditemukan.` })
     }
 
     if (targetRow.get('status') !== 'Requested') {
@@ -644,7 +644,7 @@ export async function handleConfirmRequest(req, res) {
       const kubikasiItem = toNum(raw.kubikasi, 0)
       const newItem = {
         id: nextItemId,
-        purchase_order_id: poId,
+        order_id: orderId,
         revision_number: 0,
         kubikasi: kubikasiItem,
         ...clean
@@ -654,7 +654,7 @@ export async function handleConfirmRequest(req, res) {
       return newItem
     })
 
-    console.log(`➕ [Vercel Confirm] Adding ${itemsToAdd.length} items for PO ${poId}`)
+    console.log(`➕ [Vercel Confirm] Adding ${itemsToAdd.length} items for PO ${orderId}`)
     await itemSheet.addRows(itemsToAdd)
 
     const kubikasiTotal = itemsWithIds.reduce((acc, item) => acc + toNum(item.kubikasi, 0), 0)
@@ -665,11 +665,11 @@ export async function handleConfirmRequest(req, res) {
     targetRow.set('revised_by', revisedBy || 'Admin')
     targetRow.set('pdf_link', 'generating...')
     await targetRow.save({ raw: false })
-    console.log(`✅ [Vercel Confirm] PO ${poId} status updated to Open`)
+    console.log(`✅ [Vercel Confirm] PO ${orderId} status updated to Open`)
 
     // Generate & upload JPEG PO
-    const poDataForUpload = {
-      po_number: targetRow.get('po_number'),
+    const orderDataForUpload = {
+      order_number: targetRow.get('order_number'),
       project_name: targetRow.get('project_name'),
       deadline: targetRow.get('deadline'),
       priority: targetRow.get('priority'),
@@ -682,8 +682,8 @@ export async function handleConfirmRequest(req, res) {
       items: itemsWithIds,
     }
 
-    console.log(`⏳ [Vercel Confirm] Generating & uploading JPEG for PO ${poId}...`)
-    const uploadResult = await generateAndUploadPO(poDataForUpload, 0)
+    console.log(`⏳ [Vercel Confirm] Generating & uploading JPEG for PO ${orderId}...`)
+    const uploadResult = await generateAndUploadOrder(orderDataForUpload, 0)
 
     targetRow.set(
       'pdf_link',
@@ -691,9 +691,9 @@ export async function handleConfirmRequest(req, res) {
     )
     targetRow.set('file_size_bytes', uploadResult.size || 0)
     await targetRow.save({ raw: false })
-    console.log(`✅ [Vercel Confirm] PO ${poId} fully confirmed as Open PO.`)
+    console.log(`✅ [Vercel Confirm] PO ${orderId} fully confirmed as Open PO.`)
 
-    return res.status(200).json({ success: true, poId, message: 'PO berhasil dibuat dari request.' })
+    return res.status(200).json({ success: true, orderId, message: 'PO berhasil dibuat dari request.' })
   } catch (err) {
     console.error('💥 [Vercel] ERROR in handleConfirmRequest:', err.message, err.stack)
     // Rollback status jika JPEG gagal tapi row sudah diupdate
@@ -708,8 +708,8 @@ export async function handleConfirmRequest(req, res) {
     return res.status(500).json({ success: false, error: 'Gagal konfirmasi request.', details: err.message })
   }
 }
-export async function handleUpdatePO(req, res) {
-  console.log('🏁 [Vercel] handleUpdatePO started!')
+export async function handleUpdateOrder(req, res) {
+  console.log('🏁 [Vercel] handleUpdateOrder started!')
   const data = req.body
   let doc, newRevisionRow
   let totalFileSize = 0
@@ -719,16 +719,16 @@ export async function handleUpdatePO(req, res) {
   try {
     doc = await openDoc()
     const now = new Date().toISOString()
-    const poSheet = await getSheet(doc, 'purchase_orders')
-    const itemSheet = await getSheet(doc, 'purchase_order_items')
+    const Sheet = await getSheet(doc, 'orders')
+    const itemSheet = await getSheet(doc, 'order_items')
 
-    const poId = String(data.poId)
-    if (!poId) {
+    const orderId = String(data.orderId)
+    if (!orderId) {
       throw new Error('PO ID is required for update.')
     }
 
-    const latestRevNum = await latestRevisionNumberForPO(poId, doc)
-    const prevRow = latestRevNum >= 0 ? await getHeaderForRevision(poId, latestRevNum, doc) : null
+    const latestRevNum = await latestRevisionNumberForOrder(orderId, doc)
+    const prevRow = latestRevNum >= 0 ? await getHeaderForRevision(orderId, latestRevNum, doc) : null
     const prevData = prevRow ? prevRow.toObject() : {}
     const newRevNum = latestRevNum >= 0 ? latestRevNum + 1 : 0
 
@@ -736,9 +736,9 @@ export async function handleUpdatePO(req, res) {
 
     if (data.poPhotoBase64) {
       console.log(`[Vercel Update] 📸 New reference photo detected (Base64), uploading...`)
-      const photoResult = await uploadPoPhoto(
+      const photoResult = await UploadOrderPhoto(
         data.poPhotoBase64,
-        data.nomorPo ?? prevData.po_number ?? `PO-${poId}`,
+        data.nomorOrder ?? prevData.order_number ?? `PO-${orderId}`,
         data.namaCustomer ?? prevData.project_name ?? 'Customer'
       )
       if (photoResult.success) {
@@ -754,9 +754,9 @@ export async function handleUpdatePO(req, res) {
     }
 
     const newRevisionRowData = {
-      id: poId,
+      id: orderId,
       revision_number: newRevNum,
-      po_number: data.nomorPo ?? prevData.po_number ?? `PO-${poId}`,
+      order_number: data.nomorOrder ?? prevData.order_number ?? `PO-${orderId}`,
       project_name: data.namaCustomer ?? prevData.project_name ?? 'N/A',
       deadline: data.tanggalKirim ?? prevData.deadline ?? null,
       status: data.status ?? prevData.status ?? 'Open',
@@ -771,8 +771,8 @@ export async function handleUpdatePO(req, res) {
       revised_by: data.revisedBy || 'Unknown',
       alamat_kirim: data.alamatKirim ?? prevData.alamat_kirim ?? ''
     }
-    console.log(`📝 [Vercel Update] Adding revision ${newRevNum} row data for PO ${poId}`)
-    newRevisionRow = await poSheet.addRow(newRevisionRowData)
+    console.log(`📝 [Vercel Update] Adding revision ${newRevNum} row data for PO ${orderId}`)
+    newRevisionRow = await Sheet.addRow(newRevisionRowData)
 
     const itemsWithIds = []
     let nextItemId = parseInt(await getNextIdFromSheet(itemSheet), 10)
@@ -780,7 +780,7 @@ export async function handleUpdatePO(req, res) {
       const clean = scrubItemPayload(raw)
       const newItem = {
         id: nextItemId,
-        purchase_order_id: poId,
+        order_id: orderId,
         revision_number: newRevNum,
         kubikasi: toNum(raw.kubikasi, 0),
         ...clean
@@ -792,20 +792,20 @@ export async function handleUpdatePO(req, res) {
 
     if (itemsToAdd.length > 0) {
       console.log(
-        `➕ [Vercel Update] Adding ${itemsToAdd.length} items to sheet for PO ${poId} Rev ${newRevNum}`
+        `➕ [Vercel Update] Adding ${itemsToAdd.length} items to sheet for PO ${orderId} Rev ${newRevNum}`
       )
       await itemSheet.addRows(itemsToAdd)
     } else {
-      console.warn(`⚠️ [Vercel Update] No items provided for PO ${poId} Rev ${newRevNum}`)
+      console.warn(`⚠️ [Vercel Update] No items provided for PO ${orderId} Rev ${newRevNum}`)
     }
 
-    const poDataForUpload = {
+    const orderDataForUpload = {
       ...newRevisionRowData,
       poPhotoBase64: data.poPhotoBase64,
       items: itemsWithIds
     }
-    console.log(`⏳ [Vercel Update] Calling generateAndUploadPO for PO ${poId} Rev ${newRevNum}...`)
-    const uploadResult = await generateAndUploadPO(poDataForUpload, newRevNum)
+    console.log(`⏳ [Vercel Update] Calling generateAndUploadOrder for PO ${orderId} Rev ${newRevNum}...`)
+    const uploadResult = await generateAndUploadOrder(orderDataForUpload, newRevNum)
 
     let jpegSize = 0
     if (uploadResult.success) {
@@ -825,7 +825,7 @@ export async function handleUpdatePO(req, res) {
     }
 
     console.log(
-      `🔄 [Vercel Update] Updating pdf_link & file_size_bytes for PO ${poId} Rev ${newRevNum}...`
+      `🔄 [Vercel Update] Updating pdf_link & file_size_bytes for PO ${orderId} Rev ${newRevNum}...`
     )
     newRevisionRow.set(
       'pdf_link',
@@ -839,7 +839,7 @@ export async function handleUpdatePO(req, res) {
 
     return res.status(200).json({ success: true, revision_number: newRevNum })
   } catch (err) {
-    console.error('💥 [Vercel Update] ERROR in handleUpdatePO:', err.message, err.stack)
+    console.error('💥 [Vercel Update] ERROR in handleUpdateOrder:', err.message, err.stack)
     if (newRevisionRow) {
       try {
         if (!newRevisionRow.get('pdf_link')?.startsWith('http')) {
@@ -856,26 +856,26 @@ export async function handleUpdatePO(req, res) {
   }
 }
 
-export async function handleDeletePO(req, res) {
-  const { poId } = req.query
+export async function handleDeleteOrder(req, res) {
+  const { orderId } = req.query
   const startTime = Date.now()
   const doc = await openDoc()
-  const [poSheet, itemSheet, progressSheet] = await Promise.all([
-    getSheet(doc, 'purchase_orders'),
-    getSheet(doc, 'purchase_order_items'),
+  const [Sheet, itemSheet, progressSheet] = await Promise.all([
+    getSheet(doc, 'orders'),
+    getSheet(doc, 'order_items'),
     getSheet(doc, 'progress_tracking')
   ])
-  const [poRows, itemRows, progressRows] = await Promise.all([
-    poSheet.getRows(),
+  const [orderRows, itemRows, progressRows] = await Promise.all([
+    Sheet.getRows(),
     itemSheet.getRows(),
     progressSheet.getRows()
   ])
-  const toDelHdr = poRows.filter((r) => String(r.get('id')).trim() === String(poId).trim())
+  const toDelHdr = orderRows.filter((r) => String(r.get('id')).trim() === String(orderId).trim())
   const toDelItems = itemRows.filter(
-    (r) => String(r.get('purchase_order_id')).trim() === String(poId).trim()
+    (r) => String(r.get('order_id')).trim() === String(orderId).trim()
   )
-  const poProgressRows = progressRows.filter(
-    (r) => String(r.get('purchase_order_id')).trim() === String(poId).trim()
+  const orderProgressRows = progressRows.filter(
+    (r) => String(r.get('order_id')).trim() === String(orderId).trim()
   )
   const fileIds = new Set()
   toDelHdr.forEach((poRow) => {
@@ -895,7 +895,7 @@ export async function handleDeletePO(req, res) {
       if (fileId) fileIds.add(fileId)
     }
   })
-  poProgressRows.forEach((progressRow) => {
+  orderProgressRows.forEach((progressRow) => {
     const photoUrl = progressRow.get('photo_url')
     if (photoUrl) {
       const fileId = extractGoogleDriveFileId(photoUrl)
@@ -917,7 +917,7 @@ export async function handleDeletePO(req, res) {
     })
   }
   const sheetDeletions = []
-  poProgressRows.reverse().forEach((row) => sheetDeletions.push(row.delete()))
+  orderProgressRows.reverse().forEach((row) => sheetDeletions.push(row.delete()))
   toDelHdr.reverse().forEach((row) => sheetDeletions.push(row.delete()))
   toDelItems.reverse().forEach((row) => sheetDeletions.push(row.delete()))
   await Promise.allSettled(sheetDeletions)
@@ -925,7 +925,7 @@ export async function handleDeletePO(req, res) {
   const summary = {
     deletedRevisions: toDelHdr.length,
     deletedItems: toDelItems.length,
-    deletedProgressRecords: poProgressRows.length,
+    deletedProgressRecords: orderProgressRows.length,
     deletedFiles: deletedFilesCount,
     failedFileDeletes: failedFilesCount,
     duration: `${duration}s`,
@@ -943,31 +943,31 @@ export async function handleGetProducts(req, res) {
   return res.status(200).json(products)
 }
 
-export async function handleListPOItems(req, res) {
-  const { poId } = req.query
+export async function handleListorderItems(req, res) {
+  const { orderId } = req.query
   const doc = await openDoc()
-  const latestRev = await latestRevisionNumberForPO(String(poId), doc)
+  const latestRev = await latestRevisionNumberForOrder(String(orderId), doc)
   if (latestRev < 0) return res.status(200).json([])
-  const items = await getItemsByRevision(String(poId), latestRev, doc)
+  const items = await getItemsByRevision(String(orderId), latestRev, doc)
   return res.status(200).json(items)
 }
 
 export async function handleGetRevisionHistory(req, res) {
-  const { poId } = req.query
+  const { orderId } = req.query
   const doc = await openDoc()
-  const poSheet = await getSheet(doc, 'purchase_orders')
-  const allPoRows = await poSheet.getRows()
-  const metas = allPoRows
-    .filter((r) => String(r.get('id')).trim() === String(poId).trim())
+  const Sheet = await getSheet(doc, 'orders')
+  const allOrderRows = await Sheet.getRows()
+  const metas = allOrderRows
+    .filter((r) => String(r.get('id')).trim() === String(orderId).trim())
     .map((r) => r.toObject())
-  const itemSheet = await getSheet(doc, 'purchase_order_items')
+  const itemSheet = await getSheet(doc, 'order_items')
   const allItemRows = await itemSheet.getRows()
   const history = metas.map((m) => ({
     revision: m,
     items: allItemRows
       .filter(
         (r) =>
-          String(r.get('purchase_order_id')) === String(poId) &&
+          String(r.get('order_id')) === String(orderId) &&
           toNum(r.get('revision_number'), -1) === toNum(m.revision_number, -1)
       )
       .map((r) => r.toObject())
@@ -976,10 +976,10 @@ export async function handleGetRevisionHistory(req, res) {
   return res.status(200).json(history)
 }
 
-export async function handlePreviewPO(req, res) {
+export async function handlePreviewOrder(req, res) {
   const data = req.body
-  const poData = { ...data, created_at: new Date().toISOString() }
-  const result = await generatePOJpeg(poData, 'preview')
+  const orderData = { ...data, created_at: new Date().toISOString() }
+  const result = await generateOrderJpeg(orderData, 'preview')
   if (result.success) {
     const base64Data = result.buffer.toString('base64')
     return res.status(200).json({ success: true, base64Data: base64Data })
@@ -988,13 +988,13 @@ export async function handlePreviewPO(req, res) {
 }
 
 export async function handleUpdateItemProgress(req, res) {
-  const { poId, itemId, poNumber, stage, notes, photoBase64 } = req.body
+  const { orderId, itemId, orderNumber, stage, notes, photoBase64 } = req.body
   let photoLink = null
   if (photoBase64) {
     const auth = getAuth()
     const drive = google.drive({ version: 'v3', auth })
     const timestamp = new Date().toISOString().replace(/:/g, '-')
-    const fileName = `PO-${poNumber}_ITEM-${itemId}_${timestamp}.jpg`
+    const fileName = `PO-${orderNumber}_ITEM-${itemId}_${timestamp}.jpg`
     const imageBuffer = Buffer.from(photoBase64, 'base64')
     const bufferStream = new stream.PassThrough()
     bufferStream.end(imageBuffer)
@@ -1011,8 +1011,8 @@ export async function handleUpdateItemProgress(req, res) {
   const nextId = await getNextIdFromSheet(progressSheet)
   await progressSheet.addRow({
     id: nextId,
-    purchase_order_id: poId,
-    purchase_order_item_id: itemId,
+    order_id: orderId,
+    order_item_id: itemId,
     stage: stage,
     notes: notes || '',
     photo_url: photoLink || '',
@@ -1021,55 +1021,55 @@ export async function handleUpdateItemProgress(req, res) {
   return res.status(200).json({ success: true })
 }
 
-export async function handleGetActivePOsWithProgress(req, res) {
-  console.log('--- 🏃‍♂️ EXECUTING handleGetActivePOsWithProgress ---')
+export async function handleGetActiveOrdersWithProgress(req, res) {
+  console.log('--- 🏃‍♂️ EXECUTING handleGetActiveOrdersWithProgress ---')
   const { user } = req.body // [TERIMA USER]
 
   const doc = await openDoc()
-  const [poSheet, itemSheet, progressSheet] = await Promise.all([
-    getSheet(doc, 'purchase_orders'),
-    getSheet(doc, 'purchase_order_items'),
+  const [Sheet, itemSheet, progressSheet] = await Promise.all([
+    getSheet(doc, 'orders'),
+    getSheet(doc, 'order_items'),
     getSheet(doc, 'progress_tracking')
   ])
-  const [poRows, itemRows, progressRows] = await Promise.all([
-    poSheet.getRows(),
+  const [orderRows, itemRows, progressRows] = await Promise.all([
+    Sheet.getRows(),
     itemSheet.getRows(),
     progressSheet.getRows()
   ])
   const byId = new Map()
-  poRows.forEach((r) => {
+  orderRows.forEach((r) => {
     const id = String(r.get('id')).trim(),
       rev = toNum(r.get('revision_number'), -1)
     if (!byId.has(id) || rev > (byId.get(id)?.rev ?? -1)) byId.set(id, { rev, row: r })
   })
-  const activePOs = Array.from(byId.values())
+  const activeOrders = Array.from(byId.values())
     .map(({ row }) => row)
     .filter((r) => r.get('status') !== 'Completed' && r.get('status') !== 'Cancelled')
   const progressByCompositeKey = progressRows.reduce((acc, row) => {
-    const key = `${row.get('purchase_order_id')}-${row.get('purchase_order_item_id')}`
+    const key = `${row.get('order_id')}-${row.get('order_item_id')}`
     if (!acc[key]) acc[key] = []
     acc[key].push({ stage: row.get('stage'), created_at: row.get('created_at') })
     return acc
   }, {})
   const latestItemRevisions = itemRows.reduce((acc, item) => {
-    const poId = item.get('purchase_order_id'),
+    const orderId = item.get('order_id'),
       rev = toNum(item.get('revision_number'), -1)
-    if (!acc.has(poId) || rev > acc.get(poId)) acc.set(poId, rev)
+    if (!acc.has(orderId) || rev > acc.get(orderId)) acc.set(orderId, rev)
     return acc
   }, new Map())
-  const result = activePOs.map((po) => {
-    const poId = po.get('id'),
-      latestRev = latestItemRevisions.get(poId) ?? -1
-    const poItems = itemRows.filter(
+  const result = activeOrders.map((order) => {
+    const orderId = order.get('id'),
+      latestRev = latestItemRevisions.get(orderId) ?? -1
+    const orderItems = itemRows.filter(
       (item) =>
-        item.get('purchase_order_id') === poId &&
+        item.get('order_id') === orderId &&
         toNum(item.get('revision_number'), -1) === latestRev
     )
-    if (poItems.length === 0) return { ...po.toObject(), progress: 0 }
-    let totalPercentage = poItems.reduce((total, item) => {
+    if (orderItems.length === 0) return { ...order.toObject(), progress: 0 }
+    let totalPercentage = orderItems.reduce((total, item) => {
       const itemId = item.get('id'),
         stages = PRODUCTION_STAGES
-      const itemProgress = progressByCompositeKey[`${poId}-${itemId}`] || []
+      const itemProgress = progressByCompositeKey[`${orderId}-${itemId}`] || []
       let latestStageIndex = -1
       if (itemProgress.length > 0) {
         const latest = [...itemProgress].sort(
@@ -1079,44 +1079,44 @@ export async function handleGetActivePOsWithProgress(req, res) {
       }
       return total + (latestStageIndex >= 0 ? ((latestStageIndex + 1) / stages.length) * 100 : 0)
     }, 0)
-    return { ...po.toObject(), progress: Math.round(totalPercentage / poItems.length) }
+    return { ...order.toObject(), progress: Math.round(totalPercentage / orderItems.length) }
   })
 
   // [FILTER MARKETING]
-  const filteredResult = filterPOsByMarketing(result, user)
+  const filteredResult = filterOrdersByMarketing(result, user)
 
   return res.status(200).json(filteredResult)
 }
 
-export async function handleGetPOItemsWithDetails(req, res) {
-  const { poId } = req.query
+export async function handleGetorderItemsWithDetails(req, res) {
+  const { orderId } = req.query
   const doc = await openDoc()
-  const [poSheet, itemSheet, progressSheet] = await Promise.all([
-    getSheet(doc, 'purchase_orders'),
-    getSheet(doc, 'purchase_order_items'),
+  const [Sheet, itemSheet, progressSheet] = await Promise.all([
+    getSheet(doc, 'orders'),
+    getSheet(doc, 'order_items'),
     getSheet(doc, 'progress_tracking')
   ])
-  const [poRows, itemRows, progressRows] = await Promise.all([
-    poSheet.getRows(),
+  const [orderRows, itemRows, progressRows] = await Promise.all([
+    Sheet.getRows(),
     itemSheet.getRows(),
     progressSheet.getRows()
   ])
 
-  const allItemsForPO = itemRows.filter((r) => r.get('purchase_order_id') === poId)
-  if (allItemsForPO.length === 0) {
+  const allItemsForOrder = itemRows.filter((r) => r.get('order_id') === orderId)
+  if (allItemsForOrder.length === 0) {
     return res.status(200).json([])
   }
-  const latestItemRev = Math.max(-1, ...allItemsForPO.map((r) => toNum(r.get('revision_number'))))
-  const poData = poRows.find(
-    (r) => r.get('id') === poId && toNum(r.get('revision_number')) === latestItemRev
+  const latestItemRev = Math.max(-1, ...allItemsForOrder.map((r) => toNum(r.get('revision_number'))))
+  const orderData = orderRows.find(
+    (r) => r.get('id') === orderId && toNum(r.get('revision_number')) === latestItemRev
   )
 
-  if (!poData) {
+  if (!orderData) {
     throw new Error(`Data PO untuk revisi terbaru (rev ${latestItemRev}) tidak ditemukan.`)
   }
 
-  const poStartDate = new Date(poData.get('created_at'))
-  const poDeadline = new Date(poData.get('deadline'))
+  const poStartDate = new Date(orderData.get('created_at'))
+  const poDeadline = new Date(orderData.get('deadline'))
 
   let stageDeadlines = []
   let cumulativeDate = new Date(poStartDate)
@@ -1129,20 +1129,20 @@ export async function handleGetPOItemsWithDetails(req, res) {
     return { stageName, deadline: new Date(cumulativeDate).toISOString() }
   })
 
-  const poItemsForLatestRev = allItemsForPO.filter(
+  const orderItemsForLatestRev = allItemsForOrder.filter(
     (item) => toNum(item.get('revision_number'), -1) === latestItemRev
   )
 
   const progressByItemId = progressRows
-    .filter((row) => row.get('purchase_order_id') === poId)
+    .filter((row) => row.get('order_id') === orderId)
     .reduce((acc, row) => {
-      const itemId = row.get('purchase_order_item_id')
+      const itemId = row.get('order_item_id')
       if (!acc[itemId]) acc[itemId] = []
       acc[itemId].push(row.toObject())
       return acc
     }, {})
 
-  const result = poItemsForLatestRev.map((item) => {
+  const result = orderItemsForLatestRev.map((item) => {
     const itemObject = item.toObject()
     const itemId = String(itemObject.id)
     const history = (progressByItemId[itemId] || []).sort(
@@ -1159,27 +1159,27 @@ export async function handleGetRecentProgressUpdates(req, res) {
   const { user } = req.body // [TERIMA USER]
 
   const doc = await openDoc()
-  const [progressSheet, itemSheet, poSheet] = await Promise.all([
+  const [progressSheet, itemSheet, Sheet] = await Promise.all([
     getSheet(doc, 'progress_tracking'),
-    getSheet(doc, 'purchase_order_items'),
-    getSheet(doc, 'purchase_orders')
+    getSheet(doc, 'order_items'),
+    getSheet(doc, 'orders')
   ])
-  const [progressRows, itemRows, poRows] = await Promise.all([
+  const [progressRows, itemRows, orderRows] = await Promise.all([
     progressSheet.getRows(),
     itemSheet.getRows(),
-    poSheet.getRows()
+    Sheet.getRows()
   ])
 
   // [FILTER MARKETING]
-  const filteredPoRows = filterPOsByMarketing(poRows, user)
+  const filteredOrderRows = filterOrdersByMarketing(orderRows, user)
 
   const itemMap = new Map(itemRows.map((r) => [r.get('id'), r.toObject()]))
-  const poMap = filteredPoRows.reduce((acc, r) => {
-    const poId = r.get('id'),
+  const orderMap = filteredOrderRows.reduce((acc, r) => {
+    const orderId = r.get('id'),
       rev = toNum(r.get('revision_number'))
     // Gunakan .get() karena 'r' adalah GoogleSpreadsheetRow
-    if (!acc.has(poId) || rev > toNum(acc.get(poId).revision_number)) {
-      acc.set(poId, r.toObject())
+    if (!acc.has(orderId) || rev > toNum(acc.get(orderId).revision_number)) {
+      acc.set(orderId, r.toObject())
     }
     return acc
   }, new Map())
@@ -1190,11 +1190,11 @@ export async function handleGetRecentProgressUpdates(req, res) {
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, limit)
     .map((update) => {
-      const item = itemMap.get(update.purchase_order_item_id)
+      const item = itemMap.get(update.order_item_id)
       if (!item) return null
-      const po = poMap.get(item.purchase_order_id)
-      if (!po) return null
-      return { ...update, item_name: item.product_name, po_number: po.po_number }
+      const order = orderMap.get(item.order_id)
+      if (!order) return null
+      return { ...update, item_name: item.product_name, order_number: order.order_number }
     })
     .filter(Boolean)
   return res.status(200).json(enrichedUpdates)
@@ -1205,45 +1205,45 @@ export async function handleGetAttentionData(req, res) {
   const { user } = req.body // [TERIMA USER]
 
   const doc = await openDoc()
-  const [poSheet, itemSheet, progressSheet] = await Promise.all([
-    getSheet(doc, 'purchase_orders'),
-    getSheet(doc, 'purchase_order_items'),
+  const [Sheet, itemSheet, progressSheet] = await Promise.all([
+    getSheet(doc, 'orders'),
+    getSheet(doc, 'order_items'),
     getSheet(doc, 'progress_tracking')
   ])
-  const [poRows, itemRows, progressRows] = await Promise.all([
-    poSheet.getRows(),
+  const [orderRows, itemRows, progressRows] = await Promise.all([
+    Sheet.getRows(),
     itemSheet.getRows(),
     progressSheet.getRows()
   ])
 
   // [FILTER MARKETING]
-  const filteredPoRows = filterPOsByMarketing(poRows, user)
+  const filteredOrderRows = filterOrdersByMarketing(orderRows, user)
 
-  const latestPoMap = filteredPoRows.reduce((map, r) => {
+  const latestOrderMap = filteredOrderRows.reduce((map, r) => {
     const id = r.get('id'),
       rev = toNum(r.get('revision_number'))
     if (!map.has(id) || rev > map.get(id).rev) map.set(id, { rev, row: r })
     return map
   }, new Map())
   const latestItemRevisions = itemRows.reduce((map, item) => {
-    const poId = item.get('purchase_order_id'),
+    const orderId = item.get('order_id'),
       rev = toNum(item.get('revision_number'), -1)
-    if (!map.has(poId) || rev > map.get(poId)) map.set(poId, rev)
+    if (!map.has(orderId) || rev > map.get(orderId)) map.set(orderId, rev)
     return map
   }, new Map())
   const activeItems = itemRows.filter((item) => {
-    const poData = latestPoMap.get(item.get('purchase_order_id'))
-    if (!poData) return false
-    const po = poData.row
-    const latestRev = latestItemRevisions.get(item.get('purchase_order_id')) ?? -1
+    const orderData = latestOrderMap.get(item.get('order_id'))
+    if (!orderData) return false
+    const order = orderData.row
+    const latestRev = latestItemRevisions.get(item.get('order_id')) ?? -1
     return (
-      po.get('status') !== 'Completed' &&
-      po.get('status') !== 'Cancelled' &&
+      order.get('status') !== 'Completed' &&
+      order.get('status') !== 'Cancelled' &&
       toNum(item.get('revision_number')) === latestRev
     )
   })
   const progressByCompositeKey = progressRows.reduce((acc, row) => {
-    const key = `${row.get('purchase_order_id')}-${row.get('purchase_order_item_id')}`
+    const key = `${row.get('order_id')}-${row.get('order_item_id')}`
     if (!acc[key]) acc[key] = []
     acc[key].push({ stage: row.get('stage'), created_at: row.get('created_at') })
     return acc
@@ -1255,21 +1255,21 @@ export async function handleGetAttentionData(req, res) {
     sevenDaysFromNow = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000),
     fiveDaysAgo = new Date(today.getTime() - 5 * 24 * 60 * 60 * 1000)
   activeItems.forEach((item) => {
-    const po = latestPoMap.get(item.get('purchase_order_id')).row
-    const itemProgress = progressByCompositeKey[`${po.get('id')}-${item.get('id')}`] || []
+    const order = latestOrderMap.get(item.get('order_id')).row
+    const itemProgress = progressByCompositeKey[`${order.get('id')}-${item.get('id')}`] || []
     const latestProgress = [...itemProgress].sort(
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     )[0]
     const currentStage = latestProgress ? latestProgress.stage : 'Belum Mulai'
     const attentionItem = {
-      po_number: po.get('po_number'),
+      order_number: order.get('order_number'),
       item_name: item.get('product_name'),
       current_stage: currentStage
     }
-    if (po.get('priority') === 'Urgent') urgentItems.push(attentionItem)
-    const deadline = new Date(po.get('deadline'))
+    if (order.get('priority') === 'Urgent') urgentItems.push(attentionItem)
+    const deadline = new Date(order.get('deadline'))
     if (deadline <= sevenDaysFromNow && deadline >= today && currentStage !== 'Siap Kirim') {
-      nearingDeadline.push({ ...attentionItem, deadline: po.get('deadline') })
+      nearingDeadline.push({ ...attentionItem, deadline: order.get('deadline') })
     }
     if (
       latestProgress &&
@@ -1288,31 +1288,31 @@ export async function handleGetProductSalesAnalysis(req, res) {
 
   try {
     const doc = await openDoc()
-    const [itemSheet, poSheet, productSheet] = await Promise.all([
-      getSheet(doc, 'purchase_order_items'),
-      getSheet(doc, 'purchase_orders'),
+    const [itemSheet, Sheet, productSheet] = await Promise.all([
+      getSheet(doc, 'order_items'),
+      getSheet(doc, 'orders'),
       getSheet(doc, 'product_master')
     ])
-    const [itemRowsRaw, poRowsRaw, productRowsRaw] = await Promise.all([
+    const [itemRowsRaw, orderRowsRaw, productRowsRaw] = await Promise.all([
       itemSheet.getRows(),
-      poSheet.getRows(),
+      Sheet.getRows(),
       productSheet.getRows()
     ])
 
     const itemRows = itemRowsRaw.map((r) => r.toObject())
-    const poRowsRawObjects = poRowsRaw.map((r) => r.toObject()) // Data mentah
+    const orderRowsRawObjects = orderRowsRaw.map((r) => r.toObject()) // Data mentah
     const productRows = productRowsRaw.map((r) => r.toObject())
 
     // [FILTER MARKETING]
-    const poRows = filterPOsByMarketing(poRowsRawObjects, user)
+    const orderRows = filterOrdersByMarketing(orderRowsRawObjects, user)
 
-    const latestPoMap = poRows.reduce((map, po) => {
-      const poId = po.id
-      const rev = toNum(po.revision_number)
-      if (po.status !== 'Cancelled') {
-        const existing = map.get(poId)
+    const latestOrderMap = orderRows.reduce((map, order) => {
+      const orderId = order.id
+      const rev = toNum(order.revision_number)
+      if (order.status !== 'Cancelled') {
+        const existing = map.get(orderId)
         if (!existing || rev > existing.revision_number) {
-          map.set(poId, { ...po, revision_number: rev })
+          map.set(orderId, { ...order, revision_number: rev })
         }
       }
       return map
@@ -1328,8 +1328,8 @@ export async function handleGetProductSalesAnalysis(req, res) {
     const soldProductNames = new Set()
 
     itemRows.forEach((item) => {
-      const po = latestPoMap.get(item.purchase_order_id)
-      if (!po || toNum(item.revision_number) !== po.revision_number) {
+      const order = latestOrderMap.get(item.order_id)
+      if (!order || toNum(item.revision_number) !== order.revision_number) {
         return
       }
 
@@ -1337,7 +1337,7 @@ export async function handleGetProductSalesAnalysis(req, res) {
       const quantity = toNum(item.quantity, 0)
       const kubikasi = toNum(item.kubikasi, 0)
       const woodType = item.wood_type
-      const yearMonth = getYearMonth(po.created_at)
+      const yearMonth = getYearMonth(order.created_at)
 
       if (!productName || quantity <= 0) return
 
@@ -1361,32 +1361,32 @@ export async function handleGetProductSalesAnalysis(req, res) {
         woodTypeDistribution[woodType] = (woodTypeDistribution[woodType] || 0) + quantity
 
       try {
-        salesByDateForTrend.push({ date: new Date(po.created_at), name: productName, quantity })
+        salesByDateForTrend.push({ date: new Date(order.created_at), name: productName, quantity })
       } catch {}
     })
 
-    latestPoMap.forEach((po) => {
-      const marketingName = po.acc_marketing || 'N/A'
-      const customerName = po.project_name
-      const kubikasiTotalPO = toNum(po.kubikasi_total, 0)
-      const yearMonth = getYearMonth(po.created_at)
+    latestOrderMap.forEach((order) => {
+      const marketingName = order.acc_marketing || 'N/A'
+      const customerName = order.project_name
+      const kubikasiTotalOrder = toNum(order.kubikasi_total, 0)
+      const yearMonth = getYearMonth(order.created_at)
 
       salesByMarketing[marketingName] = salesByMarketing[marketingName] || {
         totalKubikasi: 0,
-        poCount: 0,
+        orderCount: 0,
         name: marketingName
       }
-      salesByMarketing[marketingName].totalKubikasi += kubikasiTotalPO
-      salesByMarketing[marketingName].poCount += 1
+      salesByMarketing[marketingName].totalKubikasi += kubikasiTotalOrder
+      salesByMarketing[marketingName].orderCount += 1
 
       if (yearMonth) {
         monthlySalesByMarketing[yearMonth] = monthlySalesByMarketing[yearMonth] || {}
         monthlySalesByMarketing[yearMonth][marketingName] =
-          (monthlySalesByMarketing[yearMonth][marketingName] || 0) + kubikasiTotalPO
+          (monthlySalesByMarketing[yearMonth][marketingName] || 0) + kubikasiTotalOrder
       }
 
       if (customerName)
-        customerByKubikasi[customerName] = (customerByKubikasi[customerName] || 0) + kubikasiTotalPO
+        customerByKubikasi[customerName] = (customerByKubikasi[customerName] || 0) + kubikasiTotalOrder
     })
 
     const topSellingProducts = Object.values(salesByProduct)
@@ -1497,26 +1497,26 @@ export async function handleGetSalesItemData(req, res) {
   const { user } = req.body // [TERIMA USER]
 
   const doc = await openDoc()
-  const [itemSheet, poSheet] = await Promise.all([
-    getSheet(doc, 'purchase_order_items'),
-    getSheet(doc, 'purchase_orders')
+  const [itemSheet, Sheet] = await Promise.all([
+    getSheet(doc, 'order_items'),
+    getSheet(doc, 'orders')
   ])
-  const [itemRows, poRows] = await Promise.all([itemSheet.getRows(), poSheet.getRows()])
+  const [itemRows, orderRows] = await Promise.all([itemSheet.getRows(), Sheet.getRows()])
 
   // [FILTER MARKETING]
-  const filteredPoRows = filterPOsByMarketing(poRows, user)
+  const filteredOrderRows = filterOrdersByMarketing(orderRows, user)
 
-  const poMap = filteredPoRows.reduce((map, r) => {
-    const poId = r.get('id'),
+  const orderMap = filteredOrderRows.reduce((map, r) => {
+    const orderId = r.get('id'),
       rev = toNum(r.get('revision_number'))
-    if (!map.has(poId) || rev > map.get(poId).revision_number) map.set(poId, r.toObject())
+    if (!map.has(orderId) || rev > map.get(orderId).revision_number) map.set(orderId, r.toObject())
     return map
   }, new Map())
   const combinedData = itemRows
     .map((item) => {
-      const po = poMap.get(item.get('purchase_order_id'))
-      if (!po) return null
-      return { ...item.toObject(), customer_name: po.project_name, po_date: po.created_at }
+      const order = orderMap.get(item.get('order_id'))
+      if (!order) return null
+      return { ...item.toObject(), customer_name: order.project_name, order_date: order.created_at }
     })
     .filter(Boolean)
   return res.status(200).json(combinedData)
@@ -1537,31 +1537,31 @@ export async function handleAddNewProduct(req, res) {
 }
 
 export async function handleListPORevisions(req, res) {
-  const { poId } = req.query
+  const { orderId } = req.query
   const doc = await openDoc()
-  const poSheet = await getSheet(doc, 'purchase_orders')
-  const rows = await poSheet.getRows()
+  const Sheet = await getSheet(doc, 'orders')
+  const rows = await Sheet.getRows()
   const revisions = rows
-    .filter((r) => String(r.get('id')).trim() === String(poId).trim())
+    .filter((r) => String(r.get('id')).trim() === String(orderId).trim())
     .map((r) => r.toObject())
     .sort((a, b) => a.revision_number - b.revision_number)
   return res.status(200).json(revisions)
 }
 
-export async function handleListPOItemsByRevision(req, res) {
-  const { poId, revisionNumber } = req.query
+export async function handleListorderItemsByRevision(req, res) {
+  const { orderId, revisionNumber } = req.query
   const doc = await openDoc()
-  const items = await getItemsByRevision(String(poId), toNum(revisionNumber, 0), doc)
+  const items = await getItemsByRevision(String(orderId), toNum(revisionNumber, 0), doc)
   return res.status(200).json(items)
 }
 
 export async function handleUpdateStageDeadline(req, res) {
-  const { poId, itemId, stageName, newDeadline } = req.body
+  const { orderId, itemId, stageName, newDeadline } = req.body
   const doc = await openDoc()
   const sheet = await getSheet(doc, 'progress_tracking')
   await sheet.addRow({
-    purchase_order_id: poId,
-    purchase_order_item_id: itemId,
+    order_id: orderId,
+    order_item_id: itemId,
     stage: `DEADLINE_OVERRIDE: ${stageName}`,
     custom_deadline: newDeadline,
     created_at: new Date().toISOString()
@@ -1571,67 +1571,67 @@ export async function handleUpdateStageDeadline(req, res) {
 
 // --- AI CHAT HELPERS (VERCEL) ---
 
-async function listPOsForChat(user) {
+async function listOrdersforChat(user) {
   const doc = await openDoc()
-  const poSheet = getSheet(doc, 'purchase_orders')
-  const itemSheet = getSheet(doc, 'purchase_order_items')
+  const Sheet = getSheet(doc, 'orders')
+  const itemSheet = getSheet(doc, 'order_items')
   const progressSheet = getSheet(doc, 'progress_tracking')
 
-  const [poRowsRaw, itemRowsRaw, progressRowsRaw] = await Promise.all([
-    poSheet.getRows(),
+  const [orderRowsRaw, itemRowsRaw, progressRowsRaw] = await Promise.all([
+    Sheet.getRows(),
     itemSheet.getRows(),
     progressSheet.getRows()
   ])
 
   // [FILTER MARKETING]
-  const poRowsFiltered = filterPOsByMarketing(poRowsRaw, user)
+  const orderRowsFiltered = filterOrdersByMarketing(orderRowsRaw, user)
 
-  const poRows = poRowsFiltered.map((r) => r.toObject())
+  const orderRows = orderRowsFiltered.map((r) => r.toObject())
   const itemRows = itemRowsRaw.map((r) => r.toObject())
   const progressRows = progressRowsRaw.map((r) => r.toObject())
 
   const byId = new Map()
-  for (const r of poRows) {
+  for (const r of orderRows) {
     const id = String(r.id).trim()
     const rev = toNum(r.revision_number, -1)
     if (!byId.has(id) || rev > byId.get(id).rev) {
       byId.set(id, { rev, row: r })
     }
   }
-  const latestPoObjects = Array.from(byId.values()).map(({ row }) => row)
+  const latestorderObjects = Array.from(byId.values()).map(({ row }) => row)
 
   const progressByCompositeKey = progressRows.reduce((acc, row) => {
-    const key = `${row.purchase_order_id}-${row.purchase_order_item_id}`
+    const key = `${row.order_id}-${row.order_item_id}`
     if (!acc[key]) acc[key] = []
     acc[key].push({ stage: row.stage, created_at: row.created_at })
     return acc
   }, {})
 
   const latestItemRevisions = itemRows.reduce((acc, item) => {
-    const poId = item.purchase_order_id
+    const orderId = item.order_id
     const rev = toNum(item.revision_number, -1)
-    if (!acc.has(poId) || rev > acc.get(poId)) {
-      acc.set(poId, rev)
+    if (!acc.has(orderId) || rev > acc.get(orderId)) {
+      acc.set(orderId, rev)
     }
     return acc
   }, new Map())
 
-  const result = latestPoObjects.map((poObject) => {
-    const poId = poObject.id
-    const latestRev = latestItemRevisions.get(poId) ?? -1
-    const poItems = itemRows.filter(
-      (item) => item.purchase_order_id === poId && toNum(item.revision_number, -1) === latestRev
+  const result = latestorderObjects.map((orderObject) => {
+    const orderId = orderObject.id
+    const latestRev = latestItemRevisions.get(orderId) ?? -1
+    const orderItems = itemRows.filter(
+      (item) => item.order_id === orderId && toNum(item.revision_number, -1) === latestRev
     )
 
-    let poProgress = 0
-    let finalStatus = poObject.status || 'Open'
+    let orderProgress = 0
+    let finalStatus = orderObject.status || 'Open'
     let completed_at = null
 
-    if (poItems.length > 0) {
+    if (orderItems.length > 0) {
       let totalPercentage = 0
-      poItems.forEach((item) => {
+      orderItems.forEach((item) => {
         const itemId = item.id
-        const itemProgressHistory = progressByCompositeKey[`${poId}-${itemId}`] || []
+        const itemProgressHistory = progressByCompositeKey[`${orderId}-${itemId}`] || []
         let latestStageIndex = -1
 
         if (itemProgressHistory.length > 0) {
@@ -1644,18 +1644,18 @@ async function listPOsForChat(user) {
           latestStageIndex >= 0 ? ((latestStageIndex + 1) / PRODUCTION_STAGES.length) * 100 : 0
         totalPercentage += itemPercentage
       })
-      poProgress = totalPercentage / poItems.length
+      orderProgress = totalPercentage / orderItems.length
     }
 
-    const roundedProgress = Math.round(poProgress)
+    const roundedProgress = Math.round(orderProgress)
     if (finalStatus !== 'Cancelled') {
       if (roundedProgress >= 100) {
         finalStatus = 'Completed'
-        const allProgressForPO = progressRows
-          .filter((row) => row.purchase_order_id === poId)
+        const allProgressForOrder = progressRows
+          .filter((row) => row.order_id === orderId)
           .map((row) => new Date(row.created_at).getTime())
-        if (allProgressForPO.length > 0) {
-          completed_at = new Date(Math.max(...allProgressForPO)).toISOString()
+        if (allProgressForOrder.length > 0) {
+          completed_at = new Date(Math.max(...allProgressForOrder)).toISOString()
         }
       } else if (roundedProgress > 0) {
         finalStatus = 'In Progress'
@@ -1664,8 +1664,8 @@ async function listPOsForChat(user) {
       }
     }
     return {
-      ...poObject,
-      items: poItems,
+      ...orderObject,
+      items: orderItems,
       progress: roundedProgress,
       status: finalStatus,
       completed_at: completed_at
@@ -1734,9 +1734,9 @@ export async function handleAiChat(req, res) {
   if (!prompt) return res.status(400).json({ error: 'Prompt required' })
 
   // 1. FETCH CONTEXT (Hanya PO dulu agar cepat di Vercel)
-  let allPOs = []
+  let allOrders = []
   try {
-    allPOs = await listPOsForChat(user)
+    allOrders = await listOrdersforChat(user)
   } catch (e) {
     console.error(e)
     return res.status(500).json({ error: 'Context fetch failed' })
@@ -1757,23 +1757,23 @@ Panggil user dengan nama depannya (${user?.name?.split(' ')[0] || 'Tamu'}).
 ---
 
 --- ATURAN PRIORITAS ---
-1. Jika user menyebut nomor PO, nama customer, atau revisi, Anda HARUS menggunakan "getPOInfo".
+1. Jika user menyebut nomor PO, nama customer, atau revisi, Anda HARUS menggunakan "getOrderInfo".
 2. Tentukan 'intent' user dengan hati-hati.
 
 --- Alat (Tools) yang Tersedia ---
 // (Daftar alat disederhanakan untuk Vercel agar tidak terlalu panjang,
 // fokus pada fitur inti PO karena keterbatasan waktu eksekusi serverless)
 
-1. "getTotalPO": (Untuk pertanyaan jumlah/total PO).
-   - Keywords: "jumlah po", "total po", "ada berapa po", "semua po aktif".
-   - JSON: {"tool": "getTotalPO"}
+1. "getTotalOrder": (Untuk pertanyaan jumlah/total PO).
+   - Keywords: "jumlah order", "total order", "ada berapa order", "semua order aktif".
+   - JSON: {"tool": "getTotalOrder"}
 
-2. "getPOInfo": (Mencari PO berdasarkan nomor, customer, atau revisi).
-   - Keywords: "status po [nomor]", "link file [nomor]", "info po [nomor]".
-   - JSON: {"tool": "getPOInfo", "param": {"poNumber": "...", "customerName": "...", "revisionNumber": "...", "intent": "details"}}
+2. "getOrderInfo": (Mencari PO berdasarkan nomor, customer, atau revisi).
+   - Keywords: "status order [nomor]", "link file [nomor]", "info order [nomor]".
+   - JSON: {"tool": "getOrderInfo", "param": {"orderNumber": "...", "customerName": "...", "revisionNumber": "...", "intent": "details"}}
 
-3. "getUrgentPOs": (Untuk pertanyaan PO 'Urgent').
-   - JSON: {"tool": "getUrgentPOs"}
+3. "getUrgentOrders": (Untuk pertanyaan PO 'Urgent').
+   - JSON: {"tool": "getUrgentOrders"}
 
 4. "getNearingDeadline": (Untuk pertanyaan PO 'deadline dekat').
    - JSON: {"tool": "getNearingDeadline"}
@@ -1821,12 +1821,12 @@ ATURAN KETAT:
   // 3. EXECUTE & GENERATE NATURAL RESPONSE (Call 2)
   try {
     switch (aiDecision.tool) {
-      case 'getTotalPO': {
-        const total = allPOs.length
-        const active = allPOs.filter(
+      case 'getTotalOrder': {
+        const total = allOrders.length
+        const active = allOrders.filter(
           (p) => p.status !== 'Completed' && p.status !== 'Cancelled'
         ).length
-        const data = { totalPOs: total, activePOs: active }
+        const data = { totalPOs: total, activeOrders: active }
         const text = await generateNaturalResponse(
           JSON.stringify(data),
           'User tanya jumlah PO',
@@ -1835,20 +1835,20 @@ ATURAN KETAT:
         )
         return res.status(200).json({ response: text })
       }
-      case 'getPOInfo': {
+      case 'getOrderInfo': {
         // Implementasi sederhana untuk Vercel (bisa dikembangkan lagi nanti)
-        const { poNumber, customerName } = aiDecision.param || {}
-        let found = allPOs.slice(0, 5) // Default ambil 5 teratas jika tidak ada param
-        if (poNumber)
-          found = allPOs.filter((p) => p.po_number?.toLowerCase().includes(poNumber.toLowerCase()))
+        const { orderNumber, customerName } = aiDecision.param || {}
+        let found = allOrders.slice(0, 5) // Default ambil 5 teratas jika tidak ada param
+        if (orderNumber)
+          found = allOrders.filter((p) => p.order_number?.toLowerCase().includes(orderNumber.toLowerCase()))
         else if (customerName)
-          found = allPOs.filter((p) =>
+          found = allOrders.filter((p) =>
             p.project_name?.toLowerCase().includes(customerName.toLowerCase())
           )
 
         const text = await generateNaturalResponse(
           JSON.stringify(found.slice(0, 3)),
-          `User cari PO: ${poNumber || customerName || 'terbaru'}`,
+          `User cari PO: ${orderNumber || customerName || 'terbaru'}`,
           prompt,
           user
         )
@@ -1892,7 +1892,7 @@ ATURAN KETAT:
       case 'help':
         return res.status(200).json({
           response:
-            "Saya bisa membantu mengecek jumlah PO, mencari status PO, atau info akun Anda. Coba tanya: 'berapa po aktif saya?'"
+            "Saya bisa membantu mengecek jumlah PO, mencari status PO, atau info akun Anda. Coba tanya: 'berapa order aktif saya?'"
         })
 
       default: {

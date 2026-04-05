@@ -14,25 +14,25 @@ interface ICustomAPI {
 
   // Fungsi PO & Produk
   getProducts: () => Promise<any[]>;
-  saveNewPO: (data: any) => Promise<{ success: boolean; poId?: string; error?: string }>;
-  listPOs: (user: any) => Promise<any[]>;
-  deletePO: (poId: string) => Promise<any>;
+  saveNewOrder: (data: any) => Promise<{ success: boolean; orderId?: string; error?: string }>;
+  listOrders: (user: any) => Promise<any[]>;
+  deletePO: (orderId: string) => Promise<any>;
   updatePO: (data: any) => Promise<{ success: boolean; error?: string }>;
-  listPOItems: (poId: string) => Promise<any[]>;
+  listorderItems: (orderId: string) => Promise<any[]>;
   previewPO: (data: any) => Promise<any>;
   addNewProduct: (data: any) => Promise<{ success: boolean; newId?: string; error?: string }>;
   // [BARU] Request Project
-requestProject: (data: any) => Promise<{ success: boolean; poId?: string; error?: string }>;
-confirmRequest: (data: any) => Promise<{ success: boolean; poId?: string; error?: string }>;
+requestProject: (data: any) => Promise<{ success: boolean; orderId?: string; error?: string }>;
+confirmRequest: (data: any) => Promise<{ success: boolean; orderId?: string; error?: string }>;
 getCommissionData: (user: any) => Promise<any[]>;
   // Fungsi Revisi
-  listPORevisions: (poId: string) => Promise<any[]>;
-  listPOItemsByRevision: (revisionId: string) => Promise<any[]>;
-  getRevisionHistory: (poId: string) => Promise<any[]>;
+  listPORevisions: (orderId: string) => Promise<any[]>;
+  listorderItemsByRevision: (revisionId: string) => Promise<any[]>;
+  getRevisionHistory: (orderId: string) => Promise<any[]>;
 
   // Fungsi Progress & Analisis
-  getActivePOsWithProgress: (user: any) => Promise<any[]>;
-  getPOItemsWithDetails: (poId: string) => Promise<any[]>;
+  getActiveOrdersWithProgress: (user: any) => Promise<any[]>;
+  getorderItemsWithDetails: (orderId: string) => Promise<any[]>;
   updateItemProgress: (data: any) => Promise<{ success: boolean; error?: string }>;
   getRecentProgressUpdates: (user: any) => Promise<any[]>;
   getAttentionData: (user: any) => Promise<any>;

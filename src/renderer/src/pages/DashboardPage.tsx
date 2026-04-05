@@ -52,7 +52,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
     if (!poList || poList.length === 0) {
       return {
         totalPOs: 0,
-        activePOs: 0,
+        activeOrders: 0,
         completedPOs: 0,
         dailyPOData: [],
         statusPOData: [],
@@ -63,20 +63,20 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
 
     // [PERBAIKAN] Logika kalkulasi GDrive diletakkan di sini
     let totalDriveUsageBytes = 0
-    poList.forEach((po) => {
+    poList.forEach((order) => {
       // @ts-ignore
-      totalDriveUsageBytes += Number(po.file_size_bytes || 0)
+      totalDriveUsageBytes += Number(order.file_size_bytes || 0)
     })
 
     const totalPOs = poList.length
-    const activePOs = poList.filter(
-      (po) => po.status !== 'Completed' && po.status !== 'Cancelled'
+    const activeOrders = poList.filter(
+      (order) => order.status !== 'Completed' && order.status !== 'Cancelled'
     ).length
-    const completedPOs = poList.filter((po) => po.status === 'Completed').length
+    const completedPOs = poList.filter((order) => order.status === 'Completed').length
 
     // [MODIFIKASI] Data dihitung per HARI, bukan per bulan
-    const dailyCounts = poList.reduce((acc, po) => {
-      const day = new Date(po.created_at).toLocaleDateString('id-ID', {
+    const dailyCounts = poList.reduce((acc, order) => {
+      const day = new Date(order.created_at).toLocaleDateString('id-ID', {
         day: '2-digit',
         month: 'short'
       })
@@ -84,9 +84,9 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
       return acc
     }, {})
 
-    const completedCounts = poList.reduce((acc, po) => {
-      if (po.status === 'Completed' && po.completed_at) {
-        const day = new Date(po.completed_at).toLocaleDateString('id-ID', {
+    const completedCounts = poList.reduce((acc, order) => {
+      if (order.status === 'Completed' && order.completed_at) {
+        const day = new Date(order.completed_at).toLocaleDateString('id-ID', {
           day: '2-digit',
           month: 'short'
         })
@@ -112,8 +112,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
       'Order Selesai': completedCounts[day] || 0
     }))
 
-    const statusCounts = poList.reduce((acc, po) => {
-      const status = po.status || 'Open'
+    const statusCounts = poList.reduce((acc, order) => {
+      const status = order.status || 'Open'
       acc[status] = (acc[status] || 0) + 1
       return acc
     }, {})
@@ -125,9 +125,9 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
     const today = new Date()
     const nextTwoWeeks = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000)
     const nearingDeadlinePOs = poList
-      .filter((po) => {
-        if (!po.deadline || po.status === 'Completed' || po.status === 'Cancelled') return false
-        const deadlineDate = new Date(po.deadline)
+      .filter((order) => {
+        if (!order.deadline || order.status === 'Completed' || order.status === 'Cancelled') return false
+        const deadlineDate = new Date(order.deadline)
         return deadlineDate >= today && deadlineDate <= nextTwoWeeks
       })
       .sort((a, b) => new Date(a.deadline || 0).getTime() - new Date(b.deadline || 0).getTime())
@@ -135,7 +135,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
     // [PERBAIKAN] Pastikan semua nilai dikembalikan dari useMemo
     return {
       totalPOs,
-      activePOs,
+      activeOrders,
       completedPOs,
       dailyPOData,
       statusPOData,
@@ -160,18 +160,18 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
 
   const summaryStats = useMemo(() => {
     if (!Array.isArray(poList)) {
-      return { totalPOs: 0, activePOs: 0, completedPOs: 0, gdriveUsageMB: 0 };
+      return { totalPOs: 0, activeOrders: 0, completedPOs: 0, gdriveUsageMB: 0 };
     }
     const totalPOs = poList.length;
-    const activePOs = poList.filter(p => p.status !== 'Completed' && p.status !== 'Cancelled').length;
+    const activeOrders = poList.filter(p => p.status !== 'Completed' && p.status !== 'Cancelled').length;
     const completedPOs = poList.filter(p => p.status === 'Completed').length;
     // Calculate GDrive usage (sum file_size_bytes and convert to MB)
-    const totalBytes = poList.reduce((sum, po) => sum + Number(po.file_size_bytes || 0), 0);
+    const totalBytes = poList.reduce((sum, order) => sum + Number(order.file_size_bytes || 0), 0);
     const gdriveUsageMB = totalBytes / (1024 * 1024); // Convert bytes to MB
 
     return {
       totalPOs,
-      activePOs,
+      activeOrders,
       completedPOs,
       gdriveUsageMB: gdriveUsageMB.toFixed(2) // Format to 2 decimal places
     };
@@ -201,20 +201,20 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
 
           {/* [MODIFIKASI] Daftar ini sekarang akan scrollable */}
           <div className="attention-list">
-            {dashboardData.nearingDeadlinePOs.map((po) => (
-              <div key={po.id} className="attention-item">
+            {dashboardData.nearingDeadlinePOs.map((order) => (
+              <div key={order.id} className="attention-item">
 
                 {/* Bagian Kiri: Info Order dan Customer */}
                 <div className="attention-info">
                   <p className="attention-line-1">
-                    <strong>{po.po_number}</strong>
-                    <span className="customer-name"> - {po.project_name}</span>
+                    <strong>{order.order_number}</strong>
+                    <span className="customer-name"> - {order.project_name}</span>
                   </p>
                 </div>
 
                 {/* Bagian Kanan: Badge Deadline yang ringkas */}
                 <div className="attention-deadline-badge">
-                  {new Date(po.deadline || 0).toLocaleDateString('id-ID', {
+                  {new Date(order.deadline || 0).toLocaleDateString('id-ID', {
                     day: '2-digit',
                     month: 'short' // Dibuat ringkas (mis: Okt)
                   })}
@@ -231,19 +231,19 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
           title="Total Order"
           value={summaryStats.totalPOs}
           icon={LuPackage}
-          cardClassName="total-po-card" // Class for specific styling
+          cardClassName="total-order-card" // Class for specific styling
         />
         <StatCard
           title="Order Aktif (Produksi)"
-          value={summaryStats.activePOs}
+          value={summaryStats.activeOrders}
           icon={LuHourglass}
-          cardClassName="active-po-card"
+          cardClassName="active-order-card"
         />
         <StatCard
           title="Order Selesai"
           value={summaryStats.completedPOs}
           icon={LuCheck}
-          cardClassName="completed-po-card"
+          cardClassName="completed-order-card"
         />
         <StatCard
           title="Penggunaan GDrive"
@@ -333,16 +333,16 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
                 </tr>
               </thead>
               <tbody>
-                {dashboardData.nearingDeadlinePOs.map((po) => (
-                  <tr key={po.id}>
-                    <td>{po.po_number}</td>
-                    <td>{po.project_name}</td>
-                    <td>{new Date(po.deadline || 0).toLocaleDateString('id-ID')}</td>
+                {dashboardData.nearingDeadlinePOs.map((order) => (
+                  <tr key={order.id}>
+                    <td>{order.order_number}</td>
+                    <td>{order.project_name}</td>
+                    <td>{new Date(order.deadline || 0).toLocaleDateString('id-ID')}</td>
                     <td>
                       <span
-                        className={`status-badge status-${(po.status || 'open').toLowerCase().replace(' ', '-')}`}
+                        className={`status-badge status-${(order.status || 'open').toLowerCase().replace(' ', '-')}`}
                       >
-                        {po.status}
+                        {order.status}
                       </span>
                     </td>
                   </tr>

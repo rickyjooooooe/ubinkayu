@@ -23,42 +23,42 @@ const formatTimeAgo = (dateString: string | undefined | null): string => {
 
 // Komponen untuk menampilkan satu PO (aktif atau selesai)
 const POTrackingItem = ({
-  po,
+  order,
   onUpdateClick // Nama prop tetap sama
 }: {
-  po: POHeader
-  onUpdateClick: (po: POHeader) => void
+  order: POHeader
+  onUpdateClick: (order: POHeader) => void
 }) => {
   const getPriorityBadgeClass = (priority?: string) =>
     `status-badge priority-${(priority || 'normal').toLowerCase()}` // Tambahkan prefix 'priority-'
 
   // Tambah class untuk Order Selesai (opsional, untuk styling)
-  const cardClassName = `po-tracking-item-card ${po.progress && po.progress >= 100 ? 'completed' : ''}`
+  const cardClassName = `order-tracking-item-card ${order.progress && order.progress >= 100 ? 'completed' : ''}`
 
   return (
     <Card className={cardClassName}>
-      <div className="po-tracking-header">
+      <div className="order-tracking-header">
         <div>
-          <span className="po-tracking-number">{po.po_number || 'N/A'}</span>
-          <p className="po-tracking-customer">{po.project_name || 'N/A'}</p>
+          <span className="order-tracking-number">{order.order_number || 'N/A'}</span>
+          <p className="order-tracking-customer">{order.project_name || 'N/A'}</p>
         </div>
-        <span className={getPriorityBadgeClass(po.priority)}>{po.priority || 'Normal'}</span>
+        <span className={getPriorityBadgeClass(order.priority)}>{order.priority || 'Normal'}</span>
       </div>
-      <div className="po-tracking-progress">
+      <div className="order-tracking-progress">
         <span>Progress</span>
         {/* Tambah ikon centang jika selesai */}
         <span>
-          {po.progress && po.progress >= 100 ? '✅ ' : ''}
-          {po.progress?.toFixed(0) || 0}%
+          {order.progress && order.progress >= 100 ? '✅ ' : ''}
+          {order.progress?.toFixed(0) || 0}%
         </span>
       </div>
-      <ProgressBar value={po.progress || 0} />
-      <div className="po-tracking-footer">
-        <div className="po-tracking-deadline">
+      <ProgressBar value={order.progress || 0} />
+      <div className="order-tracking-footer">
+        <div className="order-tracking-deadline">
           <span>
             Target:{' '}
-            {po.deadline
-              ? new Date(po.deadline).toLocaleDateString('id-ID', {
+            {order.deadline
+              ? new Date(order.deadline).toLocaleDateString('id-ID', {
                   day: '2-digit',
                   month: 'short',
                   year: 'numeric'
@@ -67,8 +67,8 @@ const POTrackingItem = ({
           </span>
         </div>
         {/* Tombol tetap ada, ganti teks jika sudah selesai */}
-        <Button onClick={() => onUpdateClick(po)}>
-          {po.progress && po.progress >= 100 ? 'Lihat Progress' : 'Update Progress'}
+        <Button onClick={() => onUpdateClick(order)}>
+          {order.progress && order.progress >= 100 ? 'Lihat Progress' : 'Update Progress'}
         </Button>
       </div>
     </Card>
@@ -85,7 +85,7 @@ const AttentionCard = ({ title, items, icon, reasonKey, reasonPrefix }) => (
       items.map((item, index) => (
         <div key={index} className="attention-item-small">
           <p>
-            <strong>{item.item_name || 'N/A'}</strong> (Order: {item.po_number || 'N/A'})
+            <strong>{item.item_name || 'N/A'}</strong> (Order: {item.order_number || 'N/A'})
           </p>
           <span>
             {reasonPrefix}:{' '}
@@ -107,7 +107,7 @@ const UpdateEntry = ({ update }) => (
     <div className="update-icon">⚙️</div>
     <div className="update-details">
       <p className="update-text">
-        Item <strong>{update.item_name || 'N/A'}</strong> (Order: {update.po_number || 'N/A'}) masuk
+        Item <strong>{update.item_name || 'N/A'}</strong> (Order: {update.order_number || 'N/A'}) masuk
         tahap <strong>{update.stage || '?'}</strong>.
       </p>
       <span className="update-time">{formatTimeAgo(update.created_at)}</span>
@@ -117,7 +117,7 @@ const UpdateEntry = ({ update }) => (
 
 // Definisikan Interface Props
 interface ProgressTrackingPageProps {
-  onSelectPO: (po: POHeader) => void
+  onSelectPO: (order: POHeader) => void
   poList: POHeader[] // Terima poList dari App.tsx
   isLoadingPOs: boolean
   currentUser: User | null
@@ -163,28 +163,28 @@ const ProgressTrackingPage: React.FC<ProgressTrackingPageProps> = ({
   }, [currentUser])
 
   // useMemo untuk memisahkan dan memfilter PO Aktif dan Selesai
-  const { activePOs, completedPOs } = useMemo(() => {
-    if (!Array.isArray(poList)) return { activePOs: [], completedPOs: [] } // Pengaman jika poList bukan array
+  const { activeOrders, completedPOs } = useMemo(() => {
+    if (!Array.isArray(poList)) return { activeOrders: [], completedPOs: [] } // Pengaman jika poList bukan array
 
     // Pisahkan dulu berdasarkan progress
-    const allActive = poList.filter((po) => (po.progress || 0) < 100 && po.status !== 'Cancelled')
+    const allActive = poList.filter((order) => (order.progress || 0) < 100 && order.status !== 'Cancelled')
     const allCompleted = poList.filter(
-      (po) => (po.progress || 0) >= 100 && po.status !== 'Cancelled'
+      (order) => (order.progress || 0) >= 100 && order.status !== 'Cancelled'
     )
 
     // Terapkan filter pencarian ke kedua grup jika ada searchTerm
     if (!searchTerm) {
-      return { activePOs: allActive, completedPOs: allCompleted }
+      return { activeOrders: allActive, completedPOs: allCompleted }
     }
 
     const lowerSearchTerm = searchTerm.toLowerCase()
     // Fungsi filter umum
-    const filterFn = (po: POHeader) =>
-      po.po_number?.toLowerCase().includes(lowerSearchTerm) ||
-      po.project_name?.toLowerCase().includes(lowerSearchTerm)
+    const filterFn = (order: POHeader) =>
+      order.order_number?.toLowerCase().includes(lowerSearchTerm) ||
+      order.project_name?.toLowerCase().includes(lowerSearchTerm)
 
     return {
-      activePOs: allActive.filter(filterFn),
+      activeOrders: allActive.filter(filterFn),
       completedPOs: allCompleted.filter(filterFn)
     }
   }, [poList, searchTerm]) // Bergantung pada prop poList dan state searchTerm
@@ -213,20 +213,20 @@ const ProgressTrackingPage: React.FC<ProgressTrackingPageProps> = ({
       {/* Layout Utama (Grid 2 Kolom) */}
       <div className="tracking-layout">
         {/* --- Kolom Kiri: Daftar PO --- */}
-        <div className="po-list-column">
+        <div className="order-list-column">
           {' '}
           {/* Ganti nama class agar lebih deskriptif */}
           {/* Bagian PO Aktif */}
           <Card>
-            <h3>Order Aktif ({isLoadingPOs ? '...' : activePOs.length})</h3>
+            <h3>Order Aktif ({isLoadingPOs ? '...' : activeOrders.length})</h3>
             {isLoadingPOs ? (
               <p style={{ textAlign: 'center', padding: '2rem' }}>Memuat daftar Order...</p>
-            ) : activePOs.length > 0 ? (
-              <div className="po-tracking-list-wrapper">
-                {activePOs.map((po) => (
+            ) : activeOrders.length > 0 ? (
+              <div className="order-tracking-list-wrapper">
+                {activeOrders.map((order) => (
                   <POTrackingItem
-                    key={`active-${po.id || po.po_number}`}
-                    po={po}
+                    key={`active-${order.id || order.order_number}`}
+                    order={order}
                     onUpdateClick={onSelectPO}
                   />
                 ))}
@@ -247,14 +247,14 @@ const ProgressTrackingPage: React.FC<ProgressTrackingPageProps> = ({
               {/* Beri jarak atas */}
               <h3>Order Selesai ({completedPOs.length})</h3>
               {completedPOs.length > 0 ? (
-                <div className="po-tracking-list-wrapper completed-list">
+                <div className="order-tracking-list-wrapper completed-list">
                   {' '}
                   {/* Class berbeda? */}
-                  {completedPOs.map((po) => (
+                  {completedPOs.map((order) => (
                     // Gunakan komponen yang sama, event handler tetap onSelectPO
                     <POTrackingItem
-                      key={`completed-${po.id || po.po_number}`}
-                      po={po}
+                      key={`completed-${order.id || order.order_number}`}
+                      order={order}
                       onUpdateClick={onSelectPO}
                     />
                   ))}
@@ -271,7 +271,7 @@ const ProgressTrackingPage: React.FC<ProgressTrackingPageProps> = ({
             </Card>
           )}
         </div>{' '}
-        {/* Akhir .po-list-column */}
+        {/* Akhir .order-list-column */}
         {/* --- Kolom Kanan: Perhatian & Update Terbaru --- */}
         <div className="side-panel-column">
           {' '}

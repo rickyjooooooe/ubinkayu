@@ -11,8 +11,8 @@ interface User {
 }
 
 interface CommissionItem {
-  po_id: string
-  po_number: string
+  order_id: string
+  order_number: string
   project_name: string
   marketing_name: string
   commission_rate: number
@@ -67,7 +67,7 @@ const CommissionView: React.FC<CommissionViewProps> = ({ currentUser }) => {
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
       result = result.filter(d =>
-        d.po_number?.toLowerCase().includes(q) ||
+        d.order_number?.toLowerCase().includes(q) ||
         d.project_name?.toLowerCase().includes(q) ||
         d.marketing_name?.toLowerCase().includes(q)
       )
@@ -276,8 +276,8 @@ const CommissionView: React.FC<CommissionViewProps> = ({ currentUser }) => {
             ) : filtered.map((item, idx) => {
               const badge = getStatusStyle(item.status)
               return (
-                <tr key={`${item.po_id}-${idx}`} className="comm-row" style={{ borderTop: idx === 0 ? 'none' : '0.5px solid var(--color-border-tertiary)' }}>
-                  <td style={td}><span style={{ fontWeight: 700, fontFamily: 'monospace' }}>{item.po_number}</span></td>
+                <tr key={`${item.order_id}-${idx}`} className="comm-row" style={{ borderTop: idx === 0 ? 'none' : '0.5px solid var(--color-border-tertiary)' }}>
+                  <td style={td}><span style={{ fontWeight: 700, fontFamily: 'monospace' }}>{item.order_number}</span></td>
                   <td style={td}><div style={{ fontWeight: 500 }}>{item.project_name}</div></td>
                   {isAdminOrManager && (
                     <td style={td}>

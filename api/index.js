@@ -19,40 +19,40 @@ export default async function handler(req, res) {
         console.log('🚦 [Vercel API Router] Routing to handleLoginUser...')
         console.log('  -> Calling Controller.handleLoginUser now...')
         return Controller.handleLoginUser(req, res)
-      case 'listPOs':
-        return await Controller.handleListPOs(req, res)
-      case 'saveNewPO':
-        return await Controller.handleSaveNewPO(req, res)
+      case 'listOrders':
+        return await Controller.handleListOrders(req, res)
+      case 'saveNewOrder':
+        return await Controller.handleSaveNewOrder(req, res)
       case 'updatePO':
-        return await Controller.handleUpdatePO(req, res)
+        return await Controller.handleUpdateOrder(req, res)
       case 'deletePO':
-        return await Controller.handleDeletePO(req, res)
+        return await Controller.handleDeleteOrder(req, res)
 
       // Rute untuk Produk
       case 'getProducts':
         return await Controller.handleGetProducts(req, res)
 
       // Rute untuk Detail & Revisi
-      case 'listPOItems':
-        return await Controller.handleListPOItems(req, res)
+      case 'listorderItems':
+        return await Controller.handleListorderItems(req, res)
       case 'getRevisionHistory':
         return await Controller.handleGetRevisionHistory(req, res)
       case 'listPORevisions':
         return await Controller.handleListPORevisions(req, res)
-      case 'listPOItemsByRevision':
-        return await Controller.handleListPOItemsByRevision(req, res)
+      case 'listorderItemsByRevision':
+        return await Controller.handleListorderItemsByRevision(req, res)
 
       // Rute untuk Preview
       case 'previewPO':
-        return await Controller.handlePreviewPO(req, res)
+        return await Controller.handlePreviewOrder(req, res)
 
       // Rute untuk Progress
       case 'updateItemProgress':
         return await Controller.handleUpdateItemProgress(req, res)
-      case 'getActivePOsWithProgress':
-        return await Controller.handleGetActivePOsWithProgress(req, res)
-      case 'getPOItemsWithDetails':
-        return await Controller.handleGetPOItemsWithDetails(req, res)
+      case 'getActiveOrdersWithProgress':
+        return await Controller.handleGetActiveOrdersWithProgress(req, res)
+      case 'getorderItemsWithDetails':
+        return await Controller.handleGetorderItemsWithDetails(req, res)
       case 'getRecentProgressUpdates':
         return await Controller.handleGetRecentProgressUpdates(req, res)
       case 'updateStageDeadline':

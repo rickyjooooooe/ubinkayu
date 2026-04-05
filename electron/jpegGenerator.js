@@ -61,13 +61,13 @@ function calculateLineCount(context, text, maxWidth) {
 }
 // --- AKHIR FUNGSI HELPER ---
 
-export async function generatePOJpeg(poData, revisionNumber = 0, openFile = true) {
+export async function generateOrderJpeg(orderData, revisionNumber = 0, openFile = true) {
   try {
     const baseDir = path.resolve(app.getPath('documents'), 'UbinkayuERP', 'PO')
-    const poFolderName = `${poData.po_number}-${poData.project_name}`.replace(/[/\\?%*:|"<>]/g, '-')
+    const poFolderName = `${orderData.order_number}-${orderData.project_name}`.replace(/[/\\?%*:|"<>]/g, '-')
     const poDir = path.join(baseDir, poFolderName)
     ensureDirSync(poDir)
-    const fileName = `PO-${poData.po_number.replace(/[/\\?%*:|"<>]/g, '-')}-Rev${revisionNumber}.jpeg`
+    const fileName = `PO-${orderData.order_number.replace(/[/\\?%*:|"<>]/g, '-')}-Rev${revisionNumber}.jpeg`
     const filePath = path.join(poDir, fileName)
 
     // --- [BARU] Tambahkan Skala ---
@@ -98,12 +98,12 @@ export async function generatePOJpeg(poData, revisionNumber = 0, openFile = true
     totalHeight += 70 * scaleFactor
     totalHeight += 60 * scaleFactor
 
-    const items = poData.items || []
+    const items = orderData.items || []
     items.forEach((item) => {
       ctx.font = `${10 * scaleFactor}px ${baseFont}` // [DIUBAH]
       const poLines = calculateLineCount(
         ctx,
-        `${poData.po_number || 'N/A'}\n${poData.project_name || 'N/A'}`,
+        `${orderData.order_number || 'N/A'}\n${orderData.project_name || 'N/A'}`,
         130 * scaleFactor - rowPadding * 2 // [DIUBAH]
       )
       const produkText = `${item.product_name || ''}\n${item.wood_type || ''} ${item.profile || ''}`
@@ -134,7 +134,7 @@ export async function generatePOJpeg(poData, revisionNumber = 0, openFile = true
     totalHeight += 30 * scaleFactor // [DIUBAH]
 
     ctx.font = `${10 * scaleFactor}px ${baseFont}` // [DIUBAH]
-    const notesText = poData.notes || '-'
+    const notesText = orderData.notes || '-'
     const noteLineCount = calculateLineCount(ctx, notesText, tableWidth - 20 * scaleFactor) // [DIUBAH]
     // [DIUBAH]
     const notesSectionHeight =
@@ -145,9 +145,9 @@ export async function generatePOJpeg(poData, revisionNumber = 0, openFile = true
 
     let photoDrawHeight = 0
     // [DIUBAH] Logika ini spesifik untuk Electron (poPhotoPath)
-    if (poData.poPhotoPath && fs.existsSync(poData.poPhotoPath)) {
+    if (orderData.poPhotoPath && fs.existsSync(orderData.poPhotoPath)) {
       try {
-        const userImage = await loadImage(poData.poPhotoPath)
+        const userImage = await loadImage(orderData.poPhotoPath)
         const aspectRatio = userImage.height / userImage.width
         photoDrawHeight = tableWidth * aspectRatio // tableWidth sudah di-scale
         totalHeight += 20 * scaleFactor + 30 * scaleFactor + photoDrawHeight // [DIUBAH]
@@ -177,13 +177,13 @@ export async function generatePOJpeg(poData, revisionNumber = 0, openFile = true
     let currentY = 40 * scaleFactor // [DIUBAH]
     finalCtx.font = `bold ${24 * scaleFactor}px ${baseFont}` // [DIUBAH]
     finalCtx.fillStyle = redColor
-    const headerText = `${poData.po_number || 'N/A'} ${poData.project_name || 'N/A'}`
+    const headerText = `${orderData.order_number || 'N/A'} ${orderData.project_name || 'N/A'}`
     finalCtx.textAlign = 'center'
     finalCtx.fillText(headerText, width / 2, currentY)
 
     finalCtx.font = `bold ${16 * scaleFactor}px ${baseFont}` // [DIUBAH]
     finalCtx.fillStyle = blackColor
-    const date = poData.created_at ? new Date(poData.created_at) : new Date()
+    const date = orderData.created_at ? new Date(orderData.created_at) : new Date()
     const year = date.getFullYear()
     const month = date.getMonth() + 1
     const day = date.getDate()
@@ -297,7 +297,7 @@ export async function generatePOJpeg(poData, revisionNumber = 0, openFile = true
       // (calculateLineCount widths sudah di-scale)
       const poLines = calculateLineCount(
         finalCtx,
-        `${poData.po_number || 'N/A'}\n${poData.project_name || 'N/A'}`,
+        `${orderData.order_number || 'N/A'}\n${orderData.project_name || 'N/A'}`,
         cols.noPo.width - rowPadding * 2
       )
       const produkText = `${item.product_name || ''}\n${item.wood_type || ''} ${item.profile || ''}`
@@ -324,11 +324,11 @@ export async function generatePOJpeg(poData, revisionNumber = 0, openFile = true
       const rowHeight = maxLines * itemLineHeight + rowPadding * 2
 
       finalCtx.textAlign = 'center'
-      const deadline = poData.deadline
-        ? new Date(poData.deadline).toLocaleDateString('id-ID')
+      const deadline = orderData.deadline
+        ? new Date(orderData.deadline).toLocaleDateString('id-ID')
         : 'N/A'
-      const poDate = poData.created_at
-        ? new Date(poData.created_at).toLocaleDateString('id-ID')
+      const poDate = orderData.created_at
+        ? new Date(orderData.created_at).toLocaleDateString('id-ID')
         : 'N/A'
       finalCtx.fillStyle = blueColor
       finalCtx.fillText(
@@ -346,7 +346,7 @@ export async function generatePOJpeg(poData, revisionNumber = 0, openFile = true
       finalCtx.textAlign = 'left'
       wrapText(
         finalCtx,
-        `${poData.po_number || 'N/A'}\n${poData.project_name || 'N/A'}`,
+        `${orderData.order_number || 'N/A'}\n${orderData.project_name || 'N/A'}`,
         tableLeft + cols.noPo.x + rowPadding,
         currentY + rowPadding + 10 * scaleFactor, // [DIUBAH]
         cols.noPo.width - rowPadding * 2,
@@ -455,8 +455,8 @@ export async function generatePOJpeg(poData, revisionNumber = 0, openFile = true
       currentY + 20 * scaleFactor // [DIUBAH]
     )
     finalCtx.textAlign = 'center'
-    const totalKubikasi = poData.kubikasi_total
-      ? (Number(poData.kubikasi_total) || 0).toFixed(3) + ' m³'
+    const totalKubikasi = orderData.kubikasi_total
+      ? (Number(orderData.kubikasi_total) || 0).toFixed(3) + ' m³'
       : '0.000 m³'
     finalCtx.fillText(
       totalKubikasi,
@@ -523,11 +523,11 @@ export async function generatePOJpeg(poData, revisionNumber = 0, openFile = true
         currentY + approvalTableHeight - 10 * scaleFactor // [DIUBAH]
       )
 
-      if (title === 'ACC Mrktng' && poData.marketing) {
+      if (title === 'ACC Mrktng' && orderData.marketing) {
         finalCtx.fillStyle = blackColor
         finalCtx.font = `bold ${10 * scaleFactor}px ${baseFont}` // [DIUBAH]
         finalCtx.fillText(
-          poData.marketing,
+          orderData.marketing,
           colX + approvalColWidth / 2,
           currentY + approvalTableHeight / 2
         )
@@ -553,16 +553,16 @@ export async function generatePOJpeg(poData, revisionNumber = 0, openFile = true
     currentY += 30 * scaleFactor // [DIUBAH]
 
     // [DIUBAH] Logika ini spesifik untuk Electron (poPhotoPath)
-    if (poData.poPhotoPath && fs.existsSync(poData.poPhotoPath)) {
+    if (orderData.poPhotoPath && fs.existsSync(orderData.poPhotoPath)) {
       try {
-        const userImage = await loadImage(poData.poPhotoPath)
+        const userImage = await loadImage(orderData.poPhotoPath)
         finalCtx.drawImage(userImage, tableLeft, currentY, tableWidth, photoDrawHeight) // Koordinat sudah di-scale
       } catch (imgError) {
         console.error('Gagal menggambar gambar referensi:', imgError)
         finalCtx.fillStyle = redColor
         finalCtx.font = `${12 * scaleFactor}px ${baseFont}` // [DIUBAH]
         finalCtx.textAlign = 'left'
-        finalCtx.fillText(`Gagal memuat file gambar: ${poData.poPhotoPath}`, tableLeft, currentY)
+        finalCtx.fillText(`Gagal memuat file gambar: ${orderData.poPhotoPath}`, tableLeft, currentY)
       }
     } else {
       finalCtx.font = `${12 * scaleFactor}px ${baseFont}` // [DIUBAH]

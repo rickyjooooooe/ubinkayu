@@ -83,7 +83,7 @@ const Navbar: React.FC<NavbarProps> = ({
   // Definisi semua link navigasi
   const navLinksDefinition: NavLinkItem[] = [
     { id: 'dashboard', label: 'Dashboard', Icon: LuLayoutDashboard },
-    { id: 'list', label: 'PO', Icon: LuListOrdered },
+    { id: 'list', label: 'Order', Icon: LuListOrdered },
     { id: 'tracking', label: 'Progress', Icon: LuActivity },
     { id: 'analysis', label: 'Analysis', Icon: LuTrendingUp },
     { id: 'commission', label: 'Komisi', Icon: LuWallet }, // Fitur Baru

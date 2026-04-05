@@ -58,7 +58,7 @@ function App() {
   // --- State Aplikasi ---
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [view, setView] = useState<AppView>('dashboard')
-  const [allPOs, setAllPOs] = useState<POHeader[]>([])
+  const [allOrders, setallOrders] = useState<POHeader[]>([])
   const [editingPO, setEditingPO] = useState<POHeader | null>(null)
   const [formMode, setFormMode] = useState<'new' | 'request' | 'confirm' | 'edit'>('new')
   const [selectedPoId, setSelectedPoId] = useState<string | null>(null)
@@ -123,7 +123,7 @@ function App() {
       fetchPOs() // Panggil fetch data
     } else if (!isAuthLoading && !currentUser) {
       // Jika pemeriksaan selesai TAPI tidak ada user (logout atau sesi habis)
-      setAllPOs([]) // Pastikan data PO kosong
+      setallOrders([]) // Pastikan data PO kosong
       setIsLoadingPOs(false) // Pastikan loading PO mati
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -141,19 +141,19 @@ function App() {
     }
 
     try {
-      const pos: POHeader[] = await apiService.listPOs(currentUser)
+      const pos: POHeader[] = await apiService.listOrders(currentUser)
       if (Array.isArray(pos)) {
-        setAllPOs(pos)
+        setallOrders(pos)
         console.log(`Fetched ${pos.length} POs successfully.`)
       } else {
-        console.error('listPOs did not return an array:', pos)
-        setAllPOs([])
+        console.error('listOrders did not return an array:', pos)
+        setallOrders([])
         alert('Gagal memuat data PO: Format data tidak sesuai.')
       }
     } catch (error) {
       console.error('Gagal mengambil daftar PO:', error)
       alert(`Gagal mengambil daftar PO: ${(error as Error).message}`)
-      setAllPOs([])
+      setallOrders([])
       // Pertimbangkan logout paksa jika error otentikasi
       // if (error is related to auth) { handleLogout('Sesi berakhir...'); }
     } finally {
@@ -185,7 +185,7 @@ function App() {
     console.log('Logging out...')
     setCurrentUser(null)
     sessionStorage.removeItem('erpUser')
-    setAllPOs([])
+    setallOrders([])
     setIsLoadingPOs(false) // Reset loading PO juga
     setIsRefreshing(false)
     setView('dashboard') // Kembali ke view awal (yang akan jadi Login)
@@ -218,14 +218,14 @@ function App() {
   }
 
   // --- Handler Aksi PO (Delete, Edit, Detail, Track) ---
-  const handleDeletePO = async (poId: string, poInfo: string) => {
-    const confirmMessage = `⚠️ Hapus PO Permanen ⚠️\n\nPO: ${poInfo}\n\nSemua data terkait akan dihapus.\nTindakan ini TIDAK DAPAT DIBATALKAN!\n\nYakin?`
+  const handleDeleteOrder = async (orderId: string, OrderInfo: string) => {
+    const confirmMessage = `⚠️ Hapus PO Permanen ⚠️\n\nPO: ${OrderInfo}\n\nSemua data terkait akan dihapus.\nTindakan ini TIDAK DAPAT DIBATALKAN!\n\nYakin?`
     if (window.confirm(confirmMessage)) {
       setIsLoadingPOs(true) // Tampilkan loading selama proses delete
       try {
-        const result = await apiService.deletePO(poId)
+        const result = await apiService.deletePO(orderId)
         if (result.success) {
-          alert(`✅ PO ${poInfo} berhasil dihapus.\n${result.message}`)
+          alert(`✅ PO ${OrderInfo} berhasil dihapus.\n${result.message}`)
           fetchPOs() // Muat ulang daftar setelah delete
         } else {
           throw new Error(result.error || 'Gagal menghapus PO di backend.')
@@ -237,8 +237,8 @@ function App() {
       // setIsLoadingPOs(false) akan dipanggil di finally fetchPOs jika sukses
     }
   }
-  const handleEditPO = (po: POHeader) => {
-    setEditingPO(po)
+  const handleEditPO = (order: POHeader) => {
+    setEditingPO(order)
     setFormMode('edit')
     setView('input')
   }
@@ -248,23 +248,23 @@ function App() {
     setFormMode(currentUser?.role === 'marketing' ? 'request' : 'new')
     setView('input')
   }
-  const handleConfirmRequest = (po: POHeader) => {
-    setEditingPO(po)
+  const handleConfirmRequest = (order: POHeader) => {
+    setEditingPO(order)
     setFormMode('confirm')
     setView('input')
   }
-  const handleShowDetail = (po: POHeader) => {
-    setSelectedPoId(po.id)
+  const handleShowDetail = (order: POHeader) => {
+    setSelectedPoId(order.id)
     setView('detail')
   }
   const handleBackToList = () => {
     handleNavigate('list')
   }
-  const handleSelectPOForTracking = (po: POHeader) => {
-    setTrackingPO(po)
+  const handleSelectPOForTracking = (order: POHeader) => {
+    setTrackingPO(order)
     setView('updateProgress')
   }
-  // const handleShowProgress = (po: POHeader) => { setTrackingPO(po); setView('updateProgress'); }; // Sama dengan di atas
+  // const handleShowProgress = (order: POHeader) => { setTrackingPO(order); setView('updateProgress'); }; // Sama dengan di atas
 
   // --- Handler AI Chat (Fungsi tetap sama) ---
   const handleMaximizeChat = () => {
@@ -361,8 +361,8 @@ function App() {
 
   // --- Logika Render Konten Utama ---
   const getCurrentPO = (): POHeader | null => {
-    if (!selectedPoId || !Array.isArray(allPOs)) return null
-    return allPOs.find((p) => p.id === selectedPoId) || null
+    if (!selectedPoId || !Array.isArray(allOrders)) return null
+    return allOrders.find((p) => p.id === selectedPoId) || null
   }
 
   const renderContent = () => {
@@ -385,13 +385,13 @@ function App() {
     switch (view) {
       case 'dashboard':
         // Gunakan isLoadingPOs untuk dashboard
-        return <DashboardPage poList={allPOs} isLoading={isLoadingPOs} />
+        return <DashboardPage poList={allOrders} isLoading={isLoadingPOs} />
       case 'list':
         return (
           <POListPage
-            poList={allPOs}
+            poList={allOrders}
             onAddPO={handleShowInputForm}
-            onDeletePO={handleDeletePO}
+            onDeletePO={handleDeleteOrder}
             onEditPO={handleEditPO}
             onShowDetail={handleShowDetail}
             onShowProgress={handleSelectPOForTracking}
@@ -415,13 +415,13 @@ function App() {
         )
       case 'detail':
         // PODetailPage punya loading internal untuk history
-        return <PODetailPage po={currentPO} onBackToList={handleBackToList} />
+        return <PODetailPage order={currentPO} onBackToList={handleBackToList} />
       case 'tracking':
         // ProgressTrackingPage punya loading internal untuk daftar PO-nya
         return (
           <ProgressTrackingPage
             onSelectPO={handleSelectPOForTracking}
-            poList={allPOs}
+            poList={allOrders}
             isLoadingPOs={isLoadingPOs}
             currentUser={currentUser}
           />
@@ -430,7 +430,7 @@ function App() {
         // UpdateProgressPage punya loading internal untuk detail item
         return (
           <UpdateProgressPage
-            po={trackingPO}
+            order={trackingPO}
             onBack={() => handleNavigate('tracking')} // Gunakan handleNavigate
             onProgressSaved={() => fetchPOs(true)} // Refresh PO list setelah simpan progress
             currentUser={currentUser}
@@ -459,7 +459,7 @@ function App() {
       default:
         console.warn('Invalid view state:', view, 'defaulting to dashboard.')
         setView('dashboard') // Perbaiki state view
-        return <DashboardPage poList={allPOs} isLoading={isLoadingPOs} />
+        return <DashboardPage poList={allOrders} isLoading={isLoadingPOs} />
     }
   }
 
