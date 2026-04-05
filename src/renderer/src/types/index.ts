@@ -1,23 +1,36 @@
-/* eslint-disable prettier/prettier */
 // src/renderer/src/types/index.ts
 
-// [BARU] Tipe untuk satu entri progress
-
-export type ProductionStage = 'Cari Bahan Baku' | 'Sawmill' | 'KD' | 'Pembahanan' | 'Moulding' | 'Coating' | 'Siap Kirim';
-
-export interface ProgressUpdate {
-  id: string;
-  purchase_order_item_id: string;
-  stage: ProductionStage;
-  notes: string;
-  photo_url: string | null;
-  created_at: string;
+export interface User {
+  name: string
+  role?: string
 }
 
-// [MODIFIKASI] POItem ditambahkan progressHistory
+export interface SessionData {
+  user: User
+  expiry: number
+}
+
+export type ProductionStage =
+  | 'Cari Bahan Baku'
+  | 'Sawmill'
+  | 'KD'
+  | 'Pembahanan'
+  | 'Moulding'
+  | 'Coating'
+  | 'Siap Kirim'
+
+export interface ProgressUpdate {
+  id: string
+  order_item_id: string
+  stage: ProductionStage
+  notes: string
+  photo_url: string | null
+  created_at: string
+}
+
 export interface POItem {
   id: number
-  purchase_order_id?: string
+  order_id?: string
   revision_id?: string
   product_id: string
   product_name: string
@@ -36,14 +49,16 @@ export interface POItem {
   location: string
   notes: string
   kubikasi?: number
-  progressHistory?: ProgressUpdate[]; // Riwayat progress untuk item ini
-  stageDeadlines?: { stageName: string; deadline: string }[];
+  progressHistory?: ProgressLog[]
+  stageDeadlines?: { stageName: string; deadline: string }[]
+  customer_name?: string
+  order_date?: string
+  created_at?: string
 }
 
-// [MODIFIKASI] POHeader ditambahkan progress
 export interface POHeader {
   id: string
-  po_number: string
+  order_number: string
   project_name: string
   created_at: string
   status?: string
@@ -52,14 +67,22 @@ export interface POHeader {
   notes?: string
   kubikasi_total?: number
   pdf_link?: string | null
-  progress?: number; // Progress keseluruhan PO
-  marketing?: string
+  progress?: number
+  items?: POItem[]
+  photo_url?: string | null
+  acc_marketing?: string
+  alamat_kirim?: string
+  completed_at?: string | null
+  lastRevisedBy?: string
+  lastRevisedDate?: string
+  file_size_bytes?: number | null
+  foto_link?: string | null        // link foto referensi di Google Drive
+  project_valuation?: number | null // [BARU] valuasi project dari marketing
 }
 
-// Tipe ini tidak diubah
 export interface PORevision {
   id: string
-  purchase_order_id: string
+  order_id: string
   revision_number: number
   project_name: string
   deadline: string | null
@@ -67,20 +90,59 @@ export interface PORevision {
   priority: string | null
   notes: string | null
   created_at: string
-  pdf_link?: string | null // <-- [TAMBAHKAN BARIS INI]
+  pdf_link?: string | null
   acc_marketing?: string
+  revised_by?: string
+  alamat_kirim?: string
+  foto_link?: string | null        // link foto referensi di Google Drive
+  project_valuation?: number | null // [BARU] valuasi project dari marketing
 }
 
-// Tipe ini tidak diubah
+export interface ProductMaster {
+  id: string
+  product_name: string
+  wood_type?: string | null
+  profile?: string | null
+  color?: string | null
+  finishing?: string | null
+  sample?: string | null
+  marketing?: string | null
+  satuan?: string | null
+}
+
 export interface RevisionHistoryItem {
-  revision: PORevision;
-  items: POItem[];
+  revision: PORevision
+  items: POItem[]
 }
 
 export interface AnalysisData {
-  topSellingProducts: { name: string; totalQuantity: number }[];
-  trendingProducts: { name: string; change: number }[];
-  slowMovingProducts: string[];
-  woodTypeDistribution: { name: string; value: number }[]; // Tambahkan ini
-  topCustomers: { name: string; totalKubikasi: number }[]; // Tambahkan ini
+  topSellingProducts: { name: string; totalQuantity: number }[]
+  trendingProducts: { name: string; change: number }[]
+  slowMovingProducts: string[]
+  woodTypeDistribution: { name: string; value: number }[]
+  topCustomers: { name: string; totalKubikasi: number }[]
+}
+
+export interface DeleteResult {
+  success: boolean
+  message: string
+  summary?: {
+    duration?: string
+    failedFileDeletes?: number
+  }
+  error?: string
+}
+
+export interface Message {
+  sender: 'user' | 'bot'
+  text: string
+  timestamp: Date
+}
+
+export interface ProgressLog {
+  id: string
+  stage: ProductionStage
+  created_at: string
+  notes?: string
+  photo_url?: string
 }

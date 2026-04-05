@@ -1,18 +1,21 @@
-// src/components/AddProductModal.tsx
-
-import React, { useState } from 'react';
-import { Button } from './Button';
-import { Input } from './Input';
-
+import React from 'react'
+import { Input } from './Input'
+import { Button } from './Button'
+import * as apiService from '../apiService'
 
 interface AddProductModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSaveSuccess: () => void;
+  isOpen: boolean
+  onClose: () => void
+  onSaveSuccess: () => void
 }
 
-export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClose, onSaveSuccess }) => {
-  const [newProduct, setNewProduct] = useState({
+// v-- KATA KUNCI 'export' DITAMBAHKAN DI SINI --v
+export const AddProductModal: React.FC<AddProductModalProps> = ({
+  isOpen,
+  onClose,
+  onSaveSuccess
+}) => {
+  const [productData, setProductData] = React.useState({
     product_name: '',
     wood_type: '',
     profile: '',
@@ -20,71 +23,125 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
     finishing: '',
     sample: '',
     marketing: ''
-  });
-  const [isSaving, setIsSaving] = useState(false);
+  })
+  const [isSaving, setIsSaving] = React.useState(false)
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setNewProduct(prev => ({ ...prev, [e.target.name]: e.target.value }));
-  };
-
-  const handleSave = async () => {
-    // [DIUBAH] Validasi diubah: Cek apakah setidaknya ada satu field yang terisi.
-    const isAnyFieldFilled = Object.values(newProduct).some(value => value.trim() !== '');
-
-    if (!isAnyFieldFilled) {
-      return alert('Harap isi minimal satu field untuk menyimpan produk baru.');
+  React.useEffect(() => {
+    if (!isOpen) {
+      setProductData({
+        product_name: '',
+        wood_type: '',
+        profile: '',
+        color: '',
+        finishing: '',
+        sample: '',
+        marketing: ''
+      })
     }
-    
-    setIsSaving(true);
-    try {
-      // @ts-ignore
-      const result = await window.api.addNewProduct(newProduct);
-      if (result.success) {
-        alert('Produk baru berhasil disimpan!');
-        onSaveSuccess();
-        onClose();
-        setNewProduct({
-            product_name: '', wood_type: '', profile: '', color: '',
-            finishing: '', sample: '', marketing: ''
-        });
-      } else {
-        throw new Error(result.error);
-      }
-    } catch (error) {
-      alert(`Gagal menyimpan produk: ${(error as Error).message}`);
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  }, [isOpen])
 
   if (!isOpen) {
-    return null;
+    return null
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target
+    setProductData((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const handleSave = async () => {
+    if (!productData.product_name.trim()) {
+      alert('Nama Produk wajib diisi.')
+      return
+    }
+    setIsSaving(true)
+    try {
+      const result = await apiService.addNewProduct(productData)
+      if (result.success) {
+        alert('Produk baru berhasil disimpan!')
+        onSaveSuccess()
+        onClose()
+      } else {
+        throw new Error(result.error || 'Terjadi kesalahan di server.')
+      }
+    } catch (error) {
+      alert(`Gagal menyimpan produk: ${(error as Error).message}`)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-content">
-        <h2>Tambah Produk Baru ke Master</h2>
-        <p>Produk ini akan tersedia untuk semua PO di masa depan.</p>
-        
-        <div className="form-grid">
-          <Input label="Nama Produk" name="product_name" value={newProduct.product_name} onChange={handleChange} />
-          <Input label="Tipe Kayu" name="wood_type" value={newProduct.wood_type} onChange={handleChange} />
-          <Input label="Profil" name="profile" value={newProduct.profile} onChange={handleChange} />
-          <Input label="Warna" name="color" value={newProduct.color} onChange={handleChange} />
-          <Input label="Finishing" name="finishing" value={newProduct.finishing} onChange={handleChange} />
-          <Input label="Sample" name="sample" value={newProduct.sample} onChange={handleChange} />
-          <Input label="Marketing" name="marketing" value={newProduct.marketing} onChange={handleChange} />
-          
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Tambah Produk Master Baru</h3>
+          <button className="modal-close-btn" onClick={onClose}>
+            &times;
+          </button>
         </div>
-
-        <div className="modal-actions">
-          <Button variant="secondary" onClick={onClose}>Batal</Button>
+        <div className="modal-body">
+          <div className="form-grid">
+            <Input
+              label="Nama Produk *"
+              name="product_name"
+              value={productData.product_name}
+              onChange={handleInputChange}
+              placeholder="e.g., W Panel"
+            />
+            <Input
+              label="Jenis Kayu"
+              name="wood_type"
+              value={productData.wood_type}
+              onChange={handleInputChange}
+              placeholder="e.g., Ulin"
+            />
+            <Input
+              label="Profil"
+              name="profile"
+              value={productData.profile}
+              onChange={handleInputChange}
+              placeholder="e.g., Bevel"
+            />
+            <Input
+              label="Warna"
+              name="color"
+              value={productData.color}
+              onChange={handleInputChange}
+              placeholder="e.g., Natural"
+            />
+            <Input
+              label="Finishing"
+              name="finishing"
+              value={productData.finishing}
+              onChange={handleInputChange}
+              placeholder="e.g., Doff / Matt"
+            />
+            <Input
+              label="Sample"
+              name="sample"
+              value={productData.sample}
+              onChange={handleInputChange}
+              placeholder="e.g., Ada sample"
+            />
+            <Input
+              label="Marketing"
+              name="marketing"
+              value={productData.marketing}
+              onChange={handleInputChange}
+              placeholder="e.g., Michael DS"
+            />
+          </div>
+        </div>
+        <div className="modal-footer">
+          <Button variant="secondary" onClick={onClose}>
+            Batal
+          </Button>
           <Button onClick={handleSave} disabled={isSaving}>
             {isSaving ? 'Menyimpan...' : 'Simpan Produk'}
           </Button>
         </div>
       </div>
     </div>
-  );
-};
+  )
+}

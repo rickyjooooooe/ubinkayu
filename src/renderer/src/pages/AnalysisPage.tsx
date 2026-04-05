@@ -1,211 +1,393 @@
-/* eslint-disable prettier/prettier */
-/* eslint-disable @typescript-eslint/ban-ts-comment */
+// file: src/renderer/pages/AnalysisPage.tsx
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { Card } from '../components/Card';
-import { AnalysisData, POItem } from '../types';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
+import React, { useState, useEffect, useMemo } from 'react'
+import { Card } from '../components/Card'
+// Impor komponen Recharts yang dibutuhkan
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  CartesianGrid,
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line
+} from 'recharts'
+import * as apiService from '../apiService'
+import { useWindowWidth } from '../hooks/useWindowWidth' // Hook ukuran window
+import { LuLightbulb } from 'react-icons/lu'
+import { User } from '../types'
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF'];
+// --- Definisikan tipe data yang diterima dari backend ---
+interface SalesByMarketing {
+  name: string
+  totalKubikasi: number
+  orderCount: number
+}
+interface MonthlyChartData {
+  month: string // Format YYYY-MM
+  [key: string]: string | number // Bisa berisi nama produk atau marketing sebagai key
+}
+interface AnalysisResultData {
+  topSellingProducts: { name: string; totalQuantity: number; totalKubikasi: number }[]
+  salesByMarketing: SalesByMarketing[]
+  monthlyProductChartData: MonthlyChartData[]
+  monthlyMarketingChartData: MonthlyChartData[]
+  woodTypeDistribution: { name: string; value: number }[]
+  topCustomers: { name: string; totalKubikasi: number }[]
+  trendingProducts: { name: string; last30: number; prev30: number; change: number }[] // Include prev30 for context
+  slowMovingProducts: string[]
+}
+// --- Akhir Tipe Data Baru ---
 
-// Helper untuk menghitung kesimpulan dari data yang difilter
-const calculateInsights = (items: POItem[]) => {
-    if (items.length === 0) {
-        return { topProduct: 'N/A', topWood: 'N/A', topColor: 'N/A', topFinishing: 'N/A' };
-    }
-    const count = (key: keyof POItem) => items.reduce((acc, item) => {
-        const value = item[key] as string;
-        if (value) acc[value] = (acc[value] || 0) + (item.quantity || 1);
-        return acc;
-    }, {} as Record<string, number>);
+// Palet Warna untuk Charts
+const COLORS = [
+  '#0088FE',
+  '#00C49F',
+  '#FFBB28',
+  '#FF8042',
+  '#AF19FF',
+  '#FF4560',
+  '#775DD0',
+  '#FEB019',
+  '#3F51B5',
+  '#03A9F4'
+]
 
-    const getTopItem = (data: Record<string, number>) => Object.keys(data).length > 0
-        ? Object.keys(data).reduce((a, b) => data[a] > data[b] ? a : b)
-        : 'N/A';
+interface AnalysisPageProps {
+  currentUser: User | null;
+}
 
-    return {
-        topProduct: getTopItem(count('product_name')),
-        topWood: getTopItem(count('wood_type')),
-        topColor: getTopItem(count('color')),
-        topFinishing: getTopItem(count('finishing')),
-    };
-};
+const AnalysisPage: React.FC<AnalysisPageProps> = ({ currentUser }) => {
+  const windowWidth = useWindowWidth()
+  const isMobile = windowWidth < 768 // Adjust breakpoint if needed
 
+  // --- State untuk menyimpan data analisis ---
+  const [analysisData, setAnalysisData] = useState<AnalysisResultData | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
-const AnalysisPage: React.FC = () => {
-  const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
-  const [allItems, setAllItems] = useState<POItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const [filters, setFilters] = useState({
-      wood_type: 'all',
-      profile: 'all',
-      color: 'all',
-      finishing: 'all',
-  });
-
+  // --- Fetch Data dari Backend ---
   useEffect(() => {
     const fetchData = async () => {
-      setIsLoading(true);
+      setIsLoading(true)
       try {
-        // @ts-ignore
-        const [summaryData, itemData] = await Promise.all([
-            window.api.getProductSalesAnalysis(),
-            window.api.getSalesItemData(),
-        ]);
-        setAnalysisData(summaryData);
-        setAllItems(itemData);
+        const data: AnalysisResultData = await apiService.getProductSalesAnalysis(currentUser)
+        setAnalysisData(data)
       } catch (err) {
-        console.error("Gagal mengambil data analisis:", err);
+        console.error('Gagal mengambil data analisis:', err)
+        setAnalysisData(null)
       } finally {
-        setIsLoading(false);
+        setIsLoading(false)
       }
-    };
-    fetchData();
-  }, []);
+    }
+    fetchData()
+  }, [currentUser])
 
-  const uniqueOptions = useMemo(() => {
-    const wood_type = new Set<string>();
-    const profile = new Set<string>();
-    const color = new Set<string>();
-    const finishing = new Set<string>();
-    allItems.forEach(item => {
-        if(item.wood_type) wood_type.add(item.wood_type);
-        if(item.profile) profile.add(item.profile);
-        if(item.color) color.add(item.color);
-        if(item.finishing) finishing.add(item.finishing);
-    });
-    return { wood_type: [...wood_type], profile: [...profile], color: [...color], finishing: [...finishing] };
-  }, [allItems]);
+  // --- Memo untuk mendapatkan daftar nama produk & marketing untuk chart bulanan ---
+  const { productKeysForChart, marketingKeysForChart } = useMemo(() => {
+    if (!analysisData) return { productKeysForChart: [], marketingKeysForChart: [] }
 
-  const filteredItems = useMemo(() => {
-      return allItems.filter(item => {
-          return (filters.wood_type === 'all' || item.wood_type === filters.wood_type)
-              && (filters.profile === 'all' || item.profile === filters.profile)
-              && (filters.color === 'all' || item.color === filters.color)
-              && (filters.finishing === 'all' || item.finishing === filters.finishing);
-      });
-  }, [allItems, filters]);
+    // Ambil top 5 produk berdasarkan total quantity
+    const top5Products = analysisData.topSellingProducts.slice(0, 5).map((p) => p.name)
 
-  const insights = useMemo(() => calculateInsights(filteredItems), [filteredItems]);
+    // Ambil semua nama marketing dari data bulanan
+    const marketingKeys = new Set<string>()
+    analysisData.monthlyMarketingChartData.forEach((monthData) => {
+      Object.keys(monthData).forEach((key) => {
+        if (key !== 'month') marketingKeys.add(key)
+      })
+    })
 
-  const handleFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-      setFilters(prev => ({ ...prev, [e.target.name]: e.target.value }));
-  };
+    return {
+      productKeysForChart: top5Products,
+      marketingKeysForChart: Array.from(marketingKeys)
+    }
+  }, [analysisData])
 
   const recommendationText = useMemo(() => {
-    if (!analysisData || !analysisData.trendingProducts || analysisData.trendingProducts.length === 0) {
-      return "Saat ini belum ada tren penjualan produk yang signifikan.";
+    if (!analysisData?.trendingProducts || analysisData.trendingProducts.length === 0) {
+      return 'Saat ini belum ada tren penjualan produk yang signifikan untuk dasar rekomendasi stok.'
     }
-    const topTrending = analysisData.trendingProducts.slice(0, 2).map(p => p.name).join(' dan ');
-    return `Pertimbangkan untuk menambah stok untuk produk ${topTrending} karena permintaannya sedang meningkat pesat.`;
-  }, [analysisData]);
-
-
+    if (analysisData.trendingProducts.length === 1) {
+      const topTrending = analysisData.trendingProducts[0]
+      return (
+        <>
+          Pertimbangkan menambah stok untuk <strong>{topTrending.name}</strong> karena permintaannya
+          meningkat signifikan (+{topTrending.change.toFixed(0)}%) dalam sebulan terakhir (
+          {topTrending.prev30 || 0} → {topTrending.last30 || 0} unit).
+        </>
+      )
+    }
+    // Ambil 2 teratas
+    const topTwoTrending = analysisData.trendingProducts.slice(0, 2)
+    return (
+      <>
+        Fokuskan penambahan stok pada <strong>{topTwoTrending[0].name}</strong> (+
+        {topTwoTrending[0].change.toFixed(0)}%) dan <strong>{topTwoTrending[1].name}</strong> (+
+        {topTwoTrending[1].change.toFixed(0)}%) karena permintaannya sedang meningkat pesat.
+      </>
+    )
+  }, [analysisData])
+  // --- Render Logic ---
   if (isLoading) {
-    return <div className="page-container"><p>🧠 Menganalisis data penjualan, mohon tunggu...</p></div>;
+    return (
+      <div className="page-container">
+        <p>🧠 Menganalisis data, mohon tunggu...</p>
+      </div>
+    )
   }
+
   if (!analysisData) {
-    return <div className="page-container"><p>Gagal memuat data analisis.</p></div>;
+    return (
+      <div className="page-container">
+        <p>Gagal memuat data analisis atau tidak ada data Order yang valid.</p>
+      </div>
+    )
   }
 
   return (
     <div className="page-container">
       <div className="page-header">
         <div>
-          <h1>Analisis & Prediksi Penjualan</h1>
-          <p>Wawasan berbasis data untuk membantu pengambilan keputusan stok.</p>
+          <h1>Analisis Order</h1>
+          <p>Wawasan berbasis data dari SEMUA Order (kecuali Cancelled).</p>
         </div>
       </div>
 
-      {/* --- BAGIAN RINGKASAN UMUM (GRAFIK) --- */}
-      <h3>Ringkasan Umum</h3>
-      <div className="dashboard-widgets-grid">
-        <Card>
-          <h4>{'📊 Distribusi Jenis Kayu Terlaris'}</h4>
+      {/* --- Card Performa Marketing --- */}
+      <Card style={{ marginBottom: '1.5rem' }}>
+        <h4>⭐ Performa Marketing (Total Kubikasi Order)</h4>
+        {analysisData.salesByMarketing.length > 0 ? (
           <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie data={analysisData.woodTypeDistribution} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="#8884d8" label={(props) => `${props.name} (${props.percent.toFixed(0)}%)`}>
-                {analysisData.woodTypeDistribution.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-              </Pie>
-              <Tooltip formatter={(value) => `${value} unit`} /><Legend />
-            </PieChart>
+            <BarChart
+              layout="vertical"
+              data={analysisData.salesByMarketing}
+              margin={{ left: 100, right: 30 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis type="number" />
+              <YAxis type="category" dataKey="name" width={100} interval={0} fontSize={11} />
+              <Tooltip
+                formatter={(value, name) => {
+                  if (name === 'Total m³') return [`${Number(value).toFixed(3)} m³`, name]
+                  if (name === 'Jumlah Order') return [`${value} Order`, name]
+                  return [value, name]
+                }}
+              />
+              <Legend />
+              <Bar dataKey="totalKubikasi" name="Total m³" fill={COLORS[0]} />
+              <Bar dataKey="orderCount" name="Jumlah Order" fill={COLORS[1]} />
+            </BarChart>
           </ResponsiveContainer>
-        </Card>
+        ) : (
+          <p>Tidak ada data penjualan per marketing.</p>
+        )}
+      </Card>
+
+      {/* --- Card Top Selling Products --- */}
+      <Card style={{ marginBottom: '1.5rem' }}>
+        <h4>🏆 Top 10 Produk (Berdasarkan Kuantitas & Kubikasi)</h4>
+        {analysisData.topSellingProducts.length > 0 ? (
+          <ResponsiveContainer width="100%" height={400}>
+            <BarChart
+              layout="vertical"
+              data={analysisData.topSellingProducts}
+              margin={{ left: 150, right: 30 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis type="number" allowDecimals={false} />
+              <YAxis type="category" dataKey="name" width={150} interval={0} fontSize={10} />
+              <Tooltip
+                formatter={(value, name) => {
+                  if (name === 'Total Kuantitas') return [`${value} unit`, name]
+                  if (name === 'Total Kubikasi') return [`${Number(value).toFixed(3)} m³`, name]
+                  return [value, name]
+                }}
+              />
+              <Legend />
+              <Bar dataKey="totalQuantity" name="Total Kuantitas" fill={COLORS[2]} />
+              <Bar dataKey="totalKubikasi" name="Total Kubikasi" fill={COLORS[3]} />
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <p>Tidak ada data produk.</p>
+        )}
+      </Card>
+
+      {/* --- Grafik Penjualan Bulanan --- */}
+      <div className="dashboard-widgets-grid">
+        {/* Grafik Marketing Bulanan */}
         <Card>
-          <h4>{'⭐ Top 5 Customer (Berdasarkan Volume m³)'}</h4>
-          {analysisData.topCustomers.length > 0 ? (
-            <ol className="top-customer-list">
-              {analysisData.topCustomers.map(c => <li key={c.name}><span>{c.name}</span><strong>{c.totalKubikasi.toFixed(3)} m³</strong></li>)}
-            </ol>
-          ) : <p>Belum ada data kubikasi customer.</p>}
+          <h4>📈 Tren Penjualan Marketing per Bulan (m³)</h4>
+          {analysisData.monthlyMarketingChartData.length > 0 && marketingKeysForChart.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart
+                data={analysisData.monthlyMarketingChartData}
+                margin={{ top: 5, right: 30, left: 0, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip formatter={(value) => `${Number(value).toFixed(3)} m³`} />
+                <Legend />
+                {marketingKeysForChart.map((key, index) => (
+                  <Line
+                    key={key}
+                    type="monotone"
+                    dataKey={key}
+                    name={key}
+                    stroke={COLORS[index % COLORS.length]}
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <p>Data penjualan marketing bulanan tidak cukup.</p>
+          )}
+        </Card>
+        {/* Grafik Produk Bulanan */}
+        <Card>
+          <h4>📈 Tren Penjualan Top 5 Produk per Bulan (Unit)</h4>
+          {analysisData.monthlyProductChartData.length > 0 && productKeysForChart.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart
+                data={analysisData.monthlyProductChartData}
+                margin={{ top: 5, right: 30, left: 0, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis allowDecimals={false} />
+                <Tooltip formatter={(value) => `${value} unit`} />
+                <Legend />
+                {productKeysForChart.map((key, index) => (
+                  // Isi nilai 0 jika data produk tidak ada di bulan tsb
+                  <Line
+                    key={key}
+                    type="monotone"
+                    dataKey={key}
+                    name={key}
+                    stroke={COLORS[index % COLORS.length]}
+                    strokeWidth={2}
+                    dot={false}
+                    connectNulls={false}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <p>Data penjualan produk bulanan tidak cukup.</p>
+          )}
         </Card>
       </div>
-      <Card style={{ marginTop: '1.5rem' }}>
-        <h4>{'🏆 Top 10 Produk Terlaris (Berdasarkan Kuantitas)'}</h4>
-        <ResponsiveContainer width="100%" height={400}>
-          <BarChart layout="vertical" data={analysisData.topSellingProducts.slice()} margin={{ top: 20, right: 30, left: 100, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" /><XAxis type="number" allowDecimals={false} /><YAxis type="category" dataKey="name" width={150} interval={0} /><Tooltip formatter={(value) => `${value} unit`} /><Legend /><Bar dataKey="totalQuantity" name="Total Kuantitas Terjual" fill="#8884d8" />
-          </BarChart>
-        </ResponsiveContainer>
-      </Card>
+
+      {/* --- Widget Lainnya --- */}
       <div className="dashboard-widgets-grid" style={{ marginTop: '1.5rem' }}>
+        {/* Wood Type Distribution */}
         <Card>
-          <h4>{'🔥 Produk Tren Naik (>20% dalam sebulan)'}</h4>
-          {analysisData.trendingProducts.length > 0 ? (<ul className="insight-list">{analysisData.trendingProducts.map(p => (<li key={p.name}><strong>{p.name}</strong><span className="trend-up">+{p.change.toFixed(0)}%</span></li>))}</ul>) : <p>Tidak ada produk yang sedang tren naik.</p>}
+          <h4>📊 Distribusi Jenis Kayu (Unit Terjual)</h4>
+          {analysisData.woodTypeDistribution.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={analysisData.woodTypeDistribution}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={isMobile ? 60 : 80}
+                  labelLine={false}
+                  label={
+                    !isMobile &&
+                    ((props: any) => `${props.name} (${(props.percent * 100).toFixed(0)}%)`)
+                  }
+                >
+                  {analysisData.woodTypeDistribution.map((_entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value) => `${value} unit`} />
+                <Legend
+                  layout={isMobile ? 'horizontal' : 'vertical'}
+                  verticalAlign={isMobile ? 'bottom' : 'middle'}
+                  align={isMobile ? 'center' : 'right'}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <p>Tidak ada data jenis kayu.</p>
+          )}
         </Card>
+        {/* Top Customers */}
         <Card>
-          <h4>{'❄️ Produk Kurang Laris (Belum Pernah Terjual)'}</h4>
-          {analysisData.slowMovingProducts.length > 0 ? (<ul className="insight-list">{analysisData.slowMovingProducts.slice(0, 5).map(name => <li key={name}>{name}</li>)}{analysisData.slowMovingProducts.length > 5 && <li>dan lainnya...</li>}</ul>) : <p>Semua produk pernah terjual. Kerja bagus!</p>}
+          <h4>⭐ Top 10 Customer (Berdasarkan Volume m³)</h4>
+          {analysisData.topCustomers.length > 0 ? (
+            <ol className="top-customer-list">
+              {analysisData.topCustomers.map((c) => (
+                <li key={c.name}>
+                  <span>{c.name}</span>
+                  <strong>{c.totalKubikasi.toFixed(3)} m³</strong>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p>Tidak ada data customer.</p>
+          )}
+        </Card>
+      </div>
+      <div className="dashboard-widgets-grid" style={{ marginTop: '1.5rem' }}>
+        {/* Trending Products */}
+        <Card>
+          <h4>🔥 Produk Tren Naik (&gt;10% dalam sebulan)</h4>
+          {analysisData.trendingProducts.length > 0 ? (
+            <ul className="insight-list">
+              {analysisData.trendingProducts.map((p) => (
+                <li key={p.name}>
+                  <span>
+                    <strong>{p.name}</strong> ({p.prev30 || 0} → {p.last30 || 0} unit)
+                  </span>
+                  <span className="trend-up">+{p.change.toFixed(0)}%</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>Tidak ada produk yang tren naik signifikan.</p>
+          )}
+        </Card>
+        {/* Slow Moving Products */}
+        <Card>
+          <h4>❄️ Produk Belum Terjual (dari Master)</h4>
+          {analysisData.slowMovingProducts.length > 0 ? (
+            <ul className="insight-list">
+              {analysisData.slowMovingProducts.slice(0, 10).map((name) => (
+                <li key={name}>{name}</li>
+              ))}
+              {analysisData.slowMovingProducts.length > 10 && (
+                <li>... dan {analysisData.slowMovingProducts.length - 10} lainnya</li>
+              )}
+            </ul>
+          ) : (
+            <p>Semua produk master pernah terjual.</p>
+          )}
         </Card>
       </div>
       <Card className="recommendation-card">
-        <h4>{'📦 Rekomendasi Stok Cerdas'}</h4>
-        <p>{recommendationText}</p>
-      </Card>
-
-      {/* --- BAGIAN EKSPLORASI DATA INTERAKTIF --- */}
-      <h3 style={{ marginTop: '2rem' }}>Eksplorasi Minat Customer</h3>
-      <Card>
-        <div className="interactive-bi-layout">
-            <div className="bi-filters">
-                <h4>Filter Data</h4>
-                <div className="form-group"><label>Jenis Kayu</label><select name="wood_type" value={filters.wood_type} onChange={handleFilterChange}><option value="all">Semua</option>{uniqueOptions.wood_type.map(o => <option key={o} value={o}>{o}</option>)}</select></div>
-                <div className="form-group"><label>Profil</label><select name="profile" value={filters.profile} onChange={handleFilterChange}><option value="all">Semua</option>{uniqueOptions.profile.map(o => <option key={o} value={o}>{o}</option>)}</select></div>
-                <div className="form-group"><label>Warna</label><select name="color" value={filters.color} onChange={handleFilterChange}><option value="all">Semua</option>{uniqueOptions.color.map(o => <option key={o} value={o}>{o}</option>)}</select></div>
-                <div className="form-group"><label>Finishing</label><select name="finishing" value={filters.finishing} onChange={handleFilterChange}><option value="all">Semua</option>{uniqueOptions.finishing.map(o => <option key={o} value={o}>{o}</option>)}</select></div>
-            </div>
-            <div className="bi-results">
-                <Card className="insight-card">
-                    <h4>Kesimpulan Otomatis</h4>
-                    <p>Dari <strong>{filteredItems.length}</strong> item yang cocok:</p>
-                    <ul>
-                        <li>Produk Paling Laris: <strong>{insights.topProduct}</strong></li>
-                        <li>Jenis Kayu Paling Umum: <strong>{insights.topWood}</strong></li>
-                        <li>Warna Paling Diminati: <strong>{insights.topColor}</strong></li>
-                        <li>Finishing Paling Populer: <strong>{insights.topFinishing}</strong></li>
-                    </ul>
-                </Card>
-            </div>
+        <div className="recommendation-icon">
+          <LuLightbulb /> {/* Gunakan ikon */}
         </div>
-        <div className="po-table-container" style={{marginTop: '1.5rem'}}>
-            <table className="simple-table">
-                <thead>
-                    <tr><th>Produk</th><th>Customer</th><th>Jenis Kayu</th><th>Profil</th><th>Warna</th><th>Finishing</th><th>Qty</th></tr>
-                </thead>
-                <tbody>
-                    {filteredItems.slice(0, 100).map(item => (
-                        <tr key={item.id}>
-                            <td>{item.product_name}</td><td>{item.customer_name}</td><td>{item.wood_type}</td><td>{item.profile}</td><td>{item.color}</td><td>{item.finishing}</td><td>{item.quantity} {item.satuan}</td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-            {filteredItems.length > 100 && <p style={{textAlign: 'center', marginTop: '1rem'}}><i>Dan {filteredItems.length - 100} item lainnya...</i></p>}
+        <div className="recommendation-content">
+          <h4>📦 Rekomendasi Stok Cerdas</h4>
+          <p>{recommendationText}</p> {/* Tampilkan teks rekomendasi */}
         </div>
       </Card>
-    </div>
-  );
-};
+    </div> // Akhir page-container
+  )
+}
 
-export default AnalysisPage;
+export default AnalysisPage

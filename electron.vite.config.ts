@@ -6,20 +6,39 @@ export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
     build: {
+      watch: {
+        include: ['electron/**/*']
+      },
       rollupOptions: {
+        // --- TAMBAHKAN BARIS INI ---
+        input: resolve(__dirname, 'src/main/index.ts'),
+        // --- AKHIR TAMBAHAN ---
         external: [
           'google-spreadsheet',
           'google-auth-library',
-          'pdfkit',       // ⬅️ tambahin ini
-          'fs-extra'      // ⬅️ kalau kamu pakai fs-extra
+          'pdfkit',
+          'fs-extra',
+          'canvas',
+          'stream'
         ]
       }
     }
   },
   preload: {
-    plugins: [externalizeDepsPlugin()]
+    plugins: [externalizeDepsPlugin()],
+    build: {
+      rollupOptions: {
+        input: resolve(__dirname, 'src/preload/index.ts'),
+
+        output: {
+          format: 'cjs',
+          entryFileNames: '[name].js'
+        }
+      }
+    }
   },
   renderer: {
+    base: './',
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer/src')

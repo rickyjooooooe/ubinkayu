@@ -7,9 +7,9 @@ interface CardProps {
   style?: React.CSSProperties; 
 }
 
-export const Card: React.FC<CardProps> = ({ children, className }) => {
+export const Card: React.FC<CardProps> = ({ children, className, style }) => {
   return (
-    <div className={`card-container ${className}`}>
+    <div className={`card-container ${className || ''}`} style={style}>
       {children}
     </div>
   );

@@ -1,0 +1,17 @@
+{
+	"appId": "com.ubinkayu.erp",
+	"appName": "Ubinkayu ERP",
+	"webDir": "out/renderer",
+	"server": {
+		"url": "https://ubinkayu-erp1.vercel.app",
+		"hostname": "ubinkayu-erp1.vercel.app",
+		"androidScheme": "https",
+		"allowNavigation": [
+			"ubinkayu-erp1.vercel.app"
+		]
+	},
+	"ios": {
+		"contentInset": "never"
+	},
+	"packageClassList": []
+}

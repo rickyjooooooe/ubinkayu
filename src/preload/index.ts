@@ -1,5 +1,7 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { contextBridge, ipcRenderer } from 'electron'
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+
+console.log('✅ --- PRELOAD SCRIPT STARTED ---')
 
 const api = {
   // --- Fungsi Dasar & Test ---
@@ -9,39 +11,47 @@ const api = {
   getProducts: () => ipcRenderer.invoke('product:get'),
   addNewProduct: (data) => ipcRenderer.invoke('product:add', data),
 
-  // --- Fungsi CRUD untuk Purchase Order (PO) ---
-  saveNewPO: (data) => ipcRenderer.invoke('po:save', data),
-  listPOs: () => ipcRenderer.invoke('po:list'),
-  updatePO: (data) => ipcRenderer.invoke('po:update', data),
-  deletePO: (poId) => ipcRenderer.invoke('po:delete', poId),
-  listPOItems: (poId) => ipcRenderer.invoke('po:listItems', poId),
+  loginUser: (loginData) => ipcRenderer.invoke('login-user', loginData),
 
+  // --- Fungsi CRUD untuk Purchase Order (PO) ---
+  saveNewOrder: (data) => ipcRenderer.invoke('order:save', data),
+  listOrders: (user) => ipcRenderer.invoke('order:list', user),
+  updatePO: (data) => ipcRenderer.invoke('order:update', data),
+  deletePO: (orderId) => ipcRenderer.invoke('order:delete', orderId),
+  listorderItems: (orderId) => ipcRenderer.invoke('order:listItems', orderId),
+// [BARU] Request Project
+requestProject: (data) => ipcRenderer.invoke('order:requestProject', data),
+confirmRequest: (data) => ipcRenderer.invoke('order:confirmRequest', data),
+getCommissionData: (user) => ipcRenderer.invoke('commission:getData', user),
   // --- Fungsi untuk Revisi & Histori ---
-  listPORevisions: (poId) => ipcRenderer.invoke('po:listRevisions', poId),
-  listPOItemsByRevision: (revId) => ipcRenderer.invoke('po:listItemsByRevision', revId),
-  getRevisionHistory: (poId) => ipcRenderer.invoke('po:getRevisionHistory', poId),
+  listPORevisions: (orderId) => ipcRenderer.invoke('order:listRevisions', orderId),
+  listorderItemsByRevision: (revId) => ipcRenderer.invoke('order:listItemsByRevision', revId),
+  getRevisionHistory: (orderId) => ipcRenderer.invoke('order:getRevisionHistory', orderId),
 
   // --- Fungsi untuk PDF & Link ---
-  previewPO: (data) => ipcRenderer.invoke('po:preview', data),
+  previewPO: (data) => ipcRenderer.invoke('order:preview', data),
   openExternalLink: (url) => ipcRenderer.invoke('app:open-external-link', url),
 
-  // --- Fungsi untuk Progress Tracking ---
-  getActivePOs: () => ipcRenderer.invoke('progress:getActivePOs'),
-  // Use the full, correct name
-  getPOItemsWithDetails: (poId) => ipcRenderer.invoke('progress:getPOItems', poId),
+  // --- Fungsi untuk Progress, Analisis & Lainnya ---
+  getActiveOrdersWithProgress: (user) => ipcRenderer.invoke('progress:getActiveOrdersWithProgress', user), // <-- PERBAIKAN 1
+  getorderItemsWithDetails: (orderId) => ipcRenderer.invoke('progress:getorderItemsWithDetails', orderId), // <-- PERBAIKAN 2
   updateItemProgress: (data) => ipcRenderer.invoke('progress:updateItem', data),
-  getRecentUpdates: () => ipcRenderer.invoke('progress:getRecentUpdates'),
-  // [BARU] Tambahkan fungsi baru di sini
-  getAttentionData: () => ipcRenderer.invoke('progress:getAttentionData'),
+  getRecentProgressUpdates: (user) => ipcRenderer.invoke('progress:getRecentProgressUpdates', user), // <-- PERBAIKAN 3
+  getAttentionData: (user) => ipcRenderer.invoke('progress:getAttentionData', user),
+  updateStageDeadline: (data) => ipcRenderer.invoke('progress:updateDeadline', data),
+  getProductSalesAnalysis: (user) => ipcRenderer.invoke('analysis:getProductSales', user),
+  getSalesItemData: (user) => ipcRenderer.invoke('analysis:getSalesItemData', user),
 
+  // --- Fungsi untuk File ---
   openFileDialog: () => ipcRenderer.invoke('app:open-file-dialog'),
-  getProductSalesAnalysis: () => ipcRenderer.invoke('analysis:getProductSales'),
-  getSalesItemData: () => ipcRenderer.invoke('analysis:getSalesItemData'),
-  updateStageDeadline: (data) => ipcRenderer.invoke('progress:updateDeadline', data)
+  readFileAsBase64: (filePath) => ipcRenderer.invoke('app:read-file-base64', filePath),
+  ollamaChat: (prompt, user, history) => ipcRenderer.invoke('ai:ollamaChat', prompt, user, history)
 }
 
 try {
+  console.log(' bridjinggg....')
   contextBridge.exposeInMainWorld('api', api)
+  console.log('✅ --- API EXPOSED TO WINDOW SUCCESSFULLY ---')
 } catch (error) {
-  console.error(error)
+  console.error('❌ --- FAILED TO EXPOSE API ---', error)
 }

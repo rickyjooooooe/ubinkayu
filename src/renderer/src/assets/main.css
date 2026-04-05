@@ -74,7 +74,7 @@ body {
 
 /* --- Page --- */
 .page-container {
-  max-width: 1200px;
+  width: 100%; /* Pastikan bisa menggunakan lebar penuh */
   margin: 2rem auto;
 }
 
@@ -177,20 +177,20 @@ body {
 }
 /* Tambahkan kode ini di paling bawah main.css */
 
-.po-grid {
+.order-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 1.5rem;
 }
-.po-item-card {
+.order-item-card {
   border-left: 4px solid #4299E1;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
-.po-item-card:hover {
+.order-item-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 4px 12px rgba(0,0,0,0.08);
 }
-.po-card-header {
+.order-card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -211,14 +211,14 @@ body {
 .status-badge.high { background-color: #D69E2E; }
 .status-badge.urgent { background-color: #C53030; }
 .status-badge.baru { background-color: #3182CE; }
-.po-card-info {
+.order-card-info {
     display: flex;
     justify-content: space-between;
     font-size: 0.9rem;
     color: var(--text-secondary);
     margin-bottom: 1rem;
 }
-.po-card-footer {
+.order-card-footer {
     display: flex;
     gap: 0.5rem;
     border-top: 1px solid var(--border-color);
@@ -424,25 +424,25 @@ label {
   color: #4a5568;
 }
 
-/* Tambahkan di bawah bagian .po-item-card atau di akhir file */
+/* Tambahkan di bawah bagian .order-item-card atau di akhir file */
 
 /* ================================== */
 /* STYLING UNTUK PO DETAIL PAGE       */
 /* ================================== */
 
-.detail-po-info {
+.detail-order-info {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); /* Responsif, min 350px */
   gap: 1.5rem; /* Jarak antar kartu */
   margin-bottom: 2rem;
 }
 
-.po-summary-card {
+.order-summary-card {
   /* Border kiri untuk menonjolkan PO */
   border-left: 4px solid var(--primary-color);
 }
 
-.po-summary-header {
+.order-summary-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -451,21 +451,21 @@ label {
   border-bottom: 1px solid var(--border-color);
 }
 
-.po-summary-po-number {
+.order-summary-order-number {
   margin: 0;
   font-size: 1.5rem; /* Lebih besar dari h2 Card */
   font-weight: 700;
   color: var(--primary-color); /* Warna PO number */
 }
 
-.po-summary-customer {
+.order-summary-customer {
   font-size: 1.1rem;
   color: var(--text-primary);
   margin-top: 0;
   margin-bottom: 1.5rem;
 }
 
-.po-summary-grid {
+.order-summary-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 1rem;
@@ -593,7 +593,7 @@ label {
   align-items: center;
   gap: 1.5rem;
 }
-.attention-po-number {
+.attention-order-number {
   font-weight: 600;
 }
 .attention-customer, .attention-deadline {
@@ -613,36 +613,36 @@ label {
 
 
 /* --- Daftar PO Aktif --- */
-.active-po-list h3 {
+.active-order-list h3 {
   margin-top: 0;
   margin-bottom: 1rem;
 }
-.po-tracking-item-card {
+.order-tracking-item-card {
   margin-bottom: 1.5rem;
 }
-.po-tracking-header {
+.order-tracking-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 1rem;
 }
-.po-tracking-number {
+.order-tracking-number {
   font-size: 1.1rem;
   font-weight: 600;
 }
-.po-tracking-customer {
+.order-tracking-customer {
   margin: 0.1rem 0 0;
   font-size: 0.9rem;
   color: var(--text-secondary);
 }
-.po-tracking-progress {
+.order-tracking-progress {
   display: flex;
   justify-content: space-between;
   font-size: 0.85rem;
   color: var(--text-secondary);
   font-weight: 500;
 }
-.po-tracking-footer {
+.order-tracking-footer {
   margin-top: 1rem;
   padding-top: 1rem;
   border-top: 1px solid var(--border-color);
@@ -650,7 +650,7 @@ label {
   justify-content: space-between;
   align-items: center;
 }
-.po-tracking-deadline {
+.order-tracking-deadline {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -659,7 +659,7 @@ label {
 .status-badge.overdue {
   background-color: #E53E3E; /* Merah */
 }
-.po-tracking-actions {
+.order-tracking-actions {
   display: flex;
   gap: 0.5rem;
 }
@@ -716,7 +716,7 @@ label {
   box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
-.po-table-container {
+.order-table-container {
   width: 100%;
   overflow-x: auto;
   background-color: var(--card-bg);
@@ -724,19 +724,19 @@ label {
   border-radius: 8px;
 }
 
-.po-table {
+.order-table {
   width: 100%;
   border-collapse: collapse;
 }
 
-.po-table th, .po-table td {
+.order-table th, .order-table td {
   padding: 12px 15px;
   text-align: left;
   border-bottom: 1px solid var(--border-color);
-  white-space: nowrap;
+
 }
 
-.po-table th {
+.order-table th {
   background-color: var(--secondary-color);
   font-size: 0.85rem;
   font-weight: 600;
@@ -744,23 +744,33 @@ label {
   text-transform: uppercase;
 }
 
-.po-table tbody tr:hover {
+.order-table tbody tr:hover {
   background-color: #f9fafb;
 }
 
-.po-table tbody td {
+.order-table tbody td {
   font-size: 0.9rem;
 }
 
-.po-table-actions {
+.order-table-actions {
   display: flex;
   gap: 0.5rem;
 }
 
-.po-table-actions .button {
+.order-table-actions .button {
   padding: 0.25rem 0.75rem;
   font-size: 0.8rem;
 }
+
+
+
+.order-table td.no-wrap-cell {
+  white-space: nowrap; /* Terapkan nowrap hanya pada sel dengan kelas ini */
+}
+
+
+
+
 
 /* Badge untuk status PO di dalam tabel */
 .status-badge.status-open { background-color: #3182CE; }
@@ -1013,7 +1023,7 @@ label {
   font-size: 0.8rem;
   color: var(--text-secondary);
 }
-.po-card-footer-stacked {
+.order-card-footer-stacked {
   display: flex;
   flex-direction: column; /* Menyusun baris tombol secara vertikal */
   gap: 8px; /* Memberi jarak antar baris tombol */
@@ -1112,7 +1122,7 @@ label {
   background-color: #C53030; /* Merah lebih gelap */
 }
 
-.po-card-footer {
+.order-card-footer {
   display: flex;
   flex-direction: column; /* Membuat baris tombol tersusun vertikal */
   gap: 0.5rem; /* Jarak antar baris tombol */
@@ -1133,7 +1143,7 @@ label {
 }
 
 /* Styling untuk progress bar di halaman detail PO */
-.po-summary-progress {
+.order-summary-progress {
   margin-top: 1.5rem;
 }
 
@@ -1538,4 +1548,1518 @@ label {
 /* Hilangkan panah di input date yang dinonaktifkan */
 .stage-deadline input[type="date"]:disabled::-webkit-calendar-picker-indicator {
   display: none;
+}
+
+/* ========================================= */
+/* == STYLING RESPONSIVE UNTUK MODAL      == */
+/* ========================================= */
+
+/* 1. Latar Belakang Overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  padding: 1rem; /* Padding agar modal tidak menempel di tepi layar kecil */
+  box-sizing: border-box;
+}
+
+/* 2. Konten Modal Utama (Mobile First) */
+.modal-content {
+  background-color: var(--card-bg);
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  max-width: 550px; /* Lebar maksimum untuk layar desktop */
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh; /* Batasi tinggi agar bisa di-scroll jika konten panjang */
+  overflow: hidden; /* Mencegah konten keluar dari border-radius */
+}
+
+/* 3. Header Modal */
+.modal-header {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: var(--text-primary);
+}
+
+.modal-close-btn {
+  background: none;
+  border: none;
+  font-size: 2rem;
+  line-height: 1;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s ease;
+}
+
+.modal-close-btn:hover {
+  color: var(--text-primary);
+}
+
+/* 4. Body Modal (dengan scroll) */
+.modal-body {
+  padding: 1.5rem;
+  overflow-y: auto; /* Aktifkan scroll jika konten lebih tinggi dari max-height */
+}
+
+/* 5. Form Grid (Responsive) */
+.modal-body .form-grid {
+  display: grid;
+  grid-template-columns: 1fr; /* Default: 1 kolom untuk mobile */
+  gap: 1.25rem;
+}
+
+/* 6. Footer Modal (Mobile First) */
+.modal-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border-color);
+  background-color: #f9fafb;
+  display: flex;
+  flex-direction: column-reverse; /* Tombol utama (Simpan) di atas */
+  gap: 0.75rem;
+}
+
+/* ====================================================== */
+/* == Media Query untuk layar lebih besar (Tablet ke atas) == */
+/* ====================================================== */
+@media (min-width: 768px) {
+  /* Ubah form grid menjadi 2 kolom */
+  .modal-body .form-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Ubah layout footer menjadi horizontal */
+  .modal-footer {
+    flex-direction: row;
+    justify-content: flex-end;
+  }
+}
+
+/* ========================================= */
+/* == STYLING MODERN & RESPONSIVE MODAL   == */
+/* ========================================= */
+
+/* 1. Latar Belakang Overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(17, 24, 39, 0.6); /* Sedikit lebih gelap untuk kontras */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  padding: 1rem;
+  box-sizing: border-box;
+  backdrop-filter: blur(4px); /* Efek blur untuk background */
+}
+
+/* 2. Konten Modal Utama (Mobile First) */
+.modal-content {
+  background-color: var(--card-bg);
+  border-radius: 12px; /* Sudut lebih tumpul */
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  width: 100%;
+  max-width: 600px; /* Lebar maksimum agar tidak terlalu lebar di desktop */
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh; /* Batasi tinggi modal */
+  overflow: hidden;
+  /* Animasi saat muncul */
+  transform: scale(0.95);
+  opacity: 0;
+  animation: fadeInScale 0.2s ease-out forwards;
+}
+
+@keyframes fadeInScale {
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* 3. Header Modal */
+.modal-header {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0; /* Mencegah header mengecil */
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.modal-close-btn {
+  background: none;
+  border: none;
+  font-size: 1.75rem;
+  line-height: 1;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.modal-close-btn:hover {
+  background-color: var(--secondary-color);
+  color: var(--text-primary);
+}
+
+/* 4. Body Modal (dengan scroll) */
+.modal-body {
+  padding: 1.5rem;
+  overflow-y: auto; /* Aktifkan scroll jika kontennya panjang */
+}
+
+/* 5. Form Grid (Responsive) */
+.modal-body .form-grid {
+  display: grid;
+  grid-template-columns: 1fr; /* Default: 1 kolom untuk mobile */
+  gap: 1.25rem;
+}
+
+/* 6. Footer Modal (Mobile First) */
+.modal-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border-color);
+  background-color: #F9FAFB; /* Latar belakang abu-abu muda */
+  display: flex;
+  flex-direction: column-reverse; /* Tombol utama (Simpan) di atas pada mobile */
+  gap: 0.75rem;
+  flex-shrink: 0; /* Mencegah footer mengecil */
+}
+
+/* ====================================================== */
+/* == Media Query untuk layar lebih besar (Tablet ke atas) == */
+/* ====================================================== */
+@media (min-width: 640px) { /* breakpoint lebih kecil untuk form 2 kolom */
+  /* Ubah form grid menjadi 2 kolom */
+  .modal-body .form-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Ubah layout footer menjadi horizontal */
+  .modal-footer {
+    flex-direction: row;
+    justify-content: flex-end;
+  }
+}
+
+.form-group label {
+  display: block;
+  margin-top: 10px;
+  margin-bottom: 10px; /* <<< DIUBAH: Jarak ditambah dari 6px menjadi 8px */
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+
+/* 2. Menghapus tinggi tetap dan mengandalkan padding untuk ukuran yang natural */
+.form-group input,
+.form-group select,
+.form-group textarea {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-color: #fff;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #111827;
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 10px 14px; /* <<< DIUBAH: Padding horizontal sedikit lebih lega */
+  /* height: 42px; */ /* <<< DIHAPUS: Hapus baris ini agar tinggi input fleksibel */
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  vertical-align: middle;
+}
+
+/* Placeholder input + placeholder select (option kosong) */
+.form-group input::placeholder,
+.form-group textarea::placeholder {
+  color: #9ca3af; /* Warna placeholder sedikit lebih terang */
+}
+
+/* ========================================= */
+/* == CSS RESPONSIVE UNTUK HALAMAN ANALISIS == */
+/* ========================================= */
+
+/* 1. Grid Utama untuk Widget (Ringkasan Umum) */
+/* Di layar kecil, semua widget akan tersusun dalam satu kolom. */
+.dashboard-widgets-grid {
+  display: grid;
+  grid-template-columns: 1fr; /* Default: 1 kolom */
+  gap: 1.5rem;
+}
+
+/* 2. Layout BI Interaktif (Filter & Hasil) */
+/* Di layar kecil, filter akan berada di atas, dan hasil di bawahnya. */
+.interactive-bi-layout {
+  display: grid;
+  grid-template-columns: 1fr; /* Default: 1 kolom */
+  gap: 1.5rem;
+}
+
+/* 3. Penyesuaian untuk Label Y-Axis pada Bar Chart */
+/* Mencegah teks label yang panjang terpotong di layar kecil */
+.recharts-wrapper .recharts-yAxis .recharts-text {
+  font-size: 0.8rem; /* Sedikit perkecil font label produk */
+}
+
+/* ======================================================== */
+/* == Media Query untuk layar lebih besar (Tablet ke atas) == */
+/* ======================================================== */
+
+/* Terapkan layout multi-kolom untuk layar 768px atau lebih lebar */
+@media (min-width: 768px) {
+  .dashboard-widgets-grid {
+    /* Kembali ke grid auto-fit yang fleksibel */
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  }
+}
+
+/* Terapkan layout 2 kolom untuk BI Interaktif di layar 992px atau lebih lebar */
+@media (min-width: 992px) {
+  .interactive-bi-layout {
+    /* Sidebar filter 250px, sisa untuk hasil */
+    grid-template-columns: 250px 1fr;
+  }
+}
+
+/* ========================================= */
+/* == CSS RESPONSIVE UNTUK HALAMAN DASHBOARD == */
+/* ========================================= */
+
+/* 1. Grid Utama untuk Stat Cards & Widgets */
+/* Di layar kecil (mobile-first), buat semua grid menjadi satu kolom. */
+.dashboard-grid,
+.dashboard-widgets-grid {
+  grid-template-columns: 1fr; /* Paksa menjadi satu kolom */
+}
+
+/* 2. Penyesuaian untuk Kartu Statistik di Mobile */
+.stat-card {
+  flex-direction: row; /* Pastikan ikon dan teks tetap berdampingan */
+  align-items: center;
+}
+
+.stat-card-icon {
+  margin-right: 1rem;
+}
+
+/* 3. Penyesuaian untuk Tabel */
+/* Pastikan container tabel bisa di-scroll secara horizontal */
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+}
+
+/* ======================================================== */
+/* == Media Query untuk layar lebih besar (Tablet ke atas) == */
+/* ======================================================== */
+
+/* Terapkan kembali layout multi-kolom untuk layar 768px atau lebih lebar */
+@media (min-width: 768px) {
+  /* Kembalikan grid Stat Cards menjadi fleksibel */
+  .dashboard-grid {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+
+  /* Kembalikan grid Widget (grafik) menjadi 2 kolom */
+  .dashboard-widgets-grid {
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  }
+}
+
+/* ========================================= */
+/* == CSS RESPONSIF UNTUK HALAMAN INPUT PO  == */
+/* ========================================= */
+
+/* 1. Header Halaman & Header Bagian Item */
+/* Di layar kecil, buat judul dan tombol aksi menumpuk secara vertikal */
+.page-header,
+.item-section-header {
+  flex-direction: column;
+  align-items: flex-start; /* Ratakan ke kiri */
+  gap: 1rem;
+}
+
+/* Pastikan grup tombol tidak ikut menyempit */
+.header-actions,
+.item-section-header > div {
+  gap: 0.5rem;
+  flex-wrap: wrap; /* Izinkan tombol turun baris jika tidak muat */
+}
+
+
+/* 2. Grid Form Informasi Dasar PO */
+/* Di layar kecil, ubah grid 2 kolom menjadi 1 kolom */
+.form-grid {
+  grid-template-columns: 1fr;
+}
+
+
+/* 3. Tabel Item yang Lebar (Paling Penting) */
+/* Pastikan container tabel bisa di-scroll ke samping */
+.table-responsive {
+  overflow-x: auto; /* Aktifkan horizontal scroll */
+  width: 100%;
+  /* Tambahkan efek bayangan halus di tepi untuk menandakan bisa di-scroll */
+  -webkit-mask-image: linear-gradient(to right, transparent, black 20px, black 98%, transparent);
+  mask-image: linear-gradient(to right, transparent, black 20px, black 98%, transparent);
+}
+
+/* Beri lebar minimum pada tabel agar tidak tertekan aneh */
+.item-table {
+  width: 100%;
+  min-width: 1400px; /* Lebar minimum agar semua kolom muat dengan nyaman */
+}
+
+
+/* ======================================================== */
+/* == Media Query untuk layar lebih besar (Tablet ke atas) == */
+/* ======================================================== */
+
+/* Kembalikan layout asli untuk layar 768px atau lebih lebar */
+@media (min-width: 768px) {
+
+  /* Kembalikan layout header menjadi berdampingan */
+  .page-header,
+  .item-section-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  /* Kembalikan form grid menjadi 2 kolom */
+  .form-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ========================================= */
+/* == CSS RESPONSIF UNTUK HALAMAN DETAIL PO == */
+/* ========================================= */
+
+/* 1. Header Halaman */
+/* Di layar kecil, buat judul dan tombol aksi menumpuk secara vertikal */
+.page-header {
+  flex-direction: column;
+  align-items: flex-start; /* Ratakan ke kiri */
+  gap: 1rem;
+}
+.header-actions {
+  flex-wrap: wrap; /* Izinkan tombol turun baris jika tidak muat */
+  gap: 0.5rem;
+}
+
+/* 2. Grid Utama (Kartu Ringkasan & Kartu Catatan) */
+/* Di layar kecil, buat kartu-kartu ini menumpuk */
+.detail-order-info {
+  grid-template-columns: 1fr; /* Paksa menjadi satu kolom */
+}
+
+/* 3. Grid di Dalam Kartu Ringkasan */
+/* Buat info (Tanggal, Target, Prioritas) menumpuk rapi di mobile */
+.order-summary-grid {
+  grid-template-columns: 1fr; /* Paksa menjadi satu kolom */
+  gap: 1.25rem; /* Beri jarak vertikal yang lebih lega */
+}
+.info-item {
+  text-align: left; /* Pastikan teks rata kiri, bukan tengah */
+}
+.info-item .status-badge {
+  align-self: flex-start; /* Pastikan badge tidak meregang */
+}
+
+/* 4. Tabel Item */
+/* Pastikan container tabel bisa di-scroll ke samping */
+.table-responsive {
+  overflow-x: auto;
+  /* Efek bayangan untuk menandakan area bisa di-scroll */
+  -webkit-mask-image: linear-gradient(to right, transparent, black 15px, black 98%, transparent);
+  mask-image: linear-gradient(to right, transparent, black 15px, black 98%, transparent);
+}
+.item-table {
+  width: 100%;
+  min-width: 1000px; /* Beri lebar minimum agar kolom tidak terlalu sempit */
+}
+
+/* ======================================================== */
+/* == Media Query untuk layar lebih besar (Tablet ke atas) == */
+/* ======================================================== */
+
+@media (min-width: 768px) {
+  /* Kembalikan layout header menjadi berdampingan */
+  .page-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+@media (min-width: 992px) {
+  /* Kembalikan layout grid utama untuk desktop */
+  .detail-order-info {
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  }
+}
+
+@media (min-width: 576px) {
+  /* Kembalikan grid ringkasan internal untuk tablet ke atas */
+  .order-summary-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+}
+
+/* ======================================================= */
+/* == CSS RESPONSIF UNTUK HALAMAN DAFTAR PO (POListPage)  == */
+/* ======================================================= */
+
+/* 1. Header Halaman */
+/* Di layar kecil, buat judul dan tombol aksi menumpuk secara vertikal */
+.page-header {
+  flex-direction: column;
+  align-items: flex-start; /* Ratakan ke kiri */
+  gap: 1rem;
+}
+.page-header .btn {
+  width: 100%; /* Buat tombol "Tambah PO" memenuhi lebar layar */
+}
+
+
+/* 2. Panel Filter */
+/* Grid di dalam filter panel Anda sudah responsif (auto-fit), jadi kita hanya perlu memastikan jaraknya pas */
+.filter-panel {
+  padding: 1rem;
+}
+.filter-grid {
+  gap: 1rem;
+}
+
+/* 3. View Switcher (Tombol Kartu/Tabel) */
+/* Di mobile, ratakan ke kiri, bukan ke kanan */
+.view-switcher {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+
+/* 4. Tampilan Tabel (Paling Penting) */
+/* Pastikan container tabel bisa di-scroll ke samping */
+.order-table-container {
+  overflow-x: auto;
+  width: 100%;
+  /* Efek bayangan untuk menandakan area bisa di-scroll */
+  -webkit-mask-image: linear-gradient(to right, transparent, black 20px, black 98%, transparent);
+  mask-image: linear-gradient(to right, transparent, black 20px, black 98%, transparent);
+}
+.order-table {
+  width: 100%;
+  min-width: 1200px; /* Lebar minimum agar semua kolom tabel muat */
+}
+
+
+/* ======================================================== */
+/* == Media Query untuk layar lebih besar (Tablet ke atas) == */
+/* ======================================================== */
+
+@media (min-width: 768px) {
+
+  /* Kembalikan layout header menjadi berdampingan */
+  .page-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .page-header .btn {
+    width: auto; /* Kembalikan lebar tombol ke normal */
+  }
+
+  /* Kembalikan view switcher ke kanan */
+  .view-switcher {
+    margin-left: auto;
+    margin-right: 0;
+  }
+
+  .filter-panel {
+    padding: 1.5rem; /* Kembalikan padding normal */
+  }
+}
+
+/* ============================================= */
+/* == CSS RESPONSIF UNTUK HALAMAN TRACKING      == */
+/* ============================================= */
+
+/* 1. Header Halaman */
+/* Di layar kecil, buat judul dan tombol aksi menumpuk secara vertikal */
+.page-header {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+/* 2. Layout Utama (Daftar PO & Sidebar) */
+/* Di layar kecil (mobile-first), buat layout 2 kolom menjadi 1 kolom */
+.tracking-layout {
+  grid-template-columns: 1fr; /* Paksa menjadi satu kolom */
+}
+
+/* 3. Penyesuaian untuk Sidebar di Mobile */
+/* Beri sedikit jarak di atas sidebar saat menumpuk di bawah daftar PO */
+.recent-updates {
+  margin-top: 1.5rem;
+}
+
+
+/* ======================================================== */
+/* == Media Query untuk layar lebih besar (Tablet ke atas) == */
+/* ======================================================== */
+
+/* Kembalikan layout asli untuk layar 768px atau lebih lebar */
+@media (min-width: 768px) {
+  /* Kembalikan layout header menjadi berdampingan */
+  .page-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+/* Kembalikan layout 2 kolom untuk layar 992px atau lebih lebar (desktop) */
+@media (min-width: 992px) {
+  .tracking-layout {
+    /* Kembalikan layout 2 kolom: 2/3 untuk daftar, 1/3 untuk sidebar */
+    grid-template-columns: 2fr 1fr;
+  }
+
+  .recent-updates {
+    margin-top: 0; /* Hapus margin atas di desktop */
+  }
+}
+
+/* ======================================================== */
+/* == CSS RESPONSIF UNTUK HALAMAN RIWAYAT REVISI         == */
+/* ======================================================== */
+
+/* 1. Header Halaman Utama */
+/* Di layar kecil, buat judul dan tombol "Kembali" menumpuk vertikal */
+.page-header {
+  flex-direction: column;
+  align-items: flex-start; /* Ratakan ke kiri */
+  gap: 1rem;
+}
+
+/* 2. Header di Dalam Setiap Kartu Revisi */
+/* Di layar kecil, buat judul revisi dan grup aksi menumpuk vertikal */
+.revision-header {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
+}
+.revision-title-group,
+.revision-actions-group {
+  flex-wrap: wrap; /* Izinkan konten turun baris jika perlu */
+  gap: 0.75rem;
+}
+
+/* 3. Ringkasan Perubahan (change-section) */
+/* Pastikan ada jarak antar bagian perubahan di mobile */
+.change-section {
+  margin-bottom: 1.5rem;
+}
+.change-section h5 {
+  margin-bottom: 0.5rem;
+}
+
+/* 4. Tabel Item di Dalam Kartu */
+/* Ini bagian paling penting: buat tabel bisa di-scroll ke samping */
+.order-table-container {
+  overflow-x: auto;
+  width: 100%;
+  /* Efek bayangan halus untuk memberi petunjuk bisa di-scroll */
+  -webkit-mask-image: linear-gradient(to right, transparent, black 15px, black 98%, transparent);
+  mask-image: linear-gradient(to right, transparent, black 15px, black 98%, transparent);
+}
+
+/* Beri tabel lebar minimum agar kolomnya tidak terlalu sempit */
+.simple-table {
+  width: 100%;
+  min-width: 800px;
+}
+
+
+/* ======================================================== */
+/* == Media Query untuk layar lebih besar (Tablet ke atas) == */
+/* ======================================================== */
+
+@media (min-width: 768px) {
+  /* Kembalikan layout header halaman menjadi berdampingan */
+  .page-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+@media (min-width: 992px) {
+  /* Kembalikan layout header kartu revisi menjadi berdampingan di layar besar */
+  .revision-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+
+/* ======================================================= */
+/* == CSS RESPONSIF UNTUK HALAMAN UPDATE PROGRESS       == */
+/* ======================================================= */
+
+/* 1. Header Halaman */
+/* Di layar kecil, buat judul dan tombol aksi menumpuk secara vertikal */
+.page-header {
+  flex-direction: column;
+  align-items: flex-start; /* Ratakan ke kiri */
+  gap: 1rem;
+}
+
+.page-header .btn {
+  width: 100%; /* Buat tombol "Kembali" memenuhi lebar layar agar mudah disentuh */
+}
+
+
+/* 2. Timeline Produksi (Horizontal Scroll - Paling Penting) */
+/* Buat container timeline bisa di-scroll ke samping */
+.timeline-container {
+  overflow-x: auto;
+  width: 100%;
+  padding-bottom: 1rem; /* Beri ruang untuk scrollbar jika muncul */
+  /* Efek bayangan halus untuk memberi petunjuk visual bisa di-scroll */
+  -webkit-mask-image: linear-gradient(to right, transparent, black 20px, black 98%, transparent);
+  mask-image: linear-gradient(to right, transparent, black 20px, black 98%, transparent);
+}
+
+/* Beri timeline itu sendiri lebar minimum agar scrollbar aktif di layar kecil */
+.progress-timeline {
+  min-width: 800px;
+}
+
+
+/* 3. Riwayat Progress (Log Entry) */
+/* Pastikan tombol "Lihat Foto" tidak tertekan oleh teks yang panjang */
+.log-entry {
+  flex-wrap: wrap; /* Izinkan tombol turun baris jika tidak muat */
+  gap: 0.5rem;
+}
+
+
+/* ======================================================== */
+/* == Media Query untuk layar lebih besar (Tablet ke atas) == */
+/* ======================================================== */
+
+/* Kembalikan layout header menjadi berdampingan untuk layar 768px atau lebih lebar */
+@media (min-width: 768px) {
+  .page-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .page-header .btn {
+    width: auto; /* Kembalikan lebar tombol ke normal */
+  }
+}
+
+/* ======================================================= */
+/* == CSS PERBAIKAN UNTUK SAFE AREA DI MOBILE           == */
+/* ======================================================= */
+
+body {
+  /* Beri padding atas untuk menghindari tabrakan dengan status bar (jam, baterai) */
+  /* `env(safe-area-inset-top)` adalah variabel otomatis dari browser mobile. */
+  /* `1rem` adalah fallback jika variabel tidak tersedia. */
+  padding-top: max(env(safe-area-inset-top), 1rem);
+
+  /* Beri padding bawah untuk menghindari tabrakan dengan home bar/navigasi */
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Beri jarak tambahan di bawah konten terakhir di setiap halaman */
+.page-container {
+  /* Menambah padding bawah agar elemen terakhir tidak mepet ke tepi layar */
+  padding-bottom: 2rem;
+}
+
+/* file: src/renderer/src/assets/main.css */
+
+/* Tambahkan ini di bagian paling bawah file */
+
+.progress-cell {
+  min-width: 150px; /* Agar kolom tidak terlalu sempit */
+  vertical-align: middle;
+}
+
+.progress-cell span {
+  display: block;
+  font-size: 0.85rem;
+  margin-bottom: 4px;
+  color: #555;
+  text-align: left;
+}
+
+/* ========================================= */
+/* == STYLING UNTUK TOMBOL AKSI DI TABEL    == */
+/* ========================================= */
+
+.actions-cell {
+  display: flex;         /* 1. Susun tombol secara horizontal */
+  gap: 0.5rem;           /* 2. Beri jarak antar tombol */
+  align-items: center;   /* 3. Sejajarkan tombol secara vertikal (jika tingginya beda) */
+  min-width: 300px;      /* 4. Beri lebar minimum agar tidak turun baris */
+}
+
+/* Opsional: Buat tombol di dalam tabel sedikit lebih kecil agar lebih pas */
+.order-table .actions-cell .btn {
+  padding: 0.3rem 0.8rem;
+  font-size: 0.85rem;
+  white-space: nowrap; /* Mencegah teks tombol terpotong */
+}
+
+/* file: src/renderer/src/assets/main.css */
+
+/* ================================================== */
+/* == STYLING TAMBAHAN UNTUK KOLOM BARU DI TABEL    == */
+/* ================================================== */
+
+/* Styling untuk sel Customer yang sekarang berisi 2 baris */
+.customer-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 180px;
+}
+.customer-cell span {
+  font-size: 0.85rem;
+  color: #777;
+}
+
+/* Styling untuk daftar produk di dalam sel tabel */
+.product-list-cell ul {
+  margin: 0;
+  padding-left: 1rem; /* Beri sedikit indentasi */
+  list-style-type: '- '; /* Ganti bullet point standar */
+  max-width: 250px; /* Batasi lebar agar tidak terlalu dominan */
+}
+
+.product-list-cell li {
+  padding-bottom: 0.3rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; /* Tampilkan '...' jika teks terlalu panjang */
+}
+
+.product-list-cell li:last-child {
+  padding-bottom: 0;
+}
+
+/* Perbarui lebar minimum tabel untuk mengakomodasi kolom baru */
+.order-table {
+  min-width: 1500px;
+}
+
+.product-list-cell li {
+  display: flex;                 /* 1. Aktifkan Flexbox */
+  justify-content: space-between; /* 2. Dorong item ke ujung kiri dan kanan */
+  align-items: center;           /* 3. Sejajarkan secara vertikal */
+  gap: 1rem;                     /* 4. Beri jarak antara nama dan kubikasi */
+  padding-bottom: 0.3rem;
+}
+
+.product-list-cell li span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; /* Tampilkan '...' jika nama produk terlalu panjang */
+}
+
+.product-list-cell li strong {
+  flex-shrink: 0; /* Mencegah teks kubikasi terpotong */
+  font-size: 0.85rem;
+  color: #555;
+}
+
+/* ======================================================= */
+/* == STYLING UNTUK TABEL DETAIL PO YANG DI-UPGRADE       == */
+/* ======================================================= */
+
+/* Perluas grid di ringkasan PO agar muat 3 kolom di desktop */
+@media (min-width: 992px) {
+  .order-summary-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Beri style pada tabel detail yang baru */
+.detailed-item-table {
+  min-width: 1200px; /* Lebar minimum tabel */
+}
+
+.detailed-item-table td {
+  vertical-align: top;
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+
+/* Styling untuk sel-sel spesifik agar lebih rapi */
+.product-spec-cell, .size-qty-cell, .notes-location-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.product-spec-cell strong {
+  font-size: 1rem;
+}
+
+.product-spec-cell span, .notes-location-cell span {
+  font-size: 0.85rem;
+  color: #555;
+}
+
+.size-qty-cell strong {
+  font-weight: 700;
+}
+
+.notes-location-cell p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #777;
+  font-style: italic;
+}
+
+.item-progress-cell {
+  min-width: 180px;
+}
+
+.item-progress-cell span {
+  display: block;
+  font-size: 0.85rem;
+  margin-bottom: 4px;
+}
+
+/* file: src/renderer/src/assets/main.css */
+
+/* Tambahkan di paling bawah */
+
+.update-form {
+  display: flex;         /* Aktifkan Flexbox untuk alignment */
+  flex-direction: column; /* Susun elemen secara vertikal */
+  gap: 1rem;             /* Beri jarak 1rem antar elemen form */
+  margin-top: 1.5rem;    /* Jarak dari timeline */
+  padding: 1.5rem;       /* Padding di dalam form */
+  background-color: #f9fafb; /* Latar belakang sedikit berbeda */
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.update-form h5 {
+  margin-top: 0;
+  margin-bottom: 0.5rem; /* Jarak antara judul dan form group */
+}
+
+/* Pastikan semua form group punya margin bawah */
+.update-form .form-group {
+  margin-bottom: 0.5rem; /* Jarak tambahan jika perlu */
+}
+
+/* Styling khusus untuk file input label agar lebih menarik */
+.file-input-label {
+  display: block; /* Agar memenuhi lebar */
+  padding: 0.75rem 1rem;
+  border: 1px dashed var(--border-color);
+  border-radius: 6px;
+  background-color: #ffffff; /* Latar putih */
+  color: var(--text-secondary);
+  text-align: center;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.file-input-label:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+  background-color: #fff9f0; /* Warna hover halus */
+}
+/* ======================================================= */
+/* == REVISI FINAL STYLING FILTER PANEL (ALIGNMENT FIX) == */
+/* ======================================================= */
+
+.filter-grid-improved {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr); /* 6 columns on desktop */
+  gap: 1.5rem 1rem; /* Vertical gap, Horizontal gap */
+  align-items: end; /* Align grid items (form-groups) to the bottom */
+}
+
+/* Styling internal layout of each form group */
+.filter-grid-improved .form-group {
+  display: flex;          /* Use Flexbox */
+  flex-direction: column; /* Stack label above input/select */
+  /* Remove justify-content if previously added */
+}
+
+/* Consistent spacing below ALL labels in the filter */
+.filter-grid-improved .form-group label {
+  margin-bottom: 8px; /* Standard space below label */
+  display: block; /* Ensure label takes its own line */
+}
+
+/* Target ALL input/select elements directly for consistent appearance */
+.filter-grid-improved .form-group input,
+.filter-grid-improved .form-group select {
+  /* Remove fixed height to allow natural height based on content/padding */
+  /* height: 42px; */
+
+  /* Ensure consistent vertical padding (adjust values to match your base input style) */
+  padding-top: 10px;
+  padding-bottom: 10px;
+
+  /* Ensure consistent border */
+  border: 1px solid #d1d5db; /* Example border, match your theme */
+
+  /* Consistent font size */
+  font-size: 14px; /* Example size, match your theme */
+  line-height: 1.5; /* Ensure consistent line height */
+
+  box-sizing: border-box; /* Include padding and border in element's total width and height */
+  width: 100%; /* Make elements fill their grid cell */
+}
+
+/* Helper classes for spanning columns (remain the same) */
+.filter-grid-improved .span-2 { grid-column: span 2; }
+.filter-grid-improved .span-3 { grid-column: span 3; }
+.filter-grid-improved .span-4 { grid-column: span 4; }
+.filter-grid-improved .span-6 { grid-column: span 6; }
+
+/* Styling date range group (remains mostly the same) */
+.date-range-group {
+  display: flex;
+  align-items: center; /* Vertically align items in the date group */
+  gap: 0.5rem;
+}
+.date-range-group span {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  flex-shrink: 0; /* Prevent "sampai" text from shrinking */
+}
+.date-range-group input[type="date"] {
+  flex: 1; /* Allow date inputs to grow */
+  /* Ensure date inputs also match the standard padding */
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+
+/* --- Responsive Adjustments (remain the same) --- */
+@media (max-width: 992px) {
+  .filter-grid-improved {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .filter-grid-improved .span-2 { grid-column: span 2; }
+  .filter-grid-improved .span-3 { grid-column: span 4; }
+  .filter-grid-improved .span-4 { grid-column: span 4; }
+}
+
+@media (max-width: 768px) {
+  .filter-grid-improved {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .filter-grid-improved .span-2,
+  .filter-grid-improved .span-3,
+  .filter-grid-improved .span-4 {
+    grid-column: span 2;
+  }
+  .date-range-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+   .date-range-group span {
+    text-align: center;
+    margin: 0.25rem 0;
+  }
+}
+
+@media (max-width: 576px) {
+  .filter-grid-improved {
+    grid-template-columns: 1fr;
+  }
+  .filter-grid-improved .span-2,
+  .filter-grid-improved .span-3,
+  .filter-grid-improved .span-4 {
+    grid-column: span 1;
+  }
+}
+
+/* --- PERBAIKAN UNTUK STATUS BADGE --- */
+
+.status-badge {
+  display: inline-block; /* Pastikan badge sejajar dengan teks lain */
+  padding: 0.3rem 0.8rem; /* Beri padding horizontal yang cukup */
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: white;
+  text-align: center;
+  white-space: nowrap; /* <-- KUNCI: Cegah teks turun baris */
+  line-height: 1.2;    /* Sesuaikan line-height jika perlu */
+  vertical-align: middle; /* Sejajarkan badge secara vertikal */
+}
+
+/* Pastikan warna latar sudah benar (mungkin sudah ada) */
+.status-badge.status-open { background-color: #3182CE; }
+.status-badge.status-in-progress { background-color: #D69E2E; } /* Oranye */
+.status-badge.status-completed { background-color: #38A169; } /* Hijau */
+.status-badge.status-cancelled { background-color: #C53030; } /* Merah */
+
+/* Aturan lama yang mungkin menyebabkan masalah (jika ada, hapus atau sesuaikan) */
+/* .status-badge { width: 80px; } */ /* Hindari lebar tetap */
+
+.filter-grid-improved {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr); /* Tetap 6 kolom */
+  gap: 1.5rem 1rem;
+  align-items: end; /* Atau baseline, sesuai preferensi */
+}
+
+/* Helper class span */
+.filter-grid-improved .span-2 { grid-column: span 2; }
+.filter-grid-improved .span-3 { grid-column: span 3; }
+.filter-grid-improved .span-4 { grid-column: span 4; }
+.filter-grid-improved .span-6 { grid-column: span 6; }
+
+/* file: src/renderer/src/assets/main.css */
+
+/* ======================================================= */
+/* == REFINED STYLING UNTUK FILTER PANEL (Layout Baru)   == */
+/* ======================================================= */
+
+.refined-filter .filter-header {
+  margin-bottom: 1.5rem; /* Jarak lebih lega ke grid */
+}
+
+.filter-grid-refined {
+  display: grid;
+  /* Definisikan 4 kolom utama yang fleksibel */
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.25rem 1.5rem; /* Jarak vertikal, jarak horizontal */
+  align-items: end; /* Ratakan item ke bawah */
+}
+
+/* --- Layout Spesifik untuk Item Grid --- */
+
+/* Urutkan: ambil 1 kolom */
+.filter-grid-refined .sort-group {
+  grid-column: span 1;
+}
+
+/* Pencarian: ambil 3 kolom di samping Urutkan */
+.filter-grid-refined .search-group {
+  grid-column: span 3;
+}
+
+/* Filter Dropdown (Status, Prio, Kayu, Produk): Masing-masing 1 kolom (total 4) */
+/* Tidak perlu span khusus */
+
+/* Filter Tanggal: Masing-masing ambil 2 kolom agar berdampingan */
+.filter-grid-refined .date-filter-group {
+  grid-column: span 2;
+}
+
+
+/* --- Styling Internal Form Group & Elemen --- */
+
+.filter-grid-refined .form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.filter-grid-refined .form-group label {
+  margin-bottom: 8px;
+  display: block;
+}
+
+/* Samakan tinggi input & select */
+.filter-grid-refined .form-group input,
+.filter-grid-refined .form-group select {
+  height: 42px;
+  box-sizing: border-box;
+  width: 100%;
+  /* Pastikan padding, border, font-size konsisten dengan style umum Anda */
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  font-size: 14px;
+}
+
+/* Styling grup input tanggal (tetap sama) */
+.date-range-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.date-range-group span {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.date-range-group input[type="date"] {
+  flex: 1;
+}
+
+
+/* --- Penyesuaian Responsif --- */
+
+@media (max-width: 992px) {
+  .filter-grid-refined {
+    /* Di tablet, gunakan 2 kolom */
+    grid-template-columns: repeat(2, 1fr);
+  }
+  /* Semua item filter mengambil lebar penuh (span 2) */
+  .filter-grid-refined .sort-group,
+  .filter-grid-refined .search-group,
+  .filter-grid-refined .date-filter-group {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 576px) {
+  .filter-grid-refined {
+    /* Di mobile, gunakan 1 kolom */
+    grid-template-columns: 1fr;
+  }
+  /* Semua item filter mengambil lebar penuh (span 1) */
+  .filter-grid-refined .sort-group,
+  .filter-grid-refined .search-group,
+  .filter-grid-refined .date-filter-group {
+    grid-column: span 1;
+  }
+   /* Tumpuk tanggal input di mobile */
+  .date-range-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+   .date-range-group span {
+    text-align: center;
+    margin: 0.25rem 0;
+  }
+}
+
+.ai-chat-page-container .page-header {
+  margin-bottom: 1rem;
+}
+
+.ai-chat-card {
+  margin-bottom: 0;
+  height: calc(75vh - 4rem); /* Adjust as needed */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ai-chat-messages {
+  flex: 1;
+  padding: 1.5rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  background-color: #f9fafb;
+}
+
+.message {
+  padding: 0.7rem 1rem;
+  border-radius: 18px;
+  max-width: 75%;
+  word-wrap: break-word;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+.message.bot {
+  background-color: #e9ecef;
+  color: var(--text-primary);
+  border-bottom-left-radius: 4px;
+  align-self: flex-start;
+}
+.message.user {
+  background-color: var(--primary-color);
+  color: white;
+  border-bottom-right-radius: 4px;
+  align-self: flex-end;
+}
+
+.ai-chat-input {
+  display: flex;
+  align-items: flex-end;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border-color);
+  background-color: #ffffff;
+}
+.ai-chat-input textarea {
+  flex: 1;
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 0.7rem 1.2rem;
+  resize: none;
+  font-family: inherit;
+  font-size: 1rem;
+  line-height: 1.5;
+  margin-right: 0.75rem;
+  max-height: 120px;
+  min-height: 44px;
+}
+.ai-chat-input button {
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 1.4rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  flex-shrink: 0;
+}
+.ai-chat-input button:hover {
+  background-color: var(--primary-hover);
+}
+.ai-chat-input button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+/* --- Mobile Adjustments --- */
+@media (max-width: 768px) {
+  .ai-chat-card {
+    height: calc(80vh - 4rem); /* Adjust height for mobile */
+  }
+   .ai-chat-messages {
+     padding: 1rem;
+   }
+   .ai-chat-input {
+     padding: 0.75rem 1rem;
+   }
+}
+
+.recommendation-card {
+  margin-top: 1.5rem;
+  background-color: #EBF8FF; /* Biru muda */
+  border-left: 4px solid #3182CE; /* Biru tua */
+  display: flex; /* Aktifkan flexbox */
+  align-items: center; /* Sejajarkan ikon dan teks */
+  gap: 1.5rem; /* Jarak antara ikon dan teks */
+  padding: 1.5rem; /* Padding internal */
+}
+
+.recommendation-icon {
+    font-size: 2.5rem; /* Ukuran ikon */
+    color: #2C5282; /* Warna ikon (biru lebih tua) */
+    flex-shrink: 0; /* Mencegah ikon mengecil */
+}
+
+.recommendation-content h4 {
+  margin-top: 0;
+  margin-bottom: 0.5rem; /* Jarak judul ke teks */
+  color: #2B6CB0; /* Warna judul (biru lebih tua) */
+}
+
+.recommendation-content p {
+    margin: 0;
+    line-height: 1.6;
+    color: #4A5568; /* Warna teks abu-abu */
+}
+.recommendation-content strong {
+    color: #2C5282; /* Warna teks tebal (biru lebih tua) */
+}
+
+/* Container Grid */
+.dashboard-summary-grid {
+  display: grid;
+  /* Buat 4 kolom sama lebar di layar besar */
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem; /* Jarak antar kartu */
+  margin-bottom: 2rem; /* Jarak bawah dari elemen berikutnya */
+}
+
+/* Styling Dasar Kartu Summary */
+.summary-card {
+  padding: 1.5rem; /* Ruang di dalam kartu */
+  border-radius: 8px; /* Sudut sedikit melengkung */
+  background-color: #ffffff; /* Latar belakang putih (atau warna lain) */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); /* Shadow halus */
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out; /* Animasi hover */
+  position: relative; /* Untuk positioning ikon absolut (jika dipakai) */
+  overflow: hidden; /* Mencegah ikon keluar kartu (jika pakai ikon absolut) */
+  border-left: 5px solid transparent; /* Placeholder untuk border warna */
+}
+
+/* Efek Hover */
+.summary-card:hover {
+  transform: translateY(-3px); /* Sedikit naik */
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.12); /* Shadow lebih jelas */
+}
+
+/* Konten di dalam kartu */
+.summary-card .card-content {
+  text-align: center; /* Pusatkan teks */
+}
+
+/* Styling Angka Utama */
+.summary-value {
+  display: block; /* Agar menempati baris sendiri */
+  font-size: 2.5rem; /* Ukuran SANGAT BESAR */
+  font-weight: 600; /* Agak tebal */
+  color: #333; /* Warna gelap */
+  margin-bottom: 0.5rem; /* Jarak bawah ke label */
+  line-height: 1.2;
+}
+
+/* Styling Label */
+.summary-label {
+  font-size: 0.9rem; /* Ukuran lebih kecil */
+  color: #666; /* Warna abu-abu */
+  margin: 0; /* Hapus margin default paragraf */
+}
+
+/* Styling Warna Spesifik (Opsional - Contoh) */
+.total-order-card {
+  border-left-color: #4A90E2; /* Biru */
+}
+.active-order-card {
+  border-left-color: #F5A623; /* Oranye */
+}
+.completed-order-card {
+  border-left-color: #7ED321; /* Hijau */
+}
+.gdrive-card {
+  border-left-color: #9B9B9B; /* Abu-abu */
+}
+
+/* Styling Ikon (Opsional - Contoh jika Anda menambahkan ikon) */
+.summary-icon {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  font-size: 1.8rem; /* Ukuran ikon */
+  color: rgba(0, 0, 0, 0.1); /* Warna sangat pudar */
+  z-index: 0;
+}
+
+
+/* --- Media Query untuk Layar Lebih Kecil (Mobile) --- */
+@media (max-width: 992px) { /* Misalnya di bawah 992px */
+  .dashboard-summary-grid {
+    /* Ubah jadi 2 kolom */
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 576px) { /* Misalnya di bawah 576px */
+  .dashboard-summary-grid {
+    /* Ubah jadi 1 kolom (tumpuk vertikal) */
+    grid-template-columns: 1fr;
+  }
+  .summary-value {
+     font-size: 2rem; /* Kecilkan sedikit angkanya di mobile */
+  }
+}
+
+.attention-list {
+  max-height: 220px;  /* Batasi tinggi maksimum, sesuaikan jika perlu */
+  overflow-y: auto;   /* Tambahkan scrollbar jika daftar lebih panjang */
+  margin-top: 1rem;
+  padding-right: 8px; /* Beri ruang untuk scrollbar */
+  display: flex;
+  flex-direction: column;
+  gap: 10px;          /* Jarak antar item di dalam list */
+}
+
+/* 2. Styling untuk satu baris item PO */
+.attention-item {
+  display: flex;
+  justify-content: space-between; /* Info PO di kiri, deadline di kanan */
+  align-items: center;
+  padding: 10px 12px;
+  background-color: #fffaf0; /* Warna sedikit beda dari card */
+  border-radius: 8px;
+  border: 1px solid #feedc7;
+}
+
+/* 3. Styling untuk info PO (sebelah kiri) */
+.attention-info .attention-line-1 {
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin: 0;
+  line-height: 1.4;
+  padding-right: 10px; /* Jarak dari badge */
+}
+
+.attention-info .customer-name {
+  font-weight: 400;
+  color: #4b5563; /* Abu-abu gelap */
+  font-size: 0.85rem;
+  white-space: nowrap;      /* Cegah nama customer turun baris */
+  overflow: hidden;         /* Sembunyikan jika terlalu panjang */
+  text-overflow: ellipsis;  /* Beri ... jika terlalu panjang */
+  max-width: 200px;         /* Batasi lebar nama customer */
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* 4. Styling untuk "Badge" Deadline (sebelah kanan) */
+.attention-deadline-badge {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #c2410c; /* Oranye tua */
+  background-color: #fff7ed; /* Oranye sangat muda */
+  padding: 4px 10px;
+  border-radius: 999px; /* Bentuk pil */
+  border: 1px solid #fed7aa;
+  flex-shrink: 0;       /* Agar badge tidak mengecil */
+  white-space: nowrap;
 }

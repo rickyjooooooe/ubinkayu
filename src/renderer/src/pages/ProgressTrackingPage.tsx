@@ -1,43 +1,75 @@
-/* eslint-disable prettier/prettier */
+// file: src/renderer/src/pages/ProgressTrackingPage.tsx
+
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 import React, { useState, useEffect, useMemo } from 'react'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 import { ProgressBar } from '../components/ProgressBar'
-import { POHeader } from '../types'
+import { POHeader, User } from '../types'
 import { formatDistanceToNow } from 'date-fns'
 import { id } from 'date-fns/locale'
+import * as apiService from '../apiService'
 
 // Helper untuk format waktu "5 menit yang lalu"
-const formatTimeAgo = (dateString: string) => {
-    try {
-        return formatDistanceToNow(new Date(dateString), { addSuffix: true, locale: id });
-    } catch (error) {
-        return dateString;
-    }
+const formatTimeAgo = (dateString: string | undefined | null): string => {
+  if (!dateString) return '-'
+  try {
+    return formatDistanceToNow(new Date(dateString), { addSuffix: true, locale: id })
+  } catch (error) {
+    console.error('Error formatting time ago:', error)
+    return String(dateString) // Kembalikan string asli jika error
+  }
 }
 
-const POTrackingItem = ({ po, onUpdateClick }: { po: POHeader; onUpdateClick: (po: POHeader) => void }) => {
-  const getPriorityBadgeClass = (priority?: string) => `status-badge ${(priority || 'normal').toLowerCase()}`
+// Komponen untuk menampilkan satu PO (aktif atau selesai)
+const POTrackingItem = ({
+  order,
+  onUpdateClick // Nama prop tetap sama
+}: {
+  order: POHeader
+  onUpdateClick: (order: POHeader) => void
+}) => {
+  const getPriorityBadgeClass = (priority?: string) =>
+    `status-badge priority-${(priority || 'normal').toLowerCase()}` // Tambahkan prefix 'priority-'
+
+  // Tambah class untuk Order Selesai (opsional, untuk styling)
+  const cardClassName = `order-tracking-item-card ${order.progress && order.progress >= 100 ? 'completed' : ''}`
+
   return (
-    <Card className="po-tracking-item-card">
-      <div className="po-tracking-header">
+    <Card className={cardClassName}>
+      <div className="order-tracking-header">
         <div>
-          <span className="po-tracking-number">{po.po_number}</span>
-          <p className="po-tracking-customer">{po.project_name}</p>
+          <span className="order-tracking-number">{order.order_number || 'N/A'}</span>
+          <p className="order-tracking-customer">{order.project_name || 'N/A'}</p>
         </div>
-        <span className={getPriorityBadgeClass(po.priority)}>{po.priority || 'Normal'}</span>
+        <span className={getPriorityBadgeClass(order.priority)}>{order.priority || 'Normal'}</span>
       </div>
-      <div className="po-tracking-progress">
+      <div className="order-tracking-progress">
         <span>Progress</span>
-        <span>{po.progress?.toFixed(0) || 0}%</span>
+        {/* Tambah ikon centang jika selesai */}
+        <span>
+          {order.progress && order.progress >= 100 ? '✅ ' : ''}
+          {order.progress?.toFixed(0) || 0}%
+        </span>
       </div>
-      <ProgressBar value={po.progress || 0} />
-      <div className="po-tracking-footer">
-        <div className="po-tracking-deadline">
-          <span>Target: {po.deadline ? new Date(po.deadline).toLocaleDateString('id-ID') : '-'}</span>
+      <ProgressBar value={order.progress || 0} />
+      <div className="order-tracking-footer">
+        <div className="order-tracking-deadline">
+          <span>
+            Target:{' '}
+            {order.deadline
+              ? new Date(order.deadline).toLocaleDateString('id-ID', {
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric'
+                })
+              : '-'}
+          </span>
         </div>
-        <Button onClick={() => onUpdateClick(po)}>Update Progress</Button>
+        {/* Tombol tetap ada, ganti teks jika sudah selesai */}
+        <Button onClick={() => onUpdateClick(order)}>
+          {order.progress && order.progress >= 100 ? 'Lihat Progress' : 'Update Progress'}
+        </Button>
       </div>
     </Card>
   )
@@ -45,129 +77,259 @@ const POTrackingItem = ({ po, onUpdateClick }: { po: POHeader; onUpdateClick: (p
 
 // Komponen untuk panel "Perlu Perhatian"
 const AttentionCard = ({ title, items, icon, reasonKey, reasonPrefix }) => (
-    <div className="attention-section">
-        <h5>{icon} {title} ({items.length})</h5>
-        {items.length > 0 ? (
-            items.map((item, index) => (
-                <div key={index} className="attention-item-small">
-                    <p><strong>{item.item_name}</strong> (PO: {item.po_number})</p>
-                    <span>{reasonPrefix}: {item[reasonKey]}</span>
-                </div>
-            ))
-        ) : <p className="no-attention-text">Tidak ada</p>}
-    </div>
-);
-
-// [DIKEMBALIKAN] Komponen untuk menampilkan satu entri update terbaru
-const UpdateEntry = ({ update }) => (
-    <div className="update-entry">
-        <div className="update-icon">⚙️</div>
-        <div className="update-details">
-            <p className="update-text">
-                Item <strong>{update.item_name}</strong> (PO: {update.po_number}) masuk tahap <strong>{update.stage}</strong>.
-            </p>
-            <span className="update-time">{formatTimeAgo(update.created_at)}</span>
+  <div className="attention-section">
+    <h5>
+      {icon} {title} ({items?.length || 0})
+    </h5>
+    {items && items.length > 0 ? (
+      items.map((item, index) => (
+        <div key={index} className="attention-item-small">
+          <p>
+            <strong>{item.item_name || 'N/A'}</strong> (Order: {item.order_number || 'N/A'})
+          </p>
+          <span>
+            {reasonPrefix}:{' '}
+            {reasonKey === 'deadline' || reasonKey === 'last_update'
+              ? formatTimeAgo(item[reasonKey]) // Format tanggal/waktu
+              : item[reasonKey] || '-'}
+          </span>
         </div>
-    </div>
-);
+      ))
+    ) : (
+      <p className="no-attention-text">Tidak ada</p>
+    )}
+  </div>
+)
 
+// Komponen untuk menampilkan satu entri update terbaru
+const UpdateEntry = ({ update }) => (
+  <div className="update-entry">
+    <div className="update-icon">⚙️</div>
+    <div className="update-details">
+      <p className="update-text">
+        Item <strong>{update.item_name || 'N/A'}</strong> (Order: {update.order_number || 'N/A'}) masuk
+        tahap <strong>{update.stage || '?'}</strong>.
+      </p>
+      <span className="update-time">{formatTimeAgo(update.created_at)}</span>
+    </div>
+  </div>
+)
+
+// Definisikan Interface Props
 interface ProgressTrackingPageProps {
-  onSelectPO: (po: POHeader) => void;
+  onSelectPO: (order: POHeader) => void
+  poList: POHeader[] // Terima poList dari App.tsx
+  isLoadingPOs: boolean
+  currentUser: User | null
 }
 
-const ProgressTrackingPage: React.FC<ProgressTrackingPageProps> = ({ onSelectPO }) => {
-  const [poList, setPoList] = useState<POHeader[]>([])
-  const [attentionData, setAttentionData] = useState({ nearingDeadline: [], stuckItems: [], urgentItems: [] });
-  const [recentUpdates, setRecentUpdates] = useState<any[]>([]); // [DIKEMBALIKAN] State untuk update terbaru
-  const [isLoading, setIsLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('');
+const ProgressTrackingPage: React.FC<ProgressTrackingPageProps> = ({
+  onSelectPO,
+  poList,
+  isLoadingPOs,
+  currentUser
+}) => {
+  // State HANYA untuk data panel kanan (Perhatian & Update Terbaru) dan search
+  const [attentionData, setAttentionData] = useState({
+    nearingDeadline: [],
+    stuckItems: [],
+    urgentItems: []
+  })
+  const [recentUpdates, setRecentUpdates] = useState<any[]>([])
+  const [isSidePanelLoading, setIsSidePanelLoading] = useState(true) // Loading untuk panel kanan
+  const [searchTerm, setSearchTerm] = useState('')
 
+  // useEffect HANYA untuk fetch data panel kanan
   useEffect(() => {
-    const fetchAllData = async () => {
-      setIsLoading(true)
+    const fetchSidePanelData = async () => {
+      setIsSidePanelLoading(true) // Mulai loading panel kanan
       try {
-        // [DIKEMBALIKAN] Panggil ketiga API secara bersamaan
-        // @ts-ignore
-        const [poData, attention, updates] = await Promise.all([
-            window.api.getActivePOs(),
-            window.api.getAttentionData(),
-            window.api.getRecentUpdates()
-        ]);
-        setPoList(poData)
-        setAttentionData(attention)
-        setRecentUpdates(updates)
+        // Panggil API untuk attention dan updates
+        // @ts-ignore - Asumsi tipe data attention & updates dari API service
+        const [attention, updates] = await Promise.all([
+          apiService.getAttentionData(currentUser),
+          apiService.getRecentProgressUpdates(currentUser)
+        ])
+        setAttentionData(attention || { nearingDeadline: [], stuckItems: [], urgentItems: [] }) // Default jika null
+        setRecentUpdates(updates || []) // Default jika null
       } catch (err) {
-        console.error('Gagal memuat data tracking:', err)
+        console.error('Gagal memuat data panel kanan (attention/updates):', err)
+        // Set state error jika perlu (misalnya dengan state baru `sidePanelError`)
       } finally {
-        setIsLoading(false)
+        setIsSidePanelLoading(false) // Selesai loading panel kanan
       }
     }
-    fetchAllData()
-  }, [])
+    fetchSidePanelData()
+  }, [currentUser])
 
-  const filteredPOs = useMemo(() => {
-    if (!searchTerm) return poList;
-    return poList.filter(po =>
-        po.po_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        po.project_name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [poList, searchTerm]);
+  // useMemo untuk memisahkan dan memfilter PO Aktif dan Selesai
+  const { activeOrders, completedPOs } = useMemo(() => {
+    if (!Array.isArray(poList)) return { activeOrders: [], completedPOs: [] } // Pengaman jika poList bukan array
+
+    // Pisahkan dulu berdasarkan progress
+    const allActive = poList.filter((order) => (order.progress || 0) < 100 && order.status !== 'Cancelled')
+    const allCompleted = poList.filter(
+      (order) => (order.progress || 0) >= 100 && order.status !== 'Cancelled'
+    )
+
+    // Terapkan filter pencarian ke kedua grup jika ada searchTerm
+    if (!searchTerm) {
+      return { activeOrders: allActive, completedPOs: allCompleted }
+    }
+
+    const lowerSearchTerm = searchTerm.toLowerCase()
+    // Fungsi filter umum
+    const filterFn = (order: POHeader) =>
+      order.order_number?.toLowerCase().includes(lowerSearchTerm) ||
+      order.project_name?.toLowerCase().includes(lowerSearchTerm)
+
+    return {
+      activeOrders: allActive.filter(filterFn),
+      completedPOs: allCompleted.filter(filterFn)
+    }
+  }, [poList, searchTerm]) // Bergantung pada prop poList dan state searchTerm
 
   return (
-    <div className="page-container">
+    <div className="page-container tracking-page-padding">
+      {' '}
+      {/* Tambah class padding */}
       <div className="page-header">
         <div>
           <h1>Tracking Progress Produksi</h1>
-          <p>Pantau dan update kemajuan pengerjaan Purchase Order</p>
+          <p>Pantau dan update kemajuan pengerjaan Order</p>
         </div>
+        {/* Opsional: Tombol refresh jika diperlukan */}
       </div>
-
+      {/* Input Pencarian */}
       <Card className="filter-panel-simple">
         <input
-            type="text"
-            placeholder="Cari Nomor PO atau Nama Customer..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="search-input-full"
+          type="text"
+          placeholder="Cari Nomor Order atau Nama Customer..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="search-input-full"
         />
       </Card>
-
+      {/* Layout Utama (Grid 2 Kolom) */}
       <div className="tracking-layout">
-        <div className="active-po-list">
-          <h3>PO Aktif ({filteredPOs.length})</h3>
-          {isLoading ? (
-            <p>Memuat data PO...</p>
-          ) : filteredPOs.length > 0 ? (
-            filteredPOs.map((po) => <POTrackingItem key={po.id} po={po} onUpdateClick={onSelectPO} />)
-          ) : (
-            <p>Tidak ada PO yang cocok dengan pencarian.</p>
-          )}
-        </div>
-        <div className="recent-updates">
-          <Card className="recent-updates-card">
-            <h4>🚨 Perlu Perhatian</h4>
-            <div className="attention-wrapper">
-                <AttentionCard title="Prioritas Urgent" items={attentionData.urgentItems} icon="🔥" reasonKey="current_stage" reasonPrefix="Tahap" />
-                <AttentionCard title="Mendekati Deadline" items={attentionData.nearingDeadline} icon="📅" reasonKey="deadline" reasonPrefix="Target" />
-                <AttentionCard title="Item Macet (> 5 Hari)" items={attentionData.stuckItems} icon="⏳" reasonKey="current_stage" reasonPrefix="Tahap" />
-            </div>
-          </Card>
-
-          {/* [DIKEMBALIKAN] Kartu untuk Update Terbaru diletakkan di bawah */}
-          <Card className="recent-updates-card" style={{ marginTop: '1.5rem' }}>
-            <h4>Update Terbaru</h4>
-            {isLoading ? (
-                <p>Memuat aktivitas...</p>
-            ) : recentUpdates.length > 0 ? (
-                <div className="updates-list">
-                    {recentUpdates.map(update => <UpdateEntry key={update.id} update={update} />)}
-                </div>
+        {/* --- Kolom Kiri: Daftar PO --- */}
+        <div className="order-list-column">
+          {' '}
+          {/* Ganti nama class agar lebih deskriptif */}
+          {/* Bagian PO Aktif */}
+          <Card>
+            <h3>Order Aktif ({isLoadingPOs ? '...' : activeOrders.length})</h3>
+            {isLoadingPOs ? (
+              <p style={{ textAlign: 'center', padding: '2rem' }}>Memuat daftar Order...</p>
+            ) : activeOrders.length > 0 ? (
+              <div className="order-tracking-list-wrapper">
+                {activeOrders.map((order) => (
+                  <POTrackingItem
+                    key={`active-${order.id || order.order_number}`}
+                    order={order}
+                    onUpdateClick={onSelectPO}
+                  />
+                ))}
+              </div>
+            ) : searchTerm ? (
+              <p style={{ textAlign: 'center', padding: '2rem' }}>
+                Tidak ada Order aktif yang cocok dengan "{searchTerm}".
+              </p>
             ) : (
-                <p className="no-updates-text">Belum ada update progress terbaru.</p>
+              <p style={{ textAlign: 'center', padding: '2rem' }}>Tidak ada Order aktif saat ini.</p>
             )}
           </Card>
-        </div>
-      </div>
+          {/* Bagian PO Selesai */}
+          {/* Tampilkan jika tidak loading DAN (ada PO selesai ATAU sedang mencari) */}
+          {!isLoadingPOs && (completedPOs.length > 0 || searchTerm) && (
+            <Card style={{ marginTop: '1.5rem' }}>
+              {' '}
+              {/* Beri jarak atas */}
+              <h3>Order Selesai ({completedPOs.length})</h3>
+              {completedPOs.length > 0 ? (
+                <div className="order-tracking-list-wrapper completed-list">
+                  {' '}
+                  {/* Class berbeda? */}
+                  {completedPOs.map((order) => (
+                    // Gunakan komponen yang sama, event handler tetap onSelectPO
+                    <POTrackingItem
+                      key={`completed-${order.id || order.order_number}`}
+                      order={order}
+                      onUpdateClick={onSelectPO}
+                    />
+                  ))}
+                </div>
+              ) : (
+                // Tampil hanya jika ada searchTerm tapi tidak ada hasil
+                searchTerm && (
+                  <p style={{ textAlign: 'center', padding: '2rem' }}>
+                    Tidak ada Order selesai yang cocok dengan "{searchTerm}".
+                  </p>
+                )
+                // Jika tidak ada search term dan tidak ada PO selesai, bagian ini tidak tampil (atau tampilkan pesan default jika mau)
+              )}
+            </Card>
+          )}
+        </div>{' '}
+        {/* Akhir .order-list-column */}
+        {/* --- Kolom Kanan: Perhatian & Update Terbaru --- */}
+        <div className="side-panel-column">
+          {' '}
+          {/* Ganti nama class */}
+          {/* Kartu Perhatian */}
+          <Card className="side-panel-card attention-combined-card">
+            {' '}
+            {/* Ganti nama class */}
+            <h4>🚨 Perlu Perhatian</h4>
+            {isSidePanelLoading ? (
+              <p style={{ textAlign: 'center', padding: '1rem' }}>Memuat data perhatian...</p>
+            ) : (
+              <div className="attention-wrapper">
+                <AttentionCard
+                  title="Prioritas Urgent"
+                  items={attentionData.urgentItems}
+                  icon="🔥"
+                  reasonKey="current_stage"
+                  reasonPrefix="Tahap"
+                />
+                <AttentionCard
+                  title="Mendekati Deadline"
+                  items={attentionData.nearingDeadline}
+                  icon="📅"
+                  reasonKey="deadline"
+                  reasonPrefix="Target"
+                />
+                <AttentionCard
+                  title="Item Macet (> 5 Hari)"
+                  items={attentionData.stuckItems}
+                  icon="⏳"
+                  reasonKey="last_update"
+                  reasonPrefix="Update"
+                />
+              </div>
+            )}
+          </Card>
+          {/* Kartu Update Terbaru */}
+          <Card className="side-panel-card" style={{ marginTop: '1.5rem' }}>
+            {' '}
+            {/* Ganti nama class */}
+            <h4>Update Terbaru</h4>
+            {isSidePanelLoading ? (
+              <p style={{ textAlign: 'center', padding: '1rem' }}>Memuat aktivitas terbaru...</p>
+            ) : recentUpdates.length > 0 ? (
+              <div className="updates-list">
+                {recentUpdates.map((update) => (
+                  <UpdateEntry key={update.id} update={update} />
+                ))}
+              </div>
+            ) : (
+              <p className="no-updates-text">Belum ada update progress terbaru.</p>
+            )}
+          </Card>
+        </div>{' '}
+        {/* Akhir .side-panel-column */}
+      </div>{' '}
+      {/* Akhir .tracking-layout */}
     </div>
   )
 }
