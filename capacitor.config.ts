@@ -7,10 +7,10 @@ const config: CapacitorConfig = {
   appName: 'Ubinkayu ERP',
   webDir: 'out/renderer',
   server: {
-    url: 'https://ubinkayu-erp1.vercel.app',
-    hostname: 'ubinkayu-erp1.vercel.app', // <-- TAMBAHKAN BARIS INI
+    url: 'https://ubinkayu.vercel.app',
+    hostname: 'ubinkayu.vercel.app', // <-- TAMBAHKAN BARIS INI
     androidScheme: 'https',
-    allowNavigation: ['ubinkayu-erp1.vercel.app']
+    allowNavigation: ['ubinkayu.vercel.app']
   },
 
   ios: {
