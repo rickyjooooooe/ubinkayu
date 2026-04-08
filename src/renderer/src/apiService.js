@@ -10,8 +10,8 @@
 // PENTING: Ganti dengan URL Vercel Anda setelah deploy berhasil.
 // Untuk development lokal, biarkan kosong.
 const API_BASE_URL = window.api
-  ? 'https://ubinkayu-erp1.vercel.app'
-  : 'https://ubinkayu-erp1.vercel.app'
+  ? 'https://ubinkayu.vercel.app'
+  : 'https://ubinkayu.vercel.app'
 
 /**
  * Helper untuk menangani panggilan fetch API secara konsisten.
