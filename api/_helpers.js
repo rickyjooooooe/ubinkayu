@@ -105,8 +105,8 @@ export async function openUserDoc() {
 }
 
 const ALIASES = {
-  orders: ['orders', 'purchase_order'],
-  order_items: ['order_items', 'po_items'],
+  orders: ['orders', 'purchase_orders', 'purchase_order'],
+  order_items: ['order_items', 'purchase_order_items', 'po_items'],
   product_master: ['product_master', 'products'],
   progress_tracking: ['order_items_progress', 'progress'],
   users: ['users_credentials', 'users']

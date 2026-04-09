@@ -454,7 +454,8 @@ export async function handleSaveNewOrder(req, res) {
       foto_link: fotoLink,
       file_size_bytes: 0,
       alamat_kirim: data.alamatKirim || '',
-      revised_by: 'N/A'
+      revised_by: 'N/A',
+      project_valuation: toNum(data.project_valuation, 0),
     }
 
     console.log('📝 [Vercel] Adding new PO row to sheet:', NewOrderRowData.order_number)
@@ -1726,6 +1727,76 @@ JAWABAN ANDA (BAHASA INDONESIA NATURAL):`
   } catch (e) {
     console.error('Error generating natural response:', e)
     return 'Maaf, terjadi kesalahan saat menyusun jawaban natural.'
+  }
+}
+
+
+export async function handleGetCommissionData(req, res) {
+  const { user } = req.body
+  try {
+    const doc = await openDoc()
+    const userDoc = await openUserDoc()
+
+    const orderSheet = await getSheet(doc, 'orders')
+    const orderRows = await orderSheet.getRows()
+
+    const userSheet = await getSheet(userDoc, 'users')
+    await userSheet.loadHeaderRow()
+    const userRows = await userSheet.getRows()
+
+    // Map nama marketing → commission_rate
+    const commissionRateMap = {}
+    userRows.forEach((r) => {
+      const name = r.get('name')?.trim()
+      const rate = Number(r.get('commision_rate') || 0)
+      if (name && rate > 0) {
+        commissionRateMap[name.toLowerCase()] = rate
+      }
+    })
+
+    // Ambil latest revision per order
+    const orderObjects = orderRows.map((r) => r.toObject())
+    const byId = new Map()
+    for (const r of orderObjects) {
+      const id = String(r.id).trim()
+      const rev = toNum(r.revision_number, -1)
+      const keep = byId.get(id)
+      if (!keep || rev > keep.rev) byId.set(id, { rev, row: r })
+    }
+    const latestOrders = Array.from(byId.values()).map(({ row }) => row)
+
+    const result = latestOrders
+      .filter((order) => {
+        if (order.status === 'Requested') return false
+        if (!order.acc_marketing) return false
+        if (!order.project_valuation || toNum(order.project_valuation, 0) === 0) return false
+        if (user?.role === 'marketing') {
+          return order.acc_marketing.toLowerCase() === user.name.toLowerCase()
+        }
+        return true
+      })
+      .map((order) => {
+        const marketingName = order.acc_marketing?.trim() || ''
+        const rate = commissionRateMap[marketingName.toLowerCase()] || 0
+        const valuation = toNum(order.project_valuation, 0)
+        return {
+          order_id: order.id,
+          order_number: order.order_number,
+          project_name: order.project_name,
+          marketing_name: marketingName,
+          commission_rate: rate,
+          project_valuation: valuation,
+          commission_amount: (valuation * rate) / 100,
+          status: order.status || 'Open',
+          deadline: order.deadline || null,
+          created_at: order.created_at,
+        }
+      })
+
+    return res.status(200).json(result)
+  } catch (err) {
+    console.error('❌ handleGetCommissionData error:', err.message)
+    return res.status(500).json({ success: false, error: err.message })
   }
 }
 

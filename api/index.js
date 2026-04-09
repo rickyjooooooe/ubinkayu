@@ -23,9 +23,9 @@ export default async function handler(req, res) {
         return await Controller.handleListOrders(req, res)
       case 'saveNewOrder':
         return await Controller.handleSaveNewOrder(req, res)
-      case 'updatePO':
+      case 'updateOrder':
         return await Controller.handleUpdateOrder(req, res)
-      case 'deletePO':
+      case 'deleteOrder':
         return await Controller.handleDeleteOrder(req, res)
 
       // Rute untuk Produk
@@ -33,17 +33,17 @@ export default async function handler(req, res) {
         return await Controller.handleGetProducts(req, res)
 
       // Rute untuk Detail & Revisi
-      case 'listorderItems':
-        return await Controller.handleListorderItems(req, res)
+      case 'listOrderItems':
+        return await Controller.handleListOrderItems(req, res)
       case 'getRevisionHistory':
         return await Controller.handleGetRevisionHistory(req, res)
-      case 'listPORevisions':
-        return await Controller.handleListPORevisions(req, res)
-      case 'listorderItemsByRevision':
-        return await Controller.handleListorderItemsByRevision(req, res)
+      case 'listOrderRevisions':
+        return await Controller.handleListOrderRevisions(req, res)
+      case 'listOrderItemsByRevision':
+        return await Controller.handleListOrderItemsByRevision(req, res)
 
       // Rute untuk Preview
-      case 'previewPO':
+      case 'previewOrder':
         return await Controller.handlePreviewOrder(req, res)
 
       // Rute untuk Progress
@@ -51,8 +51,8 @@ export default async function handler(req, res) {
         return await Controller.handleUpdateItemProgress(req, res)
       case 'getActiveOrdersWithProgress':
         return await Controller.handleGetActiveOrdersWithProgress(req, res)
-      case 'getorderItemsWithDetails':
-        return await Controller.handleGetorderItemsWithDetails(req, res)
+      case 'getOrderItemsWithDetails':
+        return await Controller.handleGetOrderItemsWithDetails(req, res)
       case 'getRecentProgressUpdates':
         return await Controller.handleGetRecentProgressUpdates(req, res)
       case 'updateStageDeadline':
@@ -65,6 +65,10 @@ export default async function handler(req, res) {
         return await Controller.handleGetProductSalesAnalysis(req, res)
       case 'getSalesItemData':
         return await Controller.handleGetSalesItemData(req, res)
+
+      
+      case 'getCommissionData':
+        return await Controller.handleGetCommissionData(req, res)
 
       case 'addNewProduct':
         return await Controller.handleAddNewProduct(req, res)
