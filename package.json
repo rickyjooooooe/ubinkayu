@@ -72,7 +72,7 @@
   },
   "build": {
     "appId": "com.ubinkayu.erp",
-    "productName": "Ubinkayu ERP",
+    "productName": "Ubinkayu",
     "files": [
       "out/**/*"
     ],
