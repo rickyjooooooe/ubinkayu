@@ -4,7 +4,7 @@ import type { CapacitorConfig } from '@capacitor/cli'
 
 const config: CapacitorConfig = {
   appId: 'com.ubinkayu.erp',
-  appName: 'Ubinkayu ERP',
+  appName: 'Ubinkayu',
   webDir: 'out/renderer',
   server: {
     url: 'https://ubinkayu.vercel.app',
