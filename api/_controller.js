@@ -968,7 +968,8 @@ export async function handleGetRevisionHistory(req, res) {
     items: allItemRows
       .filter(
         (r) =>
-          String(r.get('order_id')) === String(orderId) &&
+          // Tambahkan .trim() di sini untuk menghindari error karena spasi tak terlihat di Google Sheets
+          String(r.get('order_id')).trim() === String(orderId).trim() &&
           toNum(r.get('revision_number'), -1) === toNum(m.revision_number, -1)
       )
       .map((r) => r.toObject())
@@ -1103,7 +1104,8 @@ export async function handleGetorderItemsWithDetails(req, res) {
     progressSheet.getRows()
   ])
 
-  const allItemsForOrder = itemRows.filter((r) => r.get('order_id') === orderId)
+  // Gunakan String() dan .trim() agar angka 101 dan teks " 101 " dianggap sama persis
+  const allItemsForOrder = itemRows.filter((r) => String(r.get('order_id')).trim() === String(orderId).trim())
   if (allItemsForOrder.length === 0) {
     return res.status(200).json([])
   }
