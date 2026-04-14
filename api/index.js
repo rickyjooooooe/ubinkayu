@@ -52,7 +52,7 @@ export default async function handler(req, res) {
       case 'getActiveOrdersWithProgress':
         return await Controller.handleGetActiveOrdersWithProgress(req, res)
       case 'getOrderItemsWithDetails':
-        return await Controller.handleGetOrderItemsWithDetails(req, res)
+        return await Controller.handlegetOrderItemsWithDetails(req, res)
       case 'getRecentProgressUpdates':
         return await Controller.handleGetRecentProgressUpdates(req, res)
       case 'updateStageDeadline':
