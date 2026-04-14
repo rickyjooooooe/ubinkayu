@@ -1089,7 +1089,7 @@ export async function handleGetActiveOrdersWithProgress(req, res) {
   return res.status(200).json(filteredResult)
 }
 
-export async function handlegetOrderItemsWithDetails(req, res) {
+export async function handleGetorderItemsWithDetails(req, res) {
   const { orderId } = req.query
   const doc = await openDoc()
   const [Sheet, itemSheet, progressSheet] = await Promise.all([
