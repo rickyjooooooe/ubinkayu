@@ -1828,7 +1828,7 @@ Panggil user dengan nama depannya (${user?.name?.split(' ')[0] || 'Tamu'}).
 ---
 
 --- ATURAN PRIORITAS ---
-1. Jika user menyebut nomor PO, nama customer, atau revisi, Anda HARUS menggunakan "getOrderInfo".
+1. Jika user menyebut nomor PO, nama customer, atau revisi, Anda HARUS menggunakan "GetOrderInfo".
 2. Tentukan 'intent' user dengan hati-hati.
 
 --- Alat (Tools) yang Tersedia ---
@@ -1839,9 +1839,9 @@ Panggil user dengan nama depannya (${user?.name?.split(' ')[0] || 'Tamu'}).
    - Keywords: "jumlah order", "total order", "ada berapa order", "semua order aktif".
    - JSON: {"tool": "getTotalOrder"}
 
-2. "getOrderInfo": (Mencari PO berdasarkan nomor, customer, atau revisi).
+2. "GetOrderInfo": (Mencari PO berdasarkan nomor, customer, atau revisi).
    - Keywords: "status order [nomor]", "link file [nomor]", "info order [nomor]".
-   - JSON: {"tool": "getOrderInfo", "param": {"orderNumber": "...", "customerName": "...", "revisionNumber": "...", "intent": "details"}}
+   - JSON: {"tool": "GetOrderInfo", "param": {"orderNumber": "...", "customerName": "...", "revisionNumber": "...", "intent": "details"}}
 
 3. "getUrgentOrders": (Untuk pertanyaan PO 'Urgent').
    - JSON: {"tool": "getUrgentOrders"}
@@ -1906,7 +1906,7 @@ ATURAN KETAT:
         )
         return res.status(200).json({ response: text })
       }
-      case 'getOrderInfo': {
+      case 'GetOrderInfo': {
         // Implementasi sederhana untuk Vercel (bisa dikembangkan lagi nanti)
         const { orderNumber, customerName } = aiDecision.param || {}
         let found = allOrders.slice(0, 5) // Default ambil 5 teratas jika tidak ada param

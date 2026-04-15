@@ -32,7 +32,7 @@ getCommissionData: (user: any) => Promise<any[]>;
 
   // Fungsi Progress & Analisis
   getActiveOrdersWithProgress: (user: any) => Promise<any[]>;
-  getorderItemsWithDetails: (orderId: string) => Promise<any[]>;
+  GetOrderItemsWithDetails: (orderId: string) => Promise<any[]>;
   updateItemProgress: (data: any) => Promise<{ success: boolean; error?: string }>;
   getRecentProgressUpdates: (user: any) => Promise<any[]>;
   getAttentionData: (user: any) => Promise<any>;

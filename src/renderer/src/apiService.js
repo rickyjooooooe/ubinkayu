@@ -208,10 +208,10 @@ export function getActiveOrdersWithProgress(user) {
   })
 }
 
-export function getorderItemsWithDetails(orderId) {
-  // SEBELUMNYA: window.api.getorderItemsDetails (kurang "With")
-  if (window.api) return window.api.getorderItemsWithDetails(orderId) // <-- PERBAIKI INI
-  return fetchAPI(createApiEndpoint('getorderItemsWithDetails', { orderId }))
+export function GetOrderItemsWithDetails(orderId) {
+  // SEBELUMNYA: window.api.GetOrderItemsDetails (kurang "With")
+  if (window.api) return window.api.GetOrderItemsWithDetails(orderId) // <-- PERBAIKI INI
+  return fetchAPI(createApiEndpoint('GetOrderItemsWithDetails', { orderId }))
 }
 
 export function getRecentProgressUpdates(user) {

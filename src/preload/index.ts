@@ -34,7 +34,7 @@ getCommissionData: (user) => ipcRenderer.invoke('commission:getData', user),
 
   // --- Fungsi untuk Progress, Analisis & Lainnya ---
   getActiveOrdersWithProgress: (user) => ipcRenderer.invoke('progress:getActiveOrdersWithProgress', user), // <-- PERBAIKAN 1
-  getorderItemsWithDetails: (orderId) => ipcRenderer.invoke('progress:getorderItemsWithDetails', orderId), // <-- PERBAIKAN 2
+  GetOrderItemsWithDetails: (orderId) => ipcRenderer.invoke('progress:GetOrderItemsWithDetails', orderId), // <-- PERBAIKAN 2
   updateItemProgress: (data) => ipcRenderer.invoke('progress:updateItem', data),
   getRecentProgressUpdates: (user) => ipcRenderer.invoke('progress:getRecentProgressUpdates', user), // <-- PERBAIKAN 3
   getAttentionData: (user) => ipcRenderer.invoke('progress:getAttentionData', user),

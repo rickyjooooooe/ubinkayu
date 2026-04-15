@@ -1604,7 +1604,7 @@ async function getActiveOrdersWithProgress(user: User | null) {
   }
 }
 
-async function getorderItemsWithDetails(orderId: string) {
+async function GetOrderItemsWithDetails(orderId: string) {
   try {
     const doc = await openDoc()
     const [Sheet, itemSheet, progressSheet] = await Promise.all([
@@ -2276,7 +2276,7 @@ Panggil user dengan nama depannya (${user?.name?.split(' ')[0] || 'Tamu'}).
 ---
 
 --- ATURAN PRIORITAS ---
-1. Jika user menyebut nomor PO, nama customer, atau revisi, Anda HARUS menggunakan "getOrderInfo".
+1. Jika user menyebut nomor PO, nama customer, atau revisi, Anda HARUS menggunakan "GetOrderInfo".
 2. Tentukan 'intent' user dengan hati-hati.
 
 --- Alat (Tools) yang Tersedia ---
@@ -2312,14 +2312,14 @@ Panggil user dengan nama depannya (${user?.name?.split(' ')[0] || 'Tamu'}).
    - Keywords: "jumlah order", "total order", "ada berapa order", "semua order aktif".
    - JSON: {"tool": "getTotalOrder"}
 
-8. "getOrderInfo": (Mencari PO berdasarkan 'header'-nya: Nomor PO atau Customer).
+8. "GetOrderInfo": (Mencari PO berdasarkan 'header'-nya: Nomor PO atau Customer).
    - PENTING: JANGAN gunakan tool ini untuk mencari berdasarkan produk or kayu. Gunakan "getPOsByItem".
    - PENTING: 'orderNumber' BISA MENGANDUNG SPASI. 'revisionNumber' HANYA angka setelah kata "revisi" atau "rev".
    - AI HARUS mengekstrak "orderNumber" atau "customerName".
    - AI HARUS mengekstrak "revisionNumber" (jika disebut).
    - AI HARUS menentukan "intent" (niat) user: "status", "details", atau "file".
    - Default ke "details" jika tidak spesifik.
-   - JSON: {"tool": "getOrderInfo", "param": {"orderNumber": "...", "customerName": "...", "revisionNumber": "...", "intent": "status"}}
+   - JSON: {"tool": "GetOrderInfo", "param": {"orderNumber": "...", "customerName": "...", "revisionNumber": "...", "intent": "status"}}
 
 9. "getPOsByItem": (Mencari PO berdasarkan 'isi' item).
    - Keywords: "order yang ada produk [nama]", "cari order pakai kayu [jenis]", "order dengan [produk]".
@@ -2635,7 +2635,7 @@ ATURAN KETAT:
         )
       }
 
-      case 'getOrderInfo': {
+      case 'GetOrderInfo': {
         const { orderNumber, customerName, revisionNumber, intent } = aiDecision.param
         if (!orderNumber && !customerName) {
           return 'Mohon sebutkan nomor PO atau nama customer yang ingin dicari.'
@@ -3292,7 +3292,7 @@ app.whenReady().then(async () => {
   })
 
   ipcMain.handle('progress:getActiveOrdersWithProgress', (_event, user) => getActiveOrdersWithProgress(user))
-  ipcMain.handle('progress:getorderItemsWithDetails', (_event, orderId) => getorderItemsWithDetails(orderId))
+  ipcMain.handle('progress:GetOrderItemsWithDetails', (_event, orderId) => GetOrderItemsWithDetails(orderId))
   ipcMain.handle('progress:updateItem', (_event, data) => updateItemProgress(data))
   ipcMain.handle('progress:getRecentProgressUpdates', (_event, user) => getRecentProgressUpdates(user))
   ipcMain.handle('progress:getAttentionData', (_event, user) => getAttentionData(user))
