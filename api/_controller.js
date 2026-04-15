@@ -944,7 +944,7 @@ export async function handleGetProducts(req, res) {
   return res.status(200).json(products)
 }
 
-export async function handleListorderItems(req, res) {
+export async function handleListOrderItems(req, res) {
   const { orderId } = req.query
   const doc = await openDoc()
   const latestRev = await latestRevisionNumberForOrder(String(orderId), doc)
@@ -1089,7 +1089,7 @@ export async function handleGetActiveOrdersWithProgress(req, res) {
   return res.status(200).json(filteredResult)
 }
 
-export async function handleGetorderItemsWithDetails(req, res) {
+export async function handleGetOrderItemsWithDetails(req, res) {
   const { orderId } = req.query
   const doc = await openDoc()
   const [Sheet, itemSheet, progressSheet] = await Promise.all([
@@ -1537,7 +1537,7 @@ export async function handleAddNewProduct(req, res) {
   }
 }
 
-export async function handleListPORevisions(req, res) {
+export async function handleListOrderRevisions(req, res) {
   const { orderId } = req.query
   const doc = await openDoc()
   const Sheet = await getSheet(doc, 'orders')
@@ -1549,7 +1549,7 @@ export async function handleListPORevisions(req, res) {
   return res.status(200).json(revisions)
 }
 
-export async function handleListorderItemsByRevision(req, res) {
+export async function handleListOrderItemsByRevision(req, res) {
   const { orderId, revisionNumber } = req.query
   const doc = await openDoc()
   const items = await getItemsByRevision(String(orderId), toNum(revisionNumber, 0), doc)

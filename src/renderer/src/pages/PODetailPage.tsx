@@ -192,7 +192,7 @@ const PODetailPage: React.FC<PODetailPageProps> = ({ order, onBackToList }) => {
         try {
           // Ambil data item terbaru (dengan progress & deadline) dan data histori revisi
           const [latestItemsData, historyData] = await Promise.all([
-            apiService.getorderItemsWithDetails(order.id),
+            apiService.getOrderItemsWithDetails(order.id),
             apiService.getRevisionHistory(order.id)
           ]);
 
