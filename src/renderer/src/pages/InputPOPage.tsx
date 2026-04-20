@@ -397,7 +397,7 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
     try {
       const payload = await constructPayload()
       if (reviserName) payload.revisedBy = reviserName
-      const result = editingPO ? await apiService.updatePO(payload) : await apiService.saveNewOrder(payload)
+      const result = editingPO ? await apiService.updateOrder(payload) : await apiService.saveNewOrder(payload)
       if (result.success) { alert(`PO berhasil ${editingPO ? 'diperbarui' : 'disimpan'}!`); onSaveSuccess() }
       else throw new Error(result.error || 'Terjadi kesalahan di backend.')
     } catch (error) {
@@ -412,7 +412,7 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
     setIsPreviewing(true)
     try {
       const payload = await constructPayload()
-      const result = await apiService.previewPO(payload)
+      const result = await apiService.previewOrder(payload)
       if (result.success) {
         const imageWindow = window.open()
         if (imageWindow) imageWindow.document.write(`<title>PO Preview</title><style>body{margin:0;}</style><img src="data:image/jpeg;base64,${result.base64Data}" style="width:100%;">`)
