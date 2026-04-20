@@ -130,18 +130,18 @@ export function saveNewOrder(data) {
   })
 }
 
-export function updatePO(data) {
-  if (window.api) return window.api.updatePO(data)
-  return fetchAPI(createApiEndpoint('updatePO'), {
+export function updateOrder(data) {
+  if (window.api) return window.api.updateOrder(data)
+  return fetchAPI(createApiEndpoint('updateOrder'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   })
 }
 
-export function deletePO(orderId) {
-  if (window.api) return window.api.deletePO(orderId)
-  return fetchAPI(createApiEndpoint('deletePO', { orderId }), {
+export function deleteOrder(orderId) {
+  if (window.api) return window.api.deleteOrder(orderId)
+  return fetchAPI(createApiEndpoint('deleteOrder', { orderId }), {
     method: 'DELETE'
   })
 }
@@ -165,9 +165,9 @@ export function getRevisionHistory(orderId) {
   return fetchAPI(createApiEndpoint('getRevisionHistory', { orderId }))
 }
 
-export function listPORevisions(orderId) {
-  if (window.api) return window.api.listPORevisions(orderId)
-  return fetchAPI(createApiEndpoint('listPORevisions', { orderId }))
+export function listOrderRevisions(orderId) {
+  if (window.api) return window.api.listOrderRevisions(orderId)
+  return fetchAPI(createApiEndpoint('listOrderRevisions', { orderId }))
 }
 
 export function listOrderItemsByRevision(orderId, revisionNumber) {
@@ -177,9 +177,9 @@ export function listOrderItemsByRevision(orderId, revisionNumber) {
 
 // --- Fungsi Pratinjau (Preview) ---
 
-export function previewPO(data) {
-  if (window.api) return window.api.previewPO(data)
-  return fetchAPI(createApiEndpoint('previewPO'), {
+export function previewOrder(data) {
+  if (window.api) return window.api.previewOrder(data)
+  return fetchAPI(createApiEndpoint('previewOrder'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
