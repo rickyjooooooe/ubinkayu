@@ -46,7 +46,7 @@ function createApiEndpoint(action, params = {}) {
 // Kirim request project (marketing)
 export function requestProject(data) {
   if (window.api) return window.api.requestProject(data)
-  return fetchAPI('/api/request-project', {
+  return fetchAPI(createApiEndpoint('requestProject'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
@@ -56,7 +56,7 @@ export function requestProject(data) {
 // Admin konfirmasi request dengan items
 export function confirmRequest(data) {
   if (window.api) return window.api.confirmRequest(data)
-  return fetchAPI('/api/confirm-request', {
+  return fetchAPI(createApiEndpoint('confirmRequest'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
@@ -208,10 +208,10 @@ export function getActiveOrdersWithProgress(user) {
   })
 }
 
-export function GetOrderItemsWithDetails(orderId) {
+export function getOrderItemsWithDetails(orderId) {
   // SEBELUMNYA: window.api.GetOrderItemsDetails (kurang "With")
-  if (window.api) return window.api.GetOrderItemsWithDetails(orderId) // <-- PERBAIKI INI
-  return fetchAPI(createApiEndpoint('GetOrderItemsWithDetails', { orderId }))
+  if (window.api) return window.api.getOrderItemsWithDetails(orderId) // <-- PERBAIKI INI
+  return fetchAPI(createApiEndpoint('getOrderItemsWithDetails', { orderId }))
 }
 
 export function getRecentProgressUpdates(user) {
