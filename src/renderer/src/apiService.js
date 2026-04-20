@@ -155,9 +155,9 @@ export function getProducts() {
 
 // --- Fungsi Detail PO & Revisi ---
 
-export function listorderItems(orderId) {
-  if (window.api) return window.api.listorderItems(orderId)
-  return fetchAPI(createApiEndpoint('listorderItems', { orderId }))
+export function listOrderItems(orderId) {
+  if (window.api) return window.api.listOrderItems(orderId)
+  return fetchAPI(createApiEndpoint('listOrderItems', { orderId }))
 }
 
 export function getRevisionHistory(orderId) {
@@ -170,9 +170,9 @@ export function listPORevisions(orderId) {
   return fetchAPI(createApiEndpoint('listPORevisions', { orderId }))
 }
 
-export function listorderItemsByRevision(orderId, revisionNumber) {
-  if (window.api) return window.api.listorderItemsByRevision(orderId, revisionNumber)
-  return fetchAPI(createApiEndpoint('listorderItemsByRevision', { orderId, revisionNumber }))
+export function listOrderItemsByRevision(orderId, revisionNumber) {
+  if (window.api) return window.api.listOrderItemsByRevision(orderId, revisionNumber)
+  return fetchAPI(createApiEndpoint('listOrderItemsByRevision', { orderId, revisionNumber }))
 }
 
 // --- Fungsi Pratinjau (Preview) ---

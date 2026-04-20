@@ -1271,12 +1271,12 @@ export async function deletePO(orderId: string) {
   }
 }
 
-async function listorderItems(orderId: string) {
+async function listOrderItems(orderId: string) {
   try {
     const doc = await openDoc()
     return await getLiveorderItems(String(orderId), doc)
   } catch (err: any) {
-    console.error('❌ listorderItems error:', err.message)
+    console.error('❌ listOrderItems error:', err.message)
     return []
   }
 }
@@ -1296,12 +1296,12 @@ async function listPORevisions(orderId: string) {
   }
 }
 
-async function listorderItemsByRevision(orderId: string, revisionNumber: number) {
+async function listOrderItemsByRevision(orderId: string, revisionNumber: number) {
   try {
     const doc = await openDoc()
     return await getItemsByRevision(String(orderId), toNum(revisionNumber, 0), doc)
   } catch (err: any) {
-    console.error('❌ listorderItemsByRevision error:', err.message)
+    console.error('❌ listOrderItemsByRevision error:', err.message)
     return []
   }
 }
@@ -3263,10 +3263,10 @@ app.whenReady().then(async () => {
   ipcMain.handle('order:delete', async (_event, orderId) => deletePO(orderId))
   ipcMain.handle('order:update', async (_event, data) => updatePO(data))
   ipcMain.handle('order:preview', async (_event, data) => previewPO(data))
-  ipcMain.handle('order:listItems', async (_event, orderId) => listorderItems(orderId))
+  ipcMain.handle('order:listItems', async (_event, orderId) => listOrderItems(orderId))
   ipcMain.handle('order:listRevisions', async (_event, orderId) => listPORevisions(orderId))
   ipcMain.handle('order:listItemsByRevision', async (_event, orderId, revisionNumber) =>
-    listorderItemsByRevision(orderId, revisionNumber)
+    listOrderItemsByRevision(orderId, revisionNumber)
   )
   ipcMain.handle('commission:getData', async (_event, user) => getCommissionData(user))
   ipcMain.handle('order:getRevisionHistory', async (_event, orderId) => getRevisionHistory(orderId))

@@ -18,14 +18,14 @@ const api = {
   listOrders: (user) => ipcRenderer.invoke('order:list', user),
   updatePO: (data) => ipcRenderer.invoke('order:update', data),
   deletePO: (orderId) => ipcRenderer.invoke('order:delete', orderId),
-  listorderItems: (orderId) => ipcRenderer.invoke('order:listItems', orderId),
+  listOrderItems: (orderId) => ipcRenderer.invoke('order:listItems', orderId),
 // [BARU] Request Project
 requestProject: (data) => ipcRenderer.invoke('order:requestProject', data),
 confirmRequest: (data) => ipcRenderer.invoke('order:confirmRequest', data),
 getCommissionData: (user) => ipcRenderer.invoke('commission:getData', user),
   // --- Fungsi untuk Revisi & Histori ---
   listPORevisions: (orderId) => ipcRenderer.invoke('order:listRevisions', orderId),
-  listorderItemsByRevision: (revId) => ipcRenderer.invoke('order:listItemsByRevision', revId),
+  listOrderItemsByRevision: (revId) => ipcRenderer.invoke('order:listItemsByRevision', revId),
   getRevisionHistory: (orderId) => ipcRenderer.invoke('order:getRevisionHistory', orderId),
 
   // --- Fungsi untuk PDF & Link ---

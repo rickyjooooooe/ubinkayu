@@ -18,7 +18,7 @@ interface ICustomAPI {
   listOrders: (user: any) => Promise<any[]>;
   deletePO: (orderId: string) => Promise<any>;
   updatePO: (data: any) => Promise<{ success: boolean; error?: string }>;
-  listorderItems: (orderId: string) => Promise<any[]>;
+  listOrderItems: (orderId: string) => Promise<any[]>;
   previewPO: (data: any) => Promise<any>;
   addNewProduct: (data: any) => Promise<{ success: boolean; newId?: string; error?: string }>;
   // [BARU] Request Project
@@ -27,7 +27,7 @@ confirmRequest: (data: any) => Promise<{ success: boolean; orderId?: string; err
 getCommissionData: (user: any) => Promise<any[]>;
   // Fungsi Revisi
   listPORevisions: (orderId: string) => Promise<any[]>;
-  listorderItemsByRevision: (revisionId: string) => Promise<any[]>;
+  listOrderItemsByRevision: (revisionId: string) => Promise<any[]>;
   getRevisionHistory: (orderId: string) => Promise<any[]>;
 
   // Fungsi Progress & Analisis

@@ -944,7 +944,7 @@ export async function handleGetProducts(req, res) {
   return res.status(200).json(products)
 }
 
-export async function handleListOrderItems(req, res) {
+export async function handlelistOrderItems(req, res) {
   const { orderId } = req.query
   const doc = await openDoc()
   const latestRev = await latestRevisionNumberForOrder(String(orderId), doc)
@@ -1549,7 +1549,7 @@ export async function handleListOrderRevisions(req, res) {
   return res.status(200).json(revisions)
 }
 
-export async function handleListOrderItemsByRevision(req, res) {
+export async function handlelistOrderItemsByRevision(req, res) {
   const { orderId, revisionNumber } = req.query
   const doc = await openDoc()
   const items = await getItemsByRevision(String(orderId), toNum(revisionNumber, 0), doc)

@@ -217,7 +217,7 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
         // Mode confirm: tampilkan info PO tapi items dimulai kosong untuk diisi admin
         if (!isConfirmMode) {
           try {
-            const orderItems = await apiService.listorderItems(editingPO.id)
+            const orderItems = await apiService.listOrderItems(editingPO.id)
             setItems(orderItems.map((item: any) => ({
               ...item,
               kubikasi: Number(item.kubikasi) || 0,
