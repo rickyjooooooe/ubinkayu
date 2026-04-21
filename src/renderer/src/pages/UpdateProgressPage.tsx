@@ -348,12 +348,12 @@ const UpdateProgressPage: React.FC<UpdateProgressPageProps> = ({ order, onBack, 
       setIsLoading(true);
       try {
         // @ts-ignore
-        const fetchedItems: POItem[] = await apiService.getOrderItemsWithDetails(order.id);
+        const fetchedItems: POItem[] = await apiService.GetOrderItemsWithDetails(order.id);
         if (Array.isArray(fetchedItems)) {
           setItems(fetchedItems);
           console.log(`Fetched ${fetchedItems.length} items successfully.`)
         } else {
-          console.error('getOrderItemsWithDetails did not return an array:', fetchedItems)
+          console.error('GetOrderItemsWithDetails did not return an array:', fetchedItems)
           setItems([])
           alert('Gagal memuat detail item: Format data tidak sesuai.')
         }
