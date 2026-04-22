@@ -277,7 +277,8 @@ export async function handleListOrders(req, res) {
 
       let finalStatus = orderObject.status
       let completed_at = null
-      if (finalStatus !== 'Cancelled') {
+      // Jangan override status Requested
+      if (finalStatus !== 'Cancelled' && finalStatus !== 'Requested') {
         const roundedProgress = Math.round(orderProgress)
         if (roundedProgress >= 100) {
           finalStatus = 'Completed'
