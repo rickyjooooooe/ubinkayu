@@ -12,7 +12,7 @@ import RequestTable from '../components/Requesttable';
 interface POListPageProps {
   poList: POHeader[];
   onAddPO: () => void;
-  onDeletePO: (orderId: string, OrderInfo: string) => Promise<void>;
+  ondeleteOrder: (orderId: string, OrderInfo: string) => Promise<void>;
   onEditPO: (order: POHeader) => void;
   onShowDetail: (order: POHeader) => void;
   onShowProgress: (order: POHeader) => void;
@@ -25,7 +25,7 @@ const POListPage: React.FC<POListPageProps> = ({
   poList,
   onAddPO,
   isLoading,
-  onDeletePO,
+  ondeleteOrder,
   onEditPO,
   onShowDetail,
   onShowProgress,
@@ -265,10 +265,10 @@ const POListPage: React.FC<POListPageProps> = ({
           poList={filteredAndSortedPOs}
           onShowDetail={onShowDetail}
           onEditPO={onEditPO}
-          onDeletePO={(orderId) => {
+          ondeleteOrder={(orderId) => {
             const OrderInfo = regularPOs?.find(p => p.id === orderId);
             const infoString = OrderInfo ? `${OrderInfo.order_number} - ${OrderInfo.project_name}` : orderId;
-            return onDeletePO(orderId, infoString);
+            return ondeleteOrder(orderId, infoString);
           }}
           onShowProgress={onShowProgress}
           currentUserRole={userRole}
