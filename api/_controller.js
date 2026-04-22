@@ -1732,12 +1732,12 @@ async function generateNaturalResponse(dataContext, userRequest, originalPrompt,
   const groqToken = process.env.GROQ_API_KEY
   if (!groqToken) throw new Error('GROQ_API_KEY missing')
 
-  const sysPrompt = `Anda adalah Asisten AI ERP Ubinkayu.
-Tugas Anda adalah menjawab pertanyaan user secara natural.
-ANDA HARUS MENJAWAB HANYA BERDASARKAN DATA KONTEKS YANG DIBERIKAN.
-JANGAN mengarang data.
-Gunakan **format markdown** (bold, list) agar mudah dibaca.
+  const sysPrompt = `Anda adalah Asisten AI Sistem Ubinkayu, ahli dalam woodworking dan manajemen PO.
+Tugas Anda adalah menjawab pertanyaan user secara natural, membantu, dan informatif dalam bahasa Indonesia.
+ANDA HARUS MENJAWAB HANYA BERDASARKAN DATA KONTEKS YANG DIBERIKAN. JANGAN mengarang data.
+Gunakan **format markdown** (bold, list, tabel jika perlu) agar mudah dibaca.
 Sapa user dengan nama depannya (${user?.name?.split(' ')[0] || 'Tamu'}) jika relevan.
+Berikan saran atau tips woodworking jika sesuai konteks.
 
 ---
 DATA KONTEKS (JSON):
@@ -1749,7 +1749,7 @@ ${userRequest}
 PROMPT ASLI USER:
 "${originalPrompt}"
 ---
-JAWABAN ANDA (BAHASA INDONESIA NATURAL):`
+JAWABAN ANDA (BAHASA INDONESIA NATURAL, RAMAH, DAN BERMANFAAT):`
 
   try {
     const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -1759,10 +1759,10 @@ JAWABAN ANDA (BAHASA INDONESIA NATURAL):`
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
+        model: 'llama-3.1-70b-versatile',
         messages: [{ role: 'system', content: sysPrompt }],
         temperature: 0.3, // Sedikit kreatif tapi tetap patuh data
-        max_tokens: 500
+        max_tokens: 800
       })
     })
     if (!resp.ok) throw new Error(`Groq Error: ${await resp.text()}`)
@@ -1863,8 +1863,8 @@ export async function handleAiChat(req, res) {
   let aiDecision = { tool: 'unknown' }
   try {
     const today = new Date().toISOString().split('T')[0]
-    // System prompt disingkat agar hemat token di Vercel, tapi tetap fungsional
-    const systemPrompt = `Anda adalah Asisten ERP Ubinkayu. Tugas Anda adalah mengubah pertanyaan pengguna menjadi JSON 'perintah' yang valid. HANYA KEMBALIKAN JSON.
+    // Enhanced system prompt with woodworking domain knowledge and better examples
+    const systemPrompt = `Anda adalah Asisten ERP Ubinkayu, spesialis dalam manajemen pesanan woodworking. Tugas Anda adalah mengubah pertanyaan pengguna menjadi JSON 'perintah' yang valid. HANYA KEMBALIKAN JSON.
 Hari ini adalah ${today}.
 
 --- INFORMASI PENGGUNA SAAT INI ---
@@ -1873,35 +1873,58 @@ Role: ${user?.role || 'Tidak Dikenal'}
 Panggil user dengan nama depannya (${user?.name?.split(' ')[0] || 'Tamu'}).
 ---
 
+--- PENGETAHUAN DOMAIN WOODWORKING ---
+- Kubikasi: Volume kayu dalam m³.
+- Finishing: Permukaan akhir seperti polish, varnish, atau natural.
+- Status PO: Requested (baru request), Open (aktif), Completed (selesai), Cancelled (dibatalkan).
+- Prioritas: Urgent, High, Normal.
+- Tools: Kayu seperti Jati, Mahoni, dll. Produk: Meja, Kursi, dll.
+
 --- ATURAN PRIORITAS ---
-1. Jika user menyebut nomor PO, nama customer, atau revisi, Anda HARUS menggunakan "GetOrderInfo".
-2. Tentukan 'intent' user dengan hati-hati.
+1. Jika user menyebut nomor PO, nama customer, revisi, atau detail spesifik, GUNAKAN "GetOrderInfo".
+2. Untuk analisis atau ringkasan, pilih tool yang sesuai.
+3. Jika pertanyaan umum atau sapaan, gunakan "general".
 
 --- Alat (Tools) yang Tersedia ---
-// (Daftar alat disederhanakan untuk Vercel agar tidak terlalu panjang,
-// fokus pada fitur inti PO karena keterbatasan waktu eksekusi serverless)
 
-1. "getTotalOrder": (Untuk pertanyaan jumlah/total PO).
-   - Keywords: "jumlah order", "total order", "ada berapa order", "semua order aktif".
+1. "getTotalOrder": Untuk jumlah/total PO.
+   - Keywords: "berapa order", "total PO", "jumlah aktif".
    - JSON: {"tool": "getTotalOrder"}
 
-2. "GetOrderInfo": (Mencari PO berdasarkan nomor, customer, atau revisi).
-   - Keywords: "status order [nomor]", "link file [nomor]", "info order [nomor]".
-   - JSON: {"tool": "GetOrderInfo", "param": {"orderNumber": "...", "customerName": "...", "revisionNumber": "...", "intent": "details"}}
+2. "GetOrderInfo": Cari detail PO berdasarkan nomor, customer, atau revisi.
+   - Keywords: "status PO 123", "info customer ABC", "revisi terakhir".
+   - JSON: {"tool": "GetOrderInfo", "param": {"orderNumber": "123", "customerName": "ABC", "revisionNumber": 1, "intent": "details"}}
 
-3. "getUrgentOrders": (Untuk pertanyaan PO 'Urgent').
+3. "getUrgentOrders": PO dengan prioritas Urgent.
    - JSON: {"tool": "getUrgentOrders"}
 
-4. "getNearingDeadline": (Untuk pertanyaan PO 'deadline dekat').
+4. "getNearingDeadline": PO dengan deadline mendekat (kurang dari 7 hari).
    - JSON: {"tool": "getNearingDeadline"}
 
-5. "general": (Untuk sapaan umum).
-   - Keywords: "halo", "terima kasih".
+5. "analyzeTrends": Analisis tren seperti jenis kayu populer atau masalah umum.
+   - Keywords: "tren kayu", "masalah deadline", "analisis produksi".
+   - JSON: {"tool": "analyzeTrends"}
+
+6. "generateReport": Buat laporan ringkas (e.g., summary bulanan).
+   - Keywords: "laporan bulan ini", "ringkasan PO".
+   - JSON: {"tool": "generateReport"}
+
+7. "general": Untuk sapaan, terima kasih, atau pertanyaan umum.
+   - Keywords: "halo", "terima kasih", "bantuan".
    - JSON: {"tool": "general"}
 
+CONTOH:
+- User: "Berapa order aktif?" -> {"tool": "getTotalOrder"}
+- User: "Detail PO 456" -> {"tool": "GetOrderInfo", "param": {"orderNumber": "456"}}
+- User: "PO urgent mana saja?" -> {"tool": "getUrgentOrders"}
+- User: "Deadline dekat apa?" -> {"tool": "getNearingDeadline"}
+- User: "Tren kayu apa?" -> {"tool": "analyzeTrends"}
+- User: "Buat laporan" -> {"tool": "generateReport"}
+- User: "Halo" -> {"tool": "general"}
+
 ATURAN KETAT:
-- JANGAN menjawab pertanyaan. HANYA KEMBALIKAN JSON.
-- Jika tidak yakin tool mana, KEMBALIKAN: {"tool": "unknown"}`
+- HANYA KEMBALIKAN JSON yang valid.
+- Jika tidak yakin, gunakan {"tool": "unknown"}.`
 
     const formattedHistory = (history || []).map((m) => ({
       role: m.sender === 'user' ? 'user' : 'assistant',
@@ -1915,9 +1938,9 @@ ATURAN KETAT:
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
+        model: 'llama-3.1-70b-versatile',
         temperature: 0.1,
-        max_tokens: 150,
+        max_tokens: 200,
         messages: [
           { role: 'system', content: systemPrompt },
           ...formattedHistory,
@@ -2006,11 +2029,76 @@ ATURAN KETAT:
         return res.status(200).json({ response: text })
       }
 
-      case 'help':
-        return res.status(200).json({
-          response:
-            "Saya bisa membantu mengecek jumlah PO, mencari status PO, atau info akun Anda. Coba tanya: 'berapa order aktif saya?'"
+      case 'getUrgentOrders': {
+        const urgent = allOrders.filter((p) => p.priority?.toLowerCase() === 'urgent')
+        const data = { urgentOrders: urgent.slice(0, 5), count: urgent.length }
+        const text = await generateNaturalResponse(
+          JSON.stringify(data),
+          'User tanya PO urgent',
+          prompt,
+          user
+        )
+        return res.status(200).json({ response: text })
+      }
+      case 'getNearingDeadline': {
+        const now = new Date()
+        const soon = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000) // 7 hari ke depan
+        const nearing = allOrders.filter((p) => {
+          if (!p.deadline) return false
+          const deadline = new Date(p.deadline)
+          return deadline >= now && deadline <= soon && p.status !== 'Completed'
         })
+        const data = { nearingDeadline: nearing.slice(0, 5), count: nearing.length }
+        const text = await generateNaturalResponse(
+          JSON.stringify(data),
+          'User tanya PO deadline dekat',
+          prompt,
+          user
+        )
+        return res.status(200).json({ response: text })
+      }
+      case 'analyzeTrends': {
+        // Simple analysis: count wood types and statuses
+        const woodCounts = {}
+        const statusCounts = {}
+        allOrders.forEach((p) => {
+          p.items?.forEach((item) => {
+            const wood = item.wood_type || 'Unknown'
+            woodCounts[wood] = (woodCounts[wood] || 0) + 1
+          })
+          const status = p.status || 'Unknown'
+          statusCounts[status] = (statusCounts[status] || 0) + 1
+        })
+        const data = { woodTrends: woodCounts, statusTrends: statusCounts }
+        const text = await generateNaturalResponse(
+          JSON.stringify(data),
+          'User minta analisis tren',
+          prompt,
+          user
+        )
+        return res.status(200).json({ response: text })
+      }
+      case 'generateReport': {
+        const total = allOrders.length
+        const active = allOrders.filter((p) => p.status !== 'Completed' && p.status !== 'Cancelled').length
+        const completed = allOrders.filter((p) => p.status === 'Completed').length
+        const totalKubikasi = allOrders.reduce((sum, p) => sum + (p.kubikasi_total || 0), 0)
+        const data = {
+          summary: {
+            totalPOs: total,
+            activeOrders: active,
+            completedOrders: completed,
+            totalKubikasi: totalKubikasi.toFixed(2)
+          }
+        }
+        const text = await generateNaturalResponse(
+          JSON.stringify(data),
+          'User minta laporan ringkas',
+          prompt,
+          user
+        )
+        return res.status(200).json({ response: text })
+      }
 
       default: {
         // Fallback ke AI untuk respons "saya tidak mengerti" yang lebih sopan
