@@ -34,13 +34,13 @@ export default async function handler(req, res) {
 
       // Rute untuk Detail & Revisi
       case 'listOrderItems':
-        return await Controller.handlelistOrderItems(req, res)
+        return await Controller.handleListOrderItems(req, res)
       case 'getRevisionHistory':
         return await Controller.handleGetRevisionHistory(req, res)
       case 'listOrderRevisions':
         return await Controller.handleListOrderRevisions(req, res)
       case 'listOrderItemsByRevision':
-        return await Controller.handlelistOrderItemsByRevision(req, res)
+        return await Controller.handleListOrderItemsByRevision(req, res)
 
       // Rute untuk Preview
       case 'previewOrder':
@@ -51,7 +51,7 @@ export default async function handler(req, res) {
         return await Controller.handleUpdateItemProgress(req, res)
       case 'getActiveOrdersWithProgress':
         return await Controller.handleGetActiveOrdersWithProgress(req, res)
-      case 'GetOrderItemsWithDetails':
+      case 'getOrderItemsWithDetails':
         return await Controller.handleGetOrderItemsWithDetails(req, res)
       case 'getRecentProgressUpdates':
         return await Controller.handleGetRecentProgressUpdates(req, res)
@@ -69,6 +69,11 @@ export default async function handler(req, res) {
       
       case 'getCommissionData':
         return await Controller.handleGetCommissionData(req, res)
+
+      case 'requestProject':
+        return await Controller.handleRequestProject(req, res)
+      case 'confirmRequest':
+        return await Controller.handleConfirmRequest(req, res)
 
       case 'addNewProduct':
         return await Controller.handleAddNewProduct(req, res)
