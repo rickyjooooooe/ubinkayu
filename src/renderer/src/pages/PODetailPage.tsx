@@ -31,7 +31,7 @@ const findHeaderChanges = (current: PORevision, previous: PORevision): string[] 
     priority: 'Prioritas',
     deadline: 'Deadline',
     notes: 'Catatan',
-    marekting: 'Marketing',
+    acc_marketing: 'Marketing',
     alamat_kirim: 'Alamat Kirim' // <-- Ensure this is present
   };
 
@@ -286,7 +286,7 @@ const PODetailPage: React.FC<PODetailPageProps> = ({ order, onBackToList }) => {
              <div className="info-item"> <label>Target Kirim</label> <span>{formatDate(order.deadline)}</span> </div>
              <div className="info-item"> <label>Prioritas</label> <span className={getPriorityBadgeClass(order.priority)}>{order.priority || '-'}</span> </div>
              <div className="info-item"> <label>Total Kubikasi</label> <span>{order.kubikasi_total ? `${Number(order.kubikasi_total).toFixed(3)} m³` : '0.000 m³'}</span> </div>
-             <div className="info-item"> <label>Marketing</label> <span>{order.marekting || '-'}</span> </div>
+             <div className="info-item"> <label>Marketing</label> <span>{order.acc_marketing || '-'}</span> </div>
              {/* <div className="info-item"> <label>Alamat Kirim</label> <span>{order.alamat_kirim || '-'}</span> </div> */}
            </div>
            <div className="order-summary-progress">
@@ -432,7 +432,7 @@ const PODetailPage: React.FC<PODetailPageProps> = ({ order, onBackToList }) => {
                  <p><strong>Prioritas:</strong> {revItem.revision.priority || 'Normal'}</p>
                  <p><strong>Status:</strong> {revItem.revision.status || '-'}</p>
                  <p><strong>Deadline:</strong> {formatDate(revItem.revision.deadline)}</p>
-                 <p><strong>Marketing:</strong> {revItem.revision.marekting || '-'}</p>
+                 <p><strong>Marketing:</strong> {revItem.revision.acc_marketing || '-'}</p>
                  {revItem.revision.notes && <p><strong>Catatan:</strong> <span style={{ whiteSpace: 'pre-wrap' }}>{revItem.revision.notes}</span></p>}
               </div>
 

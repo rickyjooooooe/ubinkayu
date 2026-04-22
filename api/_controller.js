@@ -60,9 +60,9 @@ function filterOrdersByMarketing(poList, user) {
     let poMarketing = ''
     // Handle jika 'order' adalah GoogleSpreadsheetRow atau plain object
     if (typeof order.get === 'function') {
-      poMarketing = order.get('marekting')
+      poMarketing = order.get('acc_marketing')
     } else {
-      poMarketing = order.marekting
+      poMarketing = order.acc_marketing
     }
     return poMarketing?.toLowerCase() === marketingName
   })
@@ -313,7 +313,7 @@ export async function handleListOrders(req, res) {
         status: finalStatus,
         completed_at: completed_at,
         pdf_link: orderObject.pdf_link || null,
-        marekting: orderObject.marekting || '',
+        acc_marketing: orderObject.acc_marketing || '',
         alamat_kirim: orderObject.alamat_kirim || '',
         lastRevisedBy: lastRevisedBy,
         lastRevisedDate: lastRevisedDate
@@ -457,7 +457,7 @@ export async function handleSaveNewOrder(req, res) {
       priority: data.prioritas || 'Normal',
       notes: data.catatan || '',
       kubikasi_total: toNum(data.kubikasi_total, 0),
-      marekting: data.marketing || '',
+      acc_marketing: data.marketing || '',
       created_at: now,
       pdf_link: 'generating...',
       foto_link: fotoLink,
@@ -502,7 +502,7 @@ export async function handleSaveNewOrder(req, res) {
       notes: NewOrderRowData.notes,
       created_at: NewOrderRowData.created_at,
       kubikasi_total: NewOrderRowData.kubikasi_total,
-      marekting: NewOrderRowData.marekting,
+      acc_marketing: NewOrderRowData.acc_marketing,
       alamat_kirim: NewOrderRowData.alamat_kirim,
       foto_link: fotoLink,
       items: itemsWithIds,
@@ -575,7 +575,7 @@ export async function handleRequestProject(req, res) {
       priority: data.prioritas || 'Normal',
       notes: data.catatan || '',
       kubikasi_total: 0,
-      marekting: data.marketing || '',
+      acc_marketing: data.marketing || '',
       created_at: now,
       pdf_link: '',
       foto_link: 'Tidak ada foto',
@@ -686,7 +686,7 @@ export async function handleConfirmRequest(req, res) {
       notes: targetRow.get('notes'),
       created_at: targetRow.get('created_at'),
       kubikasi_total: kubikasiTotal,
-      marekting: targetRow.get('marekting'),
+      acc_marketing: targetRow.get('acc_marketing'),
       alamat_kirim: targetRow.get('alamat_kirim'),
       foto_link: targetRow.get('foto_link'),
       items: itemsWithIds,
@@ -773,7 +773,7 @@ export async function handleUpdateOrder(req, res) {
       priority: data.prioritas ?? prevData.priority ?? 'Normal',
       notes: data.catatan ?? prevData.notes ?? '',
       kubikasi_total: toNum(data.kubikasi_total, toNum(prevData.kubikasi_total, 0)),
-      marekting: data.marketing ?? prevData.marekting ?? '',
+      acc_marketing: data.marketing ?? prevData.acc_marketing ?? '',
       created_at: now,
       pdf_link: 'generating...',
       foto_link: fotoLink,
@@ -1413,7 +1413,7 @@ export async function handleGetProductSalesAnalysis(req, res) {
     })
 
     latestOrderMap.forEach((order) => {
-      const marketingName = order.marekting || 'N/A'
+      const marketingName = order.acc_marketing || 'N/A'
       const customerName = order.project_name
       const kubikasiTotalOrder = toNum(order.kubikasi_total, 0)
       const yearMonth = getYearMonth(order.created_at)
@@ -1814,15 +1814,15 @@ export async function handleGetCommissionData(req, res) {
     const result = latestOrders
       .filter((order) => {
         if (order.status === 'Requested') return false
-        if (!order.marekting) return false
+        if (!order.acc_marketing) return false
         if (!order.project_valuation || toNum(order.project_valuation, 0) === 0) return false
         if (user?.role === 'marketing') {
-          return order.marekting.toLowerCase() === user.name.toLowerCase()
+          return order.acc_marketing.toLowerCase() === user.name.toLowerCase()
         }
         return true
       })
       .map((order) => {
-        const marketingName = order.marekting?.trim() || ''
+        const marketingName = order.acc_marketing?.trim() || ''
         const rate = commissionRateMap[marketingName.toLowerCase()] || 0
         const valuation = toNum(order.project_valuation, 0)
         return {

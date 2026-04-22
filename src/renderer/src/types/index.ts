@@ -70,7 +70,7 @@ export interface POHeader {
   progress?: number
   items?: POItem[]
   photo_url?: string | null
-  marekting?: string
+  acc_marketing?: string
   alamat_kirim?: string
   completed_at?: string | null
   lastRevisedBy?: string
@@ -91,7 +91,7 @@ export interface PORevision {
   notes: string | null
   created_at: string
   pdf_link?: string | null
-  marekting?: string
+  acc_marketing?: string
   revised_by?: string
   alamat_kirim?: string
   foto_link?: string | null        // link foto referensi di Google Drive

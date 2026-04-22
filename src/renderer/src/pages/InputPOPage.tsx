@@ -133,7 +133,7 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
     prioritas: editingPO?.priority || 'Normal',
     alamatKirim: (editingPO as any)?.alamat_kirim || '',
     catatan: editingPO?.notes || '',
-    marketing: (editingPO as any)?.marekting || currentUser?.name || '',
+    marketing: (editingPO as any)?.acc_marketing || currentUser?.name || '',
     project_valuation: (editingPO as any)?.project_valuation || '',
   })
   const [items, setItems] = useState<POItem[]>([])
@@ -211,7 +211,7 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
           prioritas: editingPO.priority || 'Normal',
           alamatKirim: (editingPO as any).alamat_kirim || '',
           catatan: editingPO.notes || '',
-          marketing: (editingPO as any).marekting || '',
+          marketing: (editingPO as any).acc_marketing || '',
           project_valuation: (editingPO as any).project_valuation || '',
         })
         // Mode confirm: tampilkan info PO tapi items dimulai kosong untuk diisi admin
@@ -436,7 +436,7 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
     : 'Input Order'
 
   const pageSubtitle =
-    isConfirmMode ? `Isi daftar item untuk request dari ${editingPO?.marekting || 'marketing'}`
+    isConfirmMode ? `Isi daftar item untuk request dari ${editingPO?.acc_marketing || 'marketing'}`
     : isRequestMode ? 'Isi informasi order, admin akan melanjutkan pembuatan order'
     : editingPO ? 'Perbarui data Order dan itemnya'
     : 'Buat Order baru dengan spesifikasi detail'
