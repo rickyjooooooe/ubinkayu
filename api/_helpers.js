@@ -105,8 +105,8 @@ export async function openUserDoc() {
 }
 
 const ALIASES = {
-  orders: ['orders',  'purchase_order'],
-  order_items: ['order_items', 'po_items'],
+  orders: ['orders', 'purchase_orders', 'purchase_order'],
+  order_items: ['order_items', 'purchase_order_items', 'po_items'],
   product_master: ['product_master', 'products'],
   progress_tracking: ['order_items_progress', 'progress'],
   users: ['users_credentials', 'users']
@@ -826,8 +826,17 @@ export async function UploadOrderPhoto(photoBase64, orderNumber, customerName) {
     const endBoundaryPart = Buffer.from(`\r\n--${boundary}--\r\n`)
     const requestBody = Buffer.concat([metaPart, mediaHeaderPart, imageBuffer, endBoundaryPart])
 
+    await auth.authorize()
     const createResponse = await auth.request({
-      /* ... (Opsi request sama) ... */
+      url: `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true`,
+      method: 'POST',
+      headers: {
+        'Content-Type': `multipart/related; boundary=${boundary}`,
+        'Content-Length': requestBody.length
+      },
+      data: requestBody,
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity
     })
 
     // Ambil Link & Ukuran

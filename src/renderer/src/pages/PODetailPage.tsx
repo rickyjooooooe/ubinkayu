@@ -303,6 +303,18 @@ const PODetailPage: React.FC<PODetailPageProps> = ({ order, onBackToList }) => {
         )}
       </div>
 
+      {/* Foto Referensi */}
+      {(order as any).foto_link && (order as any).foto_link !== 'Tidak ada foto' && !(order as any).foto_link?.startsWith('ERROR') && (
+        <Card style={{ marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h4 style={{ margin: 0 }}>📷 Foto Referensi</h4>
+            <Button onClick={() => handleOpenFile((order as any).foto_link)}>
+              🖼️ Lihat Foto Referensi
+            </Button>
+          </div>
+        </Card>
+      )}
+
       {/* --- Bagian Item Terbaru --- */}
       <div className="item-section-header">
         <h2>Daftar Item & Progressnya (Versi Terbaru - Revisi #{history[0]?.revision.revision_number ?? 'N/A'})</h2>

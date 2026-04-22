@@ -201,7 +201,15 @@ export async function handleListOrders(req, res) {
     for (const r of orderRows) {
       const id = String(r.get('id')).trim()
       const rev = toNum(r.get('revision_number'), -1)
+      const status = r.get('status') || ''
+      // Order Requested selalu tampil - jangan tertimpa revision lain
+      if (status === 'Requested') {
+        if (!byId.has(id)) byId.set(id, { rev, row: r })
+        continue
+      }
       const keep = byId.get(id)
+      // Jangan timpa Requested dengan revision lain
+      if (keep?.row?.get('status') === 'Requested') continue
       if (!keep || rev > keep.rev) {
         byId.set(id, { rev, row: r })
       }
