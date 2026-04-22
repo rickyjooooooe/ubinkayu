@@ -142,7 +142,7 @@ export function updateOrder(data) {
 export function deleteOrder(orderId) {
   if (window.api) return window.api.deleteOrder(orderId)
   return fetchAPI(createApiEndpoint('deleteOrder', { orderId }), {
-    method: 'DELETE'
+    method: 'POST'
   })
 }
 
