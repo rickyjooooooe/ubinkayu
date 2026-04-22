@@ -991,22 +991,59 @@ export async function handlePreviewOrder(req, res) {
 export async function handleUpdateItemProgress(req, res) {
   const { orderId, itemId, orderNumber, stage, notes, photoBase64 } = req.body
   let photoLink = null
+
   if (photoBase64) {
-    const auth = getAuth()
-    const drive = google.drive({ version: 'v3', auth })
-    const timestamp = new Date().toISOString().replace(/:/g, '-')
-    const fileName = `PO-${orderNumber}_ITEM-${itemId}_${timestamp}.jpg`
-    const imageBuffer = Buffer.from(photoBase64, 'base64')
-    const bufferStream = new stream.PassThrough()
-    bufferStream.end(imageBuffer)
-    const response = await drive.files.create({
-      requestBody: { name: fileName, mimeType: 'image/jpeg', parents: [PROGRESS_PHOTOS_FOLDER_ID] },
-      media: { mimeType: 'image/jpeg', body: bufferStream },
-      fields: 'id, webViewLink',
-      supportsAllDrives: true
-    })
-    photoLink = response.data.webViewLink
+    try {
+      const auth = getAuth()
+      await auth.authorize()
+
+      const timestamp = new Date().toISOString().replace(/:/g, '-')
+      const fileName = `Order-${orderNumber}_ITEM-${itemId}_${timestamp}.jpg`
+      const imageBuffer = Buffer.from(photoBase64, 'base64')
+      const mimeType = 'image/jpeg'
+
+      // Gunakan multipart upload via auth.request (sama seperti generateAndUploadOrder)
+      const boundary = `----ProgressBoundary${Date.now()}----`
+      const metadata = {
+        name: fileName,
+        mimeType: mimeType,
+        parents: [PROGRESS_PHOTOS_FOLDER_ID]
+      }
+      const metaPart = Buffer.from(
+        `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n\r\n`
+      )
+      const mediaHeaderPart = Buffer.from(`--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`)
+      const endBoundaryPart = Buffer.from(`\r\n--${boundary}--\r\n`)
+      const requestBody = Buffer.concat([metaPart, mediaHeaderPart, imageBuffer, endBoundaryPart])
+
+      const createResponse = await auth.request({
+        url: `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true`,
+        method: 'POST',
+        headers: {
+          'Content-Type': `multipart/related; boundary=${boundary}`,
+          'Content-Length': requestBody.length
+        },
+        data: requestBody,
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity
+      })
+
+      const fileId = createResponse?.data?.id
+      if (fileId) {
+        const getResponse = await auth.request({
+          url: `https://www.googleapis.com/drive/v3/files/${fileId}`,
+          method: 'GET',
+          params: { fields: 'webViewLink', supportsAllDrives: true }
+        })
+        photoLink = getResponse?.data?.webViewLink || null
+        console.log(`✅ Progress photo uploaded: ${photoLink}`)
+      }
+    } catch (photoErr) {
+      console.error('❌ Gagal upload foto progress:', photoErr.message)
+      // Lanjut simpan progress tanpa foto daripada gagal total
+    }
   }
+
   const doc = await openDoc()
   const progressSheet = await getSheet(doc, 'progress_tracking')
   const nextId = await getNextIdFromSheet(progressSheet)
