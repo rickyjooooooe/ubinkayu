@@ -223,7 +223,7 @@ function App() {
     if (window.confirm(confirmMessage)) {
       setIsLoadingPOs(true) // Tampilkan loading selama proses delete
       try {
-        const result = await apiService.deletePO(orderId)
+        const result = await apiService.deleteOrder(orderId)
         if (result.success) {
           alert(`✅ PO ${OrderInfo} berhasil dihapus.\n${result.message}`)
           fetchPOs() // Muat ulang daftar setelah delete
