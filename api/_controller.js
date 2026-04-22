@@ -1846,416 +1846,185 @@ export async function handleGetCommissionData(req, res) {
   }
 }
 
-// =================================================================
-// FILE: api/_ai-chat-improved.js  (v2 — disesuaikan dengan struktur sheet asli)
-//
-// KOREKSI DARI REVIEW SHEET:
-//   - Sheet progress bernama 'order_items_progress' (bukan 'progress_tracking')
-//   - order_items tidak punya 'order_id' langsung — pakai 'order_id' ✓
-//     tapi revision key-nya ada 2: 'revision_id' DAN 'revision_number'
-//   - orders punya kolom tambahan: 'acc_marketing_status', 'acc_marketing_date'
-//   - order_items_progress punya kolom 'created_by'
-//   - product_master punya kolom: product_name, wood_type, profile,
-//     color, finishing, sample, marketing, satuan
-// =================================================================
-
-import { openDoc, getSheet, toNum, PRODUCTION_STAGES } from './_helpers.js'
-
-// Helper filter marketing (sama seperti di _controller.js)
-function filterOrdersByMarketing(poList, user) {
-  if (!user || user.role !== 'marketing') return poList
-  const marketingName = user.name.toLowerCase()
-  return poList.filter((order) => {
-    const mk = typeof order.get === 'function'
-      ? order.get('acc_marketing')
-      : order.acc_marketing
-    return mk?.toLowerCase() === marketingName
-  })
-}
-
-// -----------------------------------------------------------------
-// CONTEXT BUILDER — menggunakan nama kolom yang persis dari sheet
-// -----------------------------------------------------------------
-async function buildRichContext(user) {
-  const doc = await openDoc()
-
-  // ⚠️ Sheet progress namanya 'order_items_progress', bukan 'progress_tracking'
-  const [orderSheet, itemSheet, progressSheet, productSheet] = await Promise.all([
-    getSheet(doc, 'orders'),
-    getSheet(doc, 'order_items'),
-    getSheet(doc, 'order_items_progress'),
-    getSheet(doc, 'product_master'),
-  ])
-
-  const [orderRowsRaw, itemRowsRaw, progressRowsRaw, productRowsRaw] = await Promise.all([
-    orderSheet.getRows(),
-    itemSheet.getRows(),
-    progressSheet.getRows(),
-    productSheet.getRows(),
-  ])
-
-  // Filter marketing jika perlu
-  const orderRowsFiltered = filterOrdersByMarketing(orderRowsRaw, user)
-  const orderObjects = orderRowsFiltered.map(r => r.toObject())
-  const itemObjects = itemRowsRaw.map(r => r.toObject())
-  const progressObjects = progressRowsRaw.map(r => r.toObject())
-  const productObjects = productRowsRaw.map(r => r.toObject())
-
-  // --- Revisi terbaru per order ---
-  const latestOrderMap = new Map()
-  for (const o of orderObjects) {
-    const id = String(o.id).trim()
-    const rev = toNum(o.revision_number, -1)
-    const existing = latestOrderMap.get(id)
-    if (!existing || rev > existing.rev) latestOrderMap.set(id, { rev, data: o })
-  }
-  const latestOrders = Array.from(latestOrderMap.values()).map(v => v.data)
-
-  // --- Revisi item terbaru per order ---
-  // ⚠️ order_items punya 'revision_number' (bukan cuma 'revision_id')
-  const latestItemRevMap = new Map()
-  for (const item of itemObjects) {
-    const oid = String(item.order_id)
-    const rev = toNum(item.revision_number, -1)
-    if (!latestItemRevMap.has(oid) || rev > latestItemRevMap.get(oid)) {
-      latestItemRevMap.set(oid, rev)
-    }
-  }
-
-  // --- Progress terakhir per item ---
-  // ⚠️ key pakai order_item_id (bukan composite order_id-item_id di code lama)
-  const progressByItemId = {}
-  for (const p of progressObjects) {
-    const key = `${p.order_id}-${p.order_item_id}`
-    if (!progressByItemId[key]) progressByItemId[key] = []
-    progressByItemId[key].push(p)
-  }
-
-  // --- Enriched orders ---
-  const today = new Date()
-  const enrichedOrders = latestOrders.map(order => {
-    const orderId = String(order.id)
-    const latestRev = latestItemRevMap.get(orderId) ?? -1
-
-    const items = itemObjects
-      .filter(i =>
-        String(i.order_id) === orderId &&
-        toNum(i.revision_number, -1) === latestRev
-      )
-      .map(item => {
-        const key = `${orderId}-${item.id}`
-        const history = (progressByItemId[key] || [])
-          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-
-        const latestStage = history[0]?.stage ?? 'Belum Mulai'
-        const stageIndex = PRODUCTION_STAGES.indexOf(latestStage)
-        const progressPct = stageIndex >= 0
-          ? Math.round(((stageIndex + 1) / PRODUCTION_STAGES.length) * 100)
-          : 0
-
-        return {
-          id: item.id,
-          product_name: item.product_name,       // ✓ kolom asli
-          wood_type: item.wood_type,              // ✓ kolom asli
-          profile: item.profile,                 // ✓ kolom asli
-          quantity: toNum(item.quantity, 0),
-          satuan: item.satuan,                   // ✓ kolom asli (m1/m2/pcs)
-          kubikasi: toNum(item.kubikasi, 0),
-          thickness_mm: item.thickness_mm,
-          width_mm: item.width_mm,
-          length_mm: item.length_mm,
-          current_stage: latestStage,
-          progress_pct: progressPct,
-          last_updated: history[0]?.created_at ?? null,
-          last_updated_by: history[0]?.created_by ?? null, // ✓ kolom baru di sheet ini
-        }
-      })
-
-    const overallProgress = items.length > 0
-      ? Math.round(items.reduce((sum, i) => sum + i.progress_pct, 0) / items.length)
-      : 0
-
-    const deadlineDate = order.deadline ? new Date(order.deadline) : null
-    const daysUntilDeadline = deadlineDate
-      ? Math.ceil((deadlineDate - today) / (1000 * 60 * 60 * 24))
-      : null
-
-    // Status dinamis
-    let status = order.status
-    if (status !== 'Cancelled' && status !== 'Requested') {
-      if (overallProgress >= 100) status = 'Completed'
-      else if (overallProgress > 0) status = 'In Progress'
-      else status = 'Open'
-    }
-
-    return {
-      id: orderId,
-      order_number: order.order_number,
-      customer: order.project_name,              // ✓ 'project_name' di sheet
-      marketing: order.acc_marketing,            // ✓ 'acc_marketing' di sheet
-      marketing_status: order.acc_marketing_status ?? null, // ✓ kolom baru
-      status,
-      priority: order.priority,
-      progress_pct: overallProgress,
-      kubikasi_total: toNum(order.kubikasi_total, 0),
-      project_valuation: toNum(order.project_valuation, 0),
-      deadline: order.deadline ?? null,
-      days_until_deadline: daysUntilDeadline,
-      created_at: order.created_at,
-      revised_by: order.revised_by,
-      notes: order.notes,
-      items,
-    }
-  })
-
-  // --- Agregasi ---
-
-  const activeOrders = enrichedOrders.filter(
-    o => o.status !== 'Completed' && o.status !== 'Cancelled'
-  )
-  const urgentOrders = activeOrders.filter(o => o.priority === 'Urgent')
-  const nearDeadline = activeOrders.filter(
-    o => o.days_until_deadline !== null &&
-         o.days_until_deadline >= 0 &&
-         o.days_until_deadline <= 7
-  )
-  const overdueOrders = activeOrders.filter(
-    o => o.days_until_deadline !== null && o.days_until_deadline < 0
-  )
-  const stuckOrders = activeOrders.filter(o => {
-    const lastUpdate = o.items.reduce((latest, item) => {
-      if (!item.last_updated) return latest
-      const d = new Date(item.last_updated)
-      return d > latest ? d : latest
-    }, new Date(0))
-    const daysSince = Math.floor((today - lastUpdate) / (1000 * 60 * 60 * 24))
-    return daysSince >= 5 && o.progress_pct < 100
-  })
-
-  // Kubikasi per marketing
-  const kubikasiByMarketing = {}
-  for (const o of enrichedOrders) {
-    if (o.status === 'Cancelled') continue
-    const mk = o.marketing || 'N/A'
-    if (!kubikasiByMarketing[mk]) kubikasiByMarketing[mk] = { total_kubikasi: 0, order_count: 0 }
-    kubikasiByMarketing[mk].total_kubikasi += o.kubikasi_total
-    kubikasiByMarketing[mk].order_count += 1
-  }
-
-  // Top produk — dari order_items (bukan product_master)
-  const productSales = {}
-  for (const o of enrichedOrders) {
-    if (o.status === 'Cancelled') continue
-    for (const item of o.items) {
-      const name = item.product_name
-      if (!name || item.quantity <= 0) continue
-      if (!productSales[name]) productSales[name] = { total_quantity: 0, total_kubikasi: 0 }
-      productSales[name].total_quantity += item.quantity
-      productSales[name].total_kubikasi += item.kubikasi
-    }
-  }
-  const topProducts = Object.entries(productSales)
-    .map(([name, v]) => ({ name, ...v }))
-    .sort((a, b) => b.total_quantity - a.total_quantity)
-    .slice(0, 10)
-
-  // Wood type distribution
-  const woodTypeSales = {}
-  for (const o of enrichedOrders) {
-    if (o.status === 'Cancelled') continue
-    for (const item of o.items) {
-      if (!item.wood_type) continue
-      woodTypeSales[item.wood_type] = (woodTypeSales[item.wood_type] || 0) + item.quantity
-    }
-  }
-
-  // Produk dari product_master yang belum pernah terjual
-  const soldNames = new Set(Object.keys(productSales))
-  const slowMoving = productObjects
-    .map(p => p.product_name)
-    .filter(Boolean)
-    .filter(name => !soldNames.has(name))
-
-  return {
-    all_orders: enrichedOrders,
-    products_master: productObjects, // 43 produk
-
-    summary: {
-      total_orders: enrichedOrders.length,
-      active: activeOrders.length,
-      completed: enrichedOrders.filter(o => o.status === 'Completed').length,
-      requested: enrichedOrders.filter(o => o.status === 'Requested').length,
-      cancelled: enrichedOrders.filter(o => o.status === 'Cancelled').length,
-      urgent: urgentOrders.length,
-      near_deadline_7d: nearDeadline.length,
-      overdue: overdueOrders.length,
-      stuck_5d: stuckOrders.length,
-    },
-
-    urgent_orders: urgentOrders.map(o => ({
-      order_number: o.order_number, customer: o.customer,
-      marketing: o.marketing, progress_pct: o.progress_pct, deadline: o.deadline,
-    })),
-    near_deadline_orders: nearDeadline.map(o => ({
-      order_number: o.order_number, customer: o.customer,
-      days_until_deadline: o.days_until_deadline, progress_pct: o.progress_pct,
-    })),
-    overdue_orders: overdueOrders.map(o => ({
-      order_number: o.order_number, customer: o.customer,
-      days_until_deadline: o.days_until_deadline,
-    })),
-    stuck_orders: stuckOrders.map(o => ({
-      order_number: o.order_number, customer: o.customer,
-      progress_pct: o.progress_pct,
-      items_stage: o.items.map(i => `${i.product_name}: ${i.current_stage}`),
-    })),
-
-    kubikasi_by_marketing: kubikasiByMarketing,
-    top_products: topProducts,
-    wood_type_distribution: woodTypeSales,
-    slow_moving_products: slowMoving,
-  }
-}
-
-
-// -----------------------------------------------------------------
-// MAIN HANDLER — Single Smart Call
-// -----------------------------------------------------------------
 export async function handleAiChat(req, res) {
   const { prompt, user, history } = req.body
   if (!prompt) return res.status(400).json({ error: 'Prompt required' })
 
-  // 1. Bangun konteks
-  let context
+  // 1. FETCH CONTEXT (Hanya PO dulu agar cepat di Vercel)
+  let allOrders = []
   try {
-    context = await buildRichContext(user)
+    allOrders = await listOrdersforChat(user)
   } catch (e) {
-    console.error('❌ [AI] Context build failed:', e.message)
-    return res.status(500).json({ error: 'Gagal memuat data.' })
+    console.error(e)
+    return res.status(500).json({ error: 'Context fetch failed' })
   }
 
-  // 2. Snapshot ringkas untuk dikirim ke model
-  //    (hindari overflow — kirim yang relevan saja)
-  const contextSnapshot = {
-    summary: context.summary,
-    urgent_orders: context.urgent_orders,
-    near_deadline_orders: context.near_deadline_orders,
-    overdue_orders: context.overdue_orders,
-    stuck_orders: context.stuck_orders,
-    kubikasi_by_marketing: context.kubikasi_by_marketing,
-    top_products: context.top_products,
-    wood_type_distribution: context.wood_type_distribution,
-    slow_moving_products: context.slow_moving_products,
-
-    // 20 order terbaru dengan detail item
-    recent_orders: context.all_orders
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      .slice(0, 20)
-      .map(o => ({
-        order_number: o.order_number,
-        customer: o.customer,
-        marketing: o.marketing,
-        status: o.status,
-        priority: o.priority,
-        progress_pct: o.progress_pct,
-        kubikasi_total: o.kubikasi_total,
-        project_valuation: o.project_valuation,
-        deadline: o.deadline,
-        days_until_deadline: o.days_until_deadline,
-        revised_by: o.revised_by,
-        items: o.items.map(i => ({
-          product_name: i.product_name,
-          wood_type: i.wood_type,
-          quantity: i.quantity,
-          satuan: i.satuan,
-          kubikasi: i.kubikasi,
-          current_stage: i.current_stage,
-          progress_pct: i.progress_pct,
-          last_updated: i.last_updated,
-          last_updated_by: i.last_updated_by,
-        })),
-      })),
-  }
-
-  const today = new Date().toLocaleString('id-ID', {
-    timeZone: 'Asia/Jakarta',
-    dateStyle: 'full',
-    timeStyle: 'short',
-  })
-
-  // 3. System prompt — langsung jawab, tidak perlu routing
-  const systemPrompt = `Anda adalah Asisten ERP Ubinkayu yang cerdas.
-Hari ini: ${today}
-User: ${user?.name || 'Tamu'} (role: ${user?.role || 'unknown'})
-Panggil user dengan nama depan: **${user?.name?.split(' ')[0] || 'Tamu'}**.
-
-TUGAS: Jawab pertanyaan user LANGSUNG dan NATURAL berdasarkan DATA di bawah.
-- JANGAN mengarang data yang tidak ada di konteks.
-- Gunakan markdown (bold, list) agar mudah dibaca.
-- Jika data tidak ditemukan, katakan dengan jelas dan tawarkan alternatif.
-
-=== DATA ERP ===
-${JSON.stringify(contextSnapshot, null, 0)}
-=== AKHIR DATA ===
-
-PANDUAN CEPAT:
-- Jumlah/total order → summary.*
-- Order urgent → urgent_orders
-- Deadline dekat → near_deadline_orders (days_until_deadline ≤ 7)
-- Order overdue → overdue_orders (days_until_deadline < 0)  
-- Order macet/stuck → stuck_orders (tidak update ≥ 5 hari)
-- Performa marketing → kubikasi_by_marketing
-- Produk terlaris → top_products
-- Jenis kayu terlaris → wood_type_distribution
-- Produk belum terjual → slow_moving_products
-- Info spesifik PO → cari di recent_orders by order_number atau customer
-- Progress item → cek items[].current_stage dan items[].progress_pct
-- Siapa yang update terakhir → items[].last_updated_by
-
-CONTOH:
-Q: "berapa order aktif?" → gunakan summary.active
-Q: "progress PO-X sampai mana?" → cari di recent_orders, sebutkan tiap item + stage-nya
-Q: "marketing siapa terbaik?" → urutkan kubikasi_by_marketing by total_kubikasi
-Q: "kayu apa yang paling banyak dipesan?" → wood_type_distribution
-Q: "order yang sudah lewat deadline?" → overdue_orders
-
-Jawab sekarang dalam Bahasa Indonesia yang natural:`
-
-  // 4. Panggil Groq — satu call
+  // 2. DECIDE TOOL (Call 1)
+  let aiDecision = { tool: 'unknown' }
   try {
-    // Ambil 6 pesan terakhir saja (lebih dari ini buang token percuma)
-    const formattedHistory = (history || []).slice(-6).map(m => ({
+    const today = new Date().toISOString().split('T')[0]
+    // System prompt disingkat agar hemat token di Vercel, tapi tetap fungsional
+    const systemPrompt = `Anda adalah Asisten ERP Ubinkayu. Tugas Anda adalah mengubah pertanyaan pengguna menjadi JSON 'perintah' yang valid. HANYA KEMBALIKAN JSON.
+Hari ini adalah ${today}.
+
+--- INFORMASI PENGGUNA SAAT INI ---
+Nama: ${user?.name || 'Tamu'}
+Role: ${user?.role || 'Tidak Dikenal'}
+Panggil user dengan nama depannya (${user?.name?.split(' ')[0] || 'Tamu'}).
+---
+
+--- ATURAN PRIORITAS ---
+1. Jika user menyebut nomor PO, nama customer, atau revisi, Anda HARUS menggunakan "GetOrderInfo".
+2. Tentukan 'intent' user dengan hati-hati.
+
+--- Alat (Tools) yang Tersedia ---
+// (Daftar alat disederhanakan untuk Vercel agar tidak terlalu panjang,
+// fokus pada fitur inti PO karena keterbatasan waktu eksekusi serverless)
+
+1. "getTotalOrder": (Untuk pertanyaan jumlah/total PO).
+   - Keywords: "jumlah order", "total order", "ada berapa order", "semua order aktif".
+   - JSON: {"tool": "getTotalOrder"}
+
+2. "GetOrderInfo": (Mencari PO berdasarkan nomor, customer, atau revisi).
+   - Keywords: "status order [nomor]", "link file [nomor]", "info order [nomor]".
+   - JSON: {"tool": "GetOrderInfo", "param": {"orderNumber": "...", "customerName": "...", "revisionNumber": "...", "intent": "details"}}
+
+3. "getUrgentOrders": (Untuk pertanyaan PO 'Urgent').
+   - JSON: {"tool": "getUrgentOrders"}
+
+4. "getNearingDeadline": (Untuk pertanyaan PO 'deadline dekat').
+   - JSON: {"tool": "getNearingDeadline"}
+
+5. "general": (Untuk sapaan umum).
+   - Keywords: "halo", "terima kasih".
+   - JSON: {"tool": "general"}
+
+ATURAN KETAT:
+- JANGAN menjawab pertanyaan. HANYA KEMBALIKAN JSON.
+- Jika tidak yakin tool mana, KEMBALIKAN: {"tool": "unknown"}`
+
+    const formattedHistory = (history || []).map((m) => ({
       role: m.sender === 'user' ? 'user' : 'assistant',
-      content: m.text,
+      content: m.text
     }))
 
     const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         model: 'llama-3.1-8b-instant',
-        temperature: 0.2,       // rendah = lebih patuh data, tidak ngarang
-        max_tokens: 600,
+        temperature: 0.1,
+        max_tokens: 150,
         messages: [
           { role: 'system', content: systemPrompt },
           ...formattedHistory,
-          { role: 'user', content: prompt },
-        ],
-      }),
+          { role: 'user', content: prompt }
+        ]
+      })
     })
-
-    if (!resp.ok) throw new Error(`Groq error: ${await resp.text()}`)
-
     const json = await resp.json()
-    const answer = json.choices[0]?.message?.content?.trim()
-      || 'Maaf, saya tidak bisa menghasilkan jawaban saat ini.'
-
-    return res.status(200).json({ response: answer })
+    let content = json.choices[0]?.message?.content?.trim() || '{}'
+    if (content.includes('```json')) content = content.split('```json')[1].split('```')[0].trim()
+    else if (content.includes('```')) content = content.split('```')[1].trim()
+    aiDecision = JSON.parse(content)
   } catch (e) {
-    console.error('❌ [AI] Groq call failed:', e.message)
+    // Fallback cerdas jika JSON gagal diparse
+    aiDecision = { tool: 'general' }
+  }
+
+  // 3. EXECUTE & GENERATE NATURAL RESPONSE (Call 2)
+  try {
+    switch (aiDecision.tool) {
+      case 'getTotalOrder': {
+        const total = allOrders.length
+        const active = allOrders.filter(
+          (p) => p.status !== 'Completed' && p.status !== 'Cancelled'
+        ).length
+        const data = { totalPOs: total, activeOrders: active }
+        const text = await generateNaturalResponse(
+          JSON.stringify(data),
+          'User tanya jumlah PO',
+          prompt,
+          user
+        )
+        return res.status(200).json({ response: text })
+      }
+      case 'GetOrderInfo': {
+        // Implementasi sederhana untuk Vercel (bisa dikembangkan lagi nanti)
+        const { orderNumber, customerName } = aiDecision.param || {}
+        let found = allOrders.slice(0, 5) // Default ambil 5 teratas jika tidak ada param
+        if (orderNumber)
+          found = allOrders.filter((p) => p.order_number?.toLowerCase().includes(orderNumber.toLowerCase()))
+        else if (customerName)
+          found = allOrders.filter((p) =>
+            p.project_name?.toLowerCase().includes(customerName.toLowerCase())
+          )
+
+        const text = await generateNaturalResponse(
+          JSON.stringify(found.slice(0, 3)),
+          `User cari PO: ${orderNumber || customerName || 'terbaru'}`,
+          prompt,
+          user
+        )
+        return res.status(200).json({ response: text })
+      }
+      case 'getUserInfo': {
+        if (!user) return res.status(200).json({ response: 'Anda belum login.' })
+        const data = {
+          nama: user.name,
+          role: user.role,
+          info: `Anda login sebagai ${user.name} (${user.role})`
+        }
+        const text = await generateNaturalResponse(
+          JSON.stringify(data),
+          'User tanya info akunnya',
+          prompt,
+          user
+        )
+        return res.status(200).json({ response: text })
+      }
+      case 'general': {
+        // --- [PERBAIKAN JAM] ---
+        // Ambil waktu saat ini di zona waktu Asia/Jakarta (WIB)
+        const wibTimeString = new Date().toLocaleString('en-US', {
+          timeZone: 'Asia/Jakarta',
+          hour: 'numeric',
+          hour12: false
+        })
+        const currentHourWIB = parseInt(wibTimeString)
+        // -----------------------
+
+        const text = await generateNaturalResponse(
+          JSON.stringify({ jam: currentHourWIB }), // Kirim jam yang sudah dikoreksi
+          'User menyapa atau mengobrol santai',
+          prompt,
+          user
+        )
+        return res.status(200).json({ response: text })
+      }
+
+      case 'help':
+        return res.status(200).json({
+          response:
+            "Saya bisa membantu mengecek jumlah PO, mencari status PO, atau info akun Anda. Coba tanya: 'berapa order aktif saya?'"
+        })
+
+      default: {
+        // Fallback ke AI untuk respons "saya tidak mengerti" yang lebih sopan
+        const unknownText = await generateNaturalResponse(
+          '{}',
+          'User bertanya hal di luar kemampuan bot',
+          prompt,
+          user
+        )
+        return res.status(200).json({ response: unknownText })
+      }
+    }
+  } catch (e) {
+    console.error(e)
     return res.status(500).json({ error: `Terjadi kesalahan: ${e.message}` })
   }
 }
