@@ -51,7 +51,7 @@ export default async function handler(req, res) {
         return await Controller.handleUpdateItemProgress(req, res)
       case 'getActiveOrdersWithProgress':
         return await Controller.handleGetActiveOrdersWithProgress(req, res)
-      case 'getOrderItemsWithDetails':
+      case 'GetOrderItemsWithDetails':
         return await Controller.handleGetOrderItemsWithDetails(req, res)
       case 'getRecentProgressUpdates':
         return await Controller.handleGetRecentProgressUpdates(req, res)
