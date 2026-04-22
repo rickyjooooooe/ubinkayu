@@ -77,7 +77,7 @@ const POListPage: React.FC<POListPageProps> = ({
       marketingNames = new Set<string>(), reviserNames = new Set<string>(),
       finishingNames = new Set<string>(), sampleNames = new Set<string>();
     (regularPOs || []).forEach((order) => {
-      if (order.acc_marketing) marketingNames.add(order.acc_marketing);
+      if (order.marekting) marketingNames.add(order.marekting);
       if (order.lastRevisedBy && order.lastRevisedBy !== 'N/A') reviserNames.add(order.lastRevisedBy);
       (order.items || []).forEach((item) => {
         if (item.wood_type) woodTypes.add(item.wood_type);
@@ -113,7 +113,7 @@ const POListPage: React.FC<POListPageProps> = ({
     if (filters.dateFrom) { try { const d = new Date(filters.dateFrom); processedPOs = processedPOs.filter(order => { try { return new Date(order.created_at) >= d } catch { return false } }) } catch { } }
     if (filters.dateTo) { try { const d = new Date(filters.dateTo); d.setDate(d.getDate() + 1); processedPOs = processedPOs.filter(order => { try { return new Date(order.created_at) < d } catch { return false } }) } catch { } }
     if (filters.deadlineDate) { try { processedPOs = processedPOs.filter((order) => { if (!order.deadline) return false; try { return new Date(order.deadline).toISOString().split('T')[0] === filters.deadlineDate } catch { return false } }) } catch { } }
-    if (filters.marketing !== 'all') processedPOs = processedPOs.filter((order) => order.acc_marketing === filters.marketing);
+    if (filters.marketing !== 'all') processedPOs = processedPOs.filter((order) => order.marekting === filters.marketing);
     if (filters.lastRevisedBy !== 'all') {
       if (filters.lastRevisedBy === 'N/A') processedPOs = processedPOs.filter(order => !order.lastRevisedBy || order.lastRevisedBy === 'N/A');
       else processedPOs = processedPOs.filter(order => order.lastRevisedBy === filters.lastRevisedBy);
@@ -138,8 +138,8 @@ const POListPage: React.FC<POListPageProps> = ({
       case 'priority': processedPOs.sort((a, b) => (priorityMap[a.priority?.toLowerCase() || 'normal'] || 3) - (priorityMap[b.priority?.toLowerCase() || 'normal'] || 3)); break;
       case 'revisi-desc': processedPOs.sort((a, b) => new Date(b.lastRevisedDate || 0).getTime() - new Date(a.lastRevisedDate || 0).getTime()); break;
       case 'revisi-asc': processedPOs.sort((a, b) => new Date(a.lastRevisedDate || 0).getTime() - new Date(b.lastRevisedDate || 0).getTime()); break;
-      case 'marketing-asc': processedPOs.sort((a, b) => (a.acc_marketing || '').localeCompare(b.acc_marketing || '')); break;
-      case 'marketing-desc': processedPOs.sort((a, b) => (b.acc_marketing || '').localeCompare(a.acc_marketing || '')); break;
+      case 'marketing-asc': processedPOs.sort((a, b) => (a.marekting || '').localeCompare(b.marekting || '')); break;
+      case 'marketing-desc': processedPOs.sort((a, b) => (b.marekting || '').localeCompare(a.marekting || '')); break;
       default: processedPOs.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()); break;
     }
     return processedPOs;
@@ -243,7 +243,7 @@ const POListPage: React.FC<POListPageProps> = ({
                     ) : <span>-</span>}
                   </td>
                   <td>{Number(order.kubikasi_total || 0).toFixed(3)} m³</td>
-                  <td>{order.acc_marketing || '-'}</td>
+                  <td>{order.marekting || '-'}</td>
                   <td>
                     <div className="actions-cell">
                       <Button variant="secondary" onClick={() => onShowDetail(order)}>Detail</Button>

@@ -119,7 +119,7 @@ const POTable: React.FC<POTableProps> = ({
               <td className="product-list-cell">{renderItemList(order.items, 'finishing')}</td>
               <td className="product-list-cell">{renderItemList(order.items, 'sample')}</td>
               <td>
-                {order.acc_marketing || '-'} {/* <-- Tampilkan langsung dari order.acc_marketing */}
+                {order.marekting || '-'} {/* <-- Tampilkan langsung dari order.marekting */}
               </td>
               <td className="product-list-cell">{renderItemList(order.items, 'location')}</td>
               {/* End of New Columns */}

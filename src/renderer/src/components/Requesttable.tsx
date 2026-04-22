@@ -97,7 +97,7 @@ const RequestTable: React.FC<RequestTableProps> = ({
                     fontWeight: 500,
                     whiteSpace: 'nowrap'
                   }}>
-                    {order.acc_marketing || '-'}
+                    {order.marekting || '-'}
                   </span>
                 </td>
 

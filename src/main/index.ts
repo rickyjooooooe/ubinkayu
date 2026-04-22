@@ -35,12 +35,12 @@ function filterOrdersByMarketing<T>( // Hapus batasan <T>
   return poList.filter(order => {
     // --- [PERBAIKAN] ---
     // Cek apakah 'order' adalah object GoogleSpreadsheetRow (punya .get())
-    // atau object biasa (punya .acc_marketing)
+    // atau object biasa (punya .marekting)
     let poMarketing = '';
     if (typeof (order as any).get === 'function') {
-      poMarketing = (order as any).get('acc_marketing');
+      poMarketing = (order as any).get('marekting');
     } else {
-      poMarketing = (order as any).acc_marketing;
+      poMarketing = (order as any).marekting;
     }
     // --- [AKHIR PERBAIKAN] ---
 
@@ -676,7 +676,7 @@ async function listOrders(user: User | null) {
         pdf_link: orderObject.pdf_link || null,
         lastRevisedBy: lastRevisedBy,
         lastRevisedDate: lastRevisedDate,
-        acc_marketing: orderObject.acc_marketing || '',
+        marekting: orderObject.marekting || '',
         file_size_bytes: orderObject.file_size_bytes || 0
       }
     })
@@ -724,15 +724,15 @@ async function getCommissionData(user: User | null) {
     const result = latestPOs
       .filter((order: any) => {
         if (order.status === 'Requested') return false
-        if (!order.acc_marketing) return false
+        if (!order.marekting) return false
         if (!order.project_valuation || toNum(order.project_valuation, 0) === 0) return false
         if (user?.role === 'marketing') {
-          return order.acc_marketing.toLowerCase() === user.name.toLowerCase()
+          return order.marekting.toLowerCase() === user.name.toLowerCase()
         }
         return true
       })
       .map((order: any) => {
-        const marketingName = order.acc_marketing?.trim() || ''
+        const marketingName = order.marekting?.trim() || ''
         const rate = commissionRateMap[marketingName.toLowerCase()] || 0
         const valuation = toNum(order.project_valuation, 0)
         return {
@@ -778,7 +778,7 @@ async function saveNewOrder(data: any) {
       priority: data.prioritas || 'Normal',
       notes: data.catatan || '',
       kubikasi_total: data.kubikasi_total || 0,
-      acc_marketing: data.marketing || '',
+      marekting: data.marketing || '',
       created_at: now,
       pdf_link: 'generating...',
       pdf_file_name: '',
@@ -878,7 +878,7 @@ async function requestProject(data: any) {
     priority: data.prioritas || 'Normal',
     notes: data.catatan || '',
     kubikasi_total: 0,
-    acc_marketing: data.marketing || '',
+    marekting: data.marketing || '',
     created_at: now,
     pdf_link: '',
     foto_link: 'Tidak ada foto',
@@ -971,7 +971,7 @@ async function confirmRequest(data: any) {
     notes: targetRow.get('notes'),
     created_at: targetRow.get('created_at'),
     kubikasi_total: kubikasiTotal,
-    acc_marketing: targetRow.get('acc_marketing'),
+    marekting: targetRow.get('marekting'),
     alamat_kirim: targetRow.get('alamat_kirim'),
     items: itemsWithIds,
   }
@@ -1029,7 +1029,7 @@ async function updatePO(data: any) {
       priority: data.prioritas ?? prev.priority ?? 'Normal',
       notes: data.catatan ?? prev.notes ?? '',
       kubikasi_total: data.kubikasi_total ?? prev.kubikasi_total ?? 0,
-      acc_marketing: data.marketing ?? prev.acc_marketing ?? '',
+      marekting: data.marketing ?? prev.marekting ?? '',
       created_at: now,
       pdf_link: 'generating...',
       pdf_file_name: '',
@@ -1088,7 +1088,7 @@ async function updatePO(data: any) {
       kubikasi_total: data.kubikasi_total ?? prev.kubikasi_total ?? 0,
       poPhotoPath: data.poPhotoPath,
       foto_link: fotoLink,
-      marketing: data.marketing ?? prev.acc_marketing,
+      marketing: data.marketing ?? prev.marekting,
       alamat_kirim: data.alamatKirim ?? prev.alamat_kirim ?? ''
     }
 
@@ -1967,7 +1967,7 @@ async function getProductSalesAnalysis(user: User | null) {
     })
 
     latestOrderMap.forEach((order: any) => {
-      const marketingName = order.acc_marketing || 'N/A'
+      const marketingName = order.marekting || 'N/A'
       const customerName = order.project_name
       const kubikasiTotalOrder = toNum(order.kubikasi_total, 0)
       const yearMonth = getYearMonth(order.created_at)
@@ -3039,7 +3039,7 @@ ATURAN KETAT:
               "Tidak bisa 'Update Progress'"
             ],
             // --- [INI PENGETAHUAN BARUNYA] ---
-            fitur_kunci: "Keamanan Data: Data PO, Analisis, dan AI Chat secara otomatis difilter untuk HANYA menampilkan data di mana nama Anda (diambil dari kolom 'name' di sheet user) terdaftar sebagai 'acc_marketing' pada PO tersebut. Anda tidak bisa melihat PO milik marketing lain."
+            fitur_kunci: "Keamanan Data: Data PO, Analisis, dan AI Chat secara otomatis difilter untuk HANYA menampilkan data di mana nama Anda (diambil dari kolom 'name' di sheet user) terdaftar sebagai 'marekting' pada PO tersebut. Anda tidak bisa melihat PO milik marketing lain."
           };
           // --- [AKHIR PENGETAHUAN BARU] ---
           userRequest = "User bertanya tentang hak akses (role) Marketing, termasuk batasan data yang bisa mereka lihat."; // <-- Diperbarui
