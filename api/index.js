@@ -33,13 +33,13 @@ export default async function handler(req, res) {
         return await Controller.handleGetProducts(req, res)
 
       // Rute untuk Detail & Revisi
-      case 'listOrderItems':
+      case 'ListOrderItems':
         return await Controller.handleListOrderItems(req, res)
       case 'getRevisionHistory':
         return await Controller.handleGetRevisionHistory(req, res)
       case 'listOrderRevisions':
         return await Controller.handleListOrderRevisions(req, res)
-      case 'listOrderItemsByRevision':
+      case 'ListOrderItemsByRevision':
         return await Controller.handleListOrderItemsByRevision(req, res)
 
       // Rute untuk Preview
