@@ -113,7 +113,9 @@ const Navbar: React.FC<NavbarProps> = ({
     if (link.id === 'commission' && currentUser.role === 'produksi') {
       return false
     }
-
+    if (link.id === 'analysis' && currentUser.role === 'produksi') {
+      return false
+    }
     return true
   })
 
