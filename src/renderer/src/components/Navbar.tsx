@@ -110,10 +110,10 @@ const Navbar: React.FC<NavbarProps> = ({
 
     // 2. Sembunyikan 'Komisi' jika user adalah tim Produksi
     // Fitur ini hanya untuk Marketing (pelaku) dan Admin (pemberi ACC/Owner)
-    if (link.id === 'commission' && currentUser.role === 'produksi') {
+    if (link.id === 'commission' && currentUser.role === 'orang pabrik') {
       return false
     }
-    if (link.id === 'analysis' && currentUser.role === 'produksi') {
+    if (link.id === 'analysis' && currentUser.role === 'orang pabrik') {
       return false
     }
     return true
