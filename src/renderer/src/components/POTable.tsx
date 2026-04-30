@@ -153,7 +153,7 @@ const POTable: React.FC<POTableProps> = ({
                   )}
 
                   {/* Tombol Update: Hanya manager & orang pabrik */}
-                  {(currentUserRole === 'manager' || currentUserRole === 'orang pabrik') && (
+                  {(currentUserRole === 'manager' || currentUserRole?.toLowerCase() === 'orang pabrik') && (
                     <Button variant="primary" onClick={() => onShowProgress(order)}>
                       Update
                     </Button>
