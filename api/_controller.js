@@ -1923,6 +1923,11 @@ async function buildFullAnalyticsCache(user) {
     .filter(o => o.priority === 'Urgent' && o.status !== 'Completed' && o.status !== 'Cancelled')
     .map(o => ({ order_number: o.order_number, project_name: o.project_name, deadline: o.deadline, status: o.status }))
 
+  // 1b. Requested Orders (belum dikonfirmasi)
+  const requestedOrders = Array.from(latestOrderMap.values())
+    .filter(o => o.status === 'Requested')
+    .map(o => ({ order_number: o.order_number, project_name: o.project_name, deadline: o.deadline, acc_marketing: o.acc_marketing, created_at: o.created_at }))
+
   // 2. Sales by Marketing (this month)
   const salesByMarketingThisMonth = {}
   const salesByMarketingLastMonth = {}
@@ -2083,6 +2088,9 @@ async function buildFullAnalyticsCache(user) {
     // Urgent
     urgentOrders,
 
+    // Requested (belum dikonfirmasi)
+    requestedOrders,
+
     // Marketing
     topMarketingThisMonth,
     topMarketingByOrders,
@@ -2102,7 +2110,10 @@ async function buildFullAnalyticsCache(user) {
     progressByStage,
 
     // Products
-    slowMovingProducts
+    slowMovingProducts,
+
+    // Full order map for status queries
+    latestOrderMap: Array.from(latestOrderMap.values())
   }
 }
 
@@ -2145,21 +2156,178 @@ export async function handleGetAnalyticsCache(req, res) {
 function matchQueryToAnswer(prompt, cache) {
   const lowerPrompt = prompt.toLowerCase()
   
+  // ═══════════════════════════════════════════════════════════════
+  // PATTERN KOMPLEKS - Pertanyaan dengan analisis lebih dalam
+  // ═══════════════════════════════════════════════════════════════
+  
+  // Pattern: Perbandingan bulan ini vs bulan lalu
+  if (lowerPrompt.match(/banding|vs|compared|sebelum|menurun|naik|growth|pertumbuhan|change/i)) {
+    if (cache.topMarketingThisMonth && cache.topMarketingLastMonth) {
+      const comparison = cache.topMarketingThisMonth.map(current => {
+        const last = cache.topMarketingLastMonth.find(m => m.name === current.name)
+        const lastVal = last?.kubikasi || 0
+        const change = lastVal > 0 ? ((current.kubikasi - lastVal) / lastVal * 100).toFixed(1) : '100'
+        const arrow = current.kubikasi > lastVal ? '📈' : (current.kubikasi < lastVal ? '📉' : '➡️')
+        return `${arrow} **${current.name}**: ${current.kubikasi.toFixed(2)} m³ (${change > 0 ? '+' : ''}${change}%)`
+      })
+      return `📊 **Perbandingan Bulan Ini vs Bulan Lalu:**\n` + comparison.slice(0, 5).join('\n')
+    }
+    return "Data perbandingan bulan lalu belum tersedia."
+  }
+
+  // Pattern: Trend / Tren produk (naik/turun)
+  if (lowerPrompt.match(/trend|naik|menurun|paling naik|paling turun|热门|hot|热门产品/i)) {
+    if (cache.topProductsThisMonth && cache.topProductsLastMonth) {
+      const trends = cache.topProductsThisMonth.map(current => {
+        const last = cache.topProductsLastMonth.find(p => p.name === current.name)
+        const lastQty = last?.quantity || 0
+        const change = lastQty > 0 ? ((current.quantity - lastQty) / lastQty * 100).toFixed(1) : 'new'
+        return { name: current.name, qty: current.quantity, change: parseFloat(change) }
+      }).sort((a, b) => b.change - a.change)
+      
+      const rising = trends.filter(t => t.change > 0).slice(0, 3)
+      const falling = trends.filter(t => t.change < 0).slice(0, 3)
+      
+      let result = `📈 **Trend Produk:**\n\n`
+      if (rising.length > 0) {
+        result += `🔥 **Meningkat:**\n` + rising.map((p, i) => 
+          `${i+1}. ${p.name} (${p.change > 0 ? '+' : ''}${p.change}%)`
+        ).join('\n') + `\n\n`
+      }
+      if (falling.length > 0) {
+        result += `❄️ **Menurun:**\n` + falling.map((p, i) => 
+          `${i+1}. ${p.name} (${p.change}%)`
+        ).join('\n')
+      }
+      return result
+    }
+    return "Data trend belum tersedia."
+  }
+
+  // Pattern: Ranking lengkap (top 5/10)
+  if (lowerPrompt.match(/ranking|peringkat|top 5|top 10|terbaik|terbesar|teringgi|terbanyak/i)) {
+    let result = `🏆 **Ranking:**\n\n`
+    
+    // Top Marketing
+    if (lowerPrompt.match(/marketing/i)) {
+      result += `**📊 Top Marketing (Bulan Ini):**\n`
+      result += cache.topMarketingThisMonth?.slice(0, 5).map((m, i) => 
+        `${i+1}. ${m.name} - ${m.kubikasi.toFixed(2)} m³`
+      ).join('\n') + `\n\n`
+    }
+    
+    // Top Products
+    if (lowerPrompt.match(/produk|item|product/i)) {
+      result += `**🏭 Top Produk (Bulan Ini):**\n`
+      result += cache.topProductsThisMonth?.slice(0, 5).map((p, i) => 
+        `${i+1}. ${p.name} - ${p.quantity} unit`
+      ).join('\n') + `\n\n`
+    }
+    
+    // Top Customer
+    if (lowerPrompt.match(/customer|klien|pelanggan|client/i)) {
+      result += `**👥 Top Customer (by Kubikasi):**\n`
+      result += cache.topCustomers?.slice(0, 5).map((c, i) => 
+        `${i+1}. ${c.name} - ${c.totalKubikasi.toFixed(2)} m³`
+      ).join('\n')
+    }
+    
+    return result.trim()
+  }
+
+  // Pattern: Analytics lengkap per marketing
+  if (lowerPrompt.match(/analisis|analysis|report|laporan|report/i)) {
+    const marketingDetails = cache.topMarketingThisMonth?.map(m => {
+      const orders = cache.latestOrderMap?.filter(o => o.acc_marketing === m.name) || []
+      return {
+        name: m.name,
+        kubikasi: m.kubikasi,
+        orderCount: orders.length,
+        avgKubikasi: orders.length > 0 ? (m.kubikasi / orders.length).toFixed(2) : 0
+      }
+    }) || []
+    
+    return `📈 **Analisis Marketing (Bulan ${cache.currentMonth}):**\n\n` +
+      marketingDetails.slice(0, 5).map((m, i) => 
+        `${i+1}. **${m.name}**
+   • Total Kubikasi: ${m.kubikasi.toFixed(2)} m³
+   • Jumlah Order: ${m.orderCount}
+   • Rata-rata per Order: ${m.avgKubikasi} m³`
+      ).join('\n\n')
+  }
+
+  // Pattern: KPI / Metrik bisnis
+  if (lowerPrompt.match(/kpi|metrik|metric|business|omset|pendapatan|revenue|valuasi|project value/i)) {
+    const totalValuation = cache.latestOrderMap?.reduce((sum, o) => 
+      sum + (parseFloat(o.project_valuation) || 0), 0) || 0
+    const avgValuation = cache.totalOrders > 0 ? (totalValuation / cache.totalOrders).toFixed(0) : 0
+    
+    return `💰 **KPI Bisnis:**\n\n` +
+      `• Total Project Valuation: Rp ${(totalValuation/1000000).toFixed(1)} M\n` +
+      `• Rata-rata per Order: Rp ${(avgValuation/1000000).toFixed(1)} M\n` +
+      `• Total Order: ${cache.totalOrders}\n` +
+      `• Order Aktif: ${cache.activeOrders}\n` +
+      `• Order Completed: ${cache.completedOrders}\n` +
+      `• Conversion Rate: ${cache.totalOrders > 0 ? ((cache.completedOrders/cache.totalOrders)*100).toFixed(1) : 0}%`
+  }
+
+  // Pattern: Production progress summary
+  if (lowerPrompt.match(/progress|produksi|production|stage|tahapan|proses/i)) {
+    const stageCounts = cache.progressByStage || {}
+    const stages = Object.entries(stageCounts).sort((a, b) => b[1] - a[1])
+    
+    return `🏭 **Ringkasan Progress Produksi:**\n\n` +
+      stages.slice(0, 8).map(([stage, count]) => 
+        `• ${stage}: ${count} record`
+      ).join('\n')
+  }
+
+  // Pattern: Wood type analysis
+  if (lowerPrompt.match(/kayu|wood|jenis kayu|material/i)) {
+    // Compute wood type from items
+    const woodTypeMap = {}
+    cache.latestOrderMap?.forEach(order => {
+      // This would need to be computed from order_items
+    })
+    return `🪵 **Analisis Jenis Kayu:**\n\n` +
+      `Data jenis kayu dapat dilihat di menu Analisis Penjualan.\n` +
+      `Gunakan filter untuk melihat distribusi kayu per periode.`
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // PATTERN DASAR - Pertanyaan sederhana
+  // ═══════════════════════════════════════════════════════════════
+  
   // Pattern: Urgent Orders
   if (lowerPrompt.match(/order urgent|po urgent|urgent|prioritas tinggi|yang urgent/i)) {
     if (cache.urgentOrders?.length > 0) {
-      return cache.urgentOrders.map(o => 
-        `• **${o.order_number}** - ${o.project_name} (${o.status})`
+      return `🚨 **${cache.urgentOrders.length} Order Urgent:**\n\n` + 
+        cache.urgentOrders.map(o => 
+        `• **${o.order_number}** - ${o.project_name}\n  Deadline: ${o.deadline || '-'}\n  Status: ${o.status}`
       ).join('\n')
     }
-    return "Tidak ada order urgent saat ini."
+    return "✅ Tidak ada order urgent saat ini."
+  }
+
+  // Pattern: Requested Orders (belum dikonfirmasi)
+  if (lowerPrompt.match(/requested|request|menunggu|belum konfirmasi|pending|belum jadi po|request project/i)) {
+    if (cache.requestedOrders?.length > 0) {
+      return `📋 **${cache.requestedOrders.length} Order Requested** (menunggu konfirmasi admin):\n\n` + 
+        cache.requestedOrders.map(o => 
+        `• **${o.order_number}** - ${o.project_name}\n  Marketing: ${o.acc_marketing || '-'}\n  Deadline: ${o.deadline || '-'}`
+      ).join('\n')
+    }
+    return "✅ Tidak ada order Requested. Semua order sudah dikonfirmasi."
   }
 
   // Pattern: Top Marketing this month
   if (lowerPrompt.match(/marketing paling banyak|jualan paling banyak|penjualan tertinggi|top marketing|marketing terbaik/i)) {
     if (cache.topMarketingThisMonth?.length > 0) {
       const top = cache.topMarketingThisMonth[0]
-      return `🏆 **${top.name}** dengan ${top.kubikasi.toFixed(2)} m³ bulan ini.`
+      const total = cache.topMarketingThisMonth.reduce((s, m) => s + m.kubikasi, 0)
+      const percent = ((top.kubikasi / total) * 100).toFixed(1)
+      return `🏆 **Top Marketing Bulan Ini:**\n\n` +
+        `🥇 **${top.name}** dengan ${top.kubikasi.toFixed(2)} m³ (${percent}% dari total ${total.toFixed(2)} m³)`
     }
     return "Tidak ada data penjualan bulan ini."
   }
@@ -2172,9 +2340,10 @@ function matchQueryToAnswer(prompt, cache) {
         .map(([m, o]) => ({ marketing: m, ...o }))
         .sort((a, b) => b.kubikasi - a.kubikasi)
       
-      return sorted.slice(0, 5).map(o => 
-        `• **${o.marketing}**: ${o.order_number} (${o.kubikasi.toFixed(2)} m³) - ${o.project_name}`
-      ).join('\n')
+      return `📦 **Order Terbesar per Marketing:**\n\n` + 
+        sorted.slice(0, 5).map((o, i) => 
+        `${i+1}. **${o.marketing}**: ${o.order_number}\n   Project: ${o.project_name}\n   Kubikasi: ${o.kubikasi.toFixed(2)} m³`
+      ).join('\n\n')
     }
     return "Tidak ada data order."
   }
@@ -2182,7 +2351,8 @@ function matchQueryToAnswer(prompt, cache) {
   // Pattern: Repeat customers
   if (lowerPrompt.match(/repeat|customer ulang|pelanggan tetap|beli lagi|klien tetap/i)) {
     if (cache.repeatCustomers?.length > 0) {
-      return cache.repeatCustomers.slice(0, 10).map(c => 
+      return `🔁 **${cache.repeatCustomers.length} Customer Repeat:**\n\n` + 
+        cache.repeatCustomers.slice(0, 10).map(c => 
         `• **${c.name}** - ${c.orderCount} kali pesan`
       ).join('\n')
     }
@@ -2191,51 +2361,146 @@ function matchQueryToAnswer(prompt, cache) {
 
   // Pattern: Total orders
   if (lowerPrompt.match(/jumlah total|total order|ada berapa order|berapa order/i)) {
-    return `📊 **Total: ${cache.totalOrders}** | Aktif: ${cache.activeOrders} | Selesai: ${cache.completedOrders}`
+    return `📊 **Statistik Order:**\n\n` +
+      `• **Total:** ${cache.totalOrders}\n` +
+      `• **Aktif:** ${cache.activeOrders}\n` +
+      `• **Selesai:** ${cache.completedOrders}\n` +
+      `• **Urgent:** ${cache.urgentOrders?.length || 0}\n` +
+      `• **Requested:** ${cache.requestedOrders?.length || 0}`
   }
 
   // Pattern: Deadline
-  if (lowerPrompt.match(/deadline|dekat|jatuh tempo|segera|hari ini/i)) {
+  if (lowerPrompt.match(/deadline|dekat|jatuh tempo|segera|hari ini|minggu ini/i)) {
     if (cache.nearingDeadline?.length > 0) {
-      return cache.nearingDeadline.slice(0, 5).map(o => 
-        `• **${o.order_number}** - ${o.project_name} (${o.deadline})`
+      return `⏰ **${cache.nearingDeadline.length} Deadline Terdekat:**\n\n` + 
+        cache.nearingDeadline.slice(0, 5).map(o => 
+        `• **${o.order_number}** - ${o.project_name}\n  Deadline: ${o.deadline}`
       ).join('\n')
     }
-    return "Tidak ada deadline dekat."
+    return "Tidak ada deadline dekat dalam 7 hari ke depan."
   }
 
   // Pattern: Stuck items
-  if (lowerPrompt.match(/stuck|macet|tidak bergerak|belum jadi|proses/i)) {
+  if (lowerPrompt.match(/stuck|macet|tidak bergerak|belum jadi|proses|lama/i)) {
     if (cache.stuckItems?.length > 0) {
-      return cache.stuckItems.slice(0, 5).map(s => 
-        `• **${s.order_number}** - ${s.item_name} (last: ${s.last_update})`
+      return `⚠️ **${cache.stuckItems.length} Item Stuck (>5 hari tidak ada progress):**\n\n` + 
+        cache.stuckItems.slice(0, 5).map(s => 
+        `• **${s.order_number}** - ${s.item_name}\n  Last update: ${s.last_update?.split('T')[0]}`
       ).join('\n')
     }
-    return "Tidak ada item stuck."
+    return "✅ Tidak ada item stuck. Semua proses berjalan normal."
   }
 
   // Pattern: Top products
-  if (lowerPrompt.match(/produk paling|item paling|laris|best seller|top product/i)) {
+  if (lowerPrompt.match(/produk paling|item paling|laris|best seller|top product|produk terlaris/i)) {
     if (cache.topProductsThisMonth?.length > 0) {
-      return cache.topProductsThisMonth.slice(0, 5).map(p => 
-        `• **${p.name}** - ${p.quantity} unit`
+      return `🔥 **Top ${Math.min(5, cache.topProductsThisMonth.length)} Produk Terlaris (Bulan Ini):**\n\n` + 
+        cache.topProductsThisMonth.slice(0, 5).map((p, i) => 
+        `${i+1}. **${p.name}** - ${p.quantity} unit`
       ).join('\n')
     }
-    return "Tidak ada data produk."
+    return "Tidak ada data produk bulan ini."
   }
 
   // Pattern: Help
-  if (lowerPrompt.match(/bisa apa|fitur|menu|bantuan|help/i)) {
-    return `Saya bisa menjawab:
-• Jumlah total order
-• Order urgent
-• Marketing dengan penjualan tertinggi bulan ini
-• Order terbesar per marketing
-• Customer repeat order
+  if (lowerPrompt.match(/bisa apa|fitur|menu|bantuan|help|apa saja/i)) {
+    return `🤖 **Kemampuan AI ERP Ubinkayu:**
+
+**📊 Analisis & Ranking:**
+• Ranking marketing, produk, customer
+• Perbandingan bulan ini vs bulan lalu
+• Trend produk (naik/turun)
+• Analisis lengkap per marketing
+
+**📋 Status Order:**
+• Urgent, Requested, Active, Completed
 • Deadline terdekat
-• Item yang stuck
-• Produk terlaris bulan ini
-• Dan pertanyaan umum lainnya!`
+• Item stuck/macet
+
+**💰 KPI Bisnis:**
+• Total project valuation
+• Rata-rata per order
+• Conversion rate
+
+**🔍 Query Umum:**
+• Jumlah total order
+• Top performance
+• Customer repeat
+• Dan pertanyaan lainnya!
+
+Coba tanya: "ranking marketing" atau "beri ringkasan" atau "analisis bulan ini"`
+  }
+
+  // Pattern: Ringkasan / Summary
+  if (lowerPrompt.match(/ringkasan|summary|overview|rekap|statistik|dashboard/i)) {
+    return `📊 **Ringkasan ERP Ubinkayu**
+
+**📈 Status Order:**
+• Total: ${cache.totalOrders} | Aktif: ${cache.activeOrders} | Selesai: ${cache.completedOrders}
+
+**🚨 Perlu Attention:**
+• Urgent: ${cache.urgentOrders?.length || 0} order
+• Requested: ${cache.requestedOrders?.length || 0} order (menunggu konfirmasi)
+• Deadline dekat: ${cache.nearingDeadline?.length || 0} order
+• Stuck: ${cache.stuckItems?.length || 0} item
+
+**🏆 Top Performance:**
+• Marketing terbaik: ${cache.topMarketingThisMonth?.[0]?.name || '-'} (${cache.topMarketingThisMonth?.[0]?.kubikasi?.toFixed(2) || 0} m³)
+• Produk terlaris: ${cache.topProductsThisMonth?.[0]?.name || '-'}
+• Customer repeat: ${cache.repeatCustomers?.length || 0} customer`
+  }
+
+  // Pattern: Status specific
+  if (lowerPrompt.match(/status|in progress|completed|open|cancelled/i)) {
+    const statusCounts = {}
+    ;(cache.latestOrderMap || []).forEach(o => {
+      statusCounts[o.status] = (statusCounts[o.status] || 0) + 1
+    })
+    return `📈 **Status Order:**\n\n` +
+      `• Open: ${statusCounts['Open'] || 0}\n` +
+      `• In Progress: ${statusCounts['In Progress'] || 0}\n` +
+      `• Requested: ${statusCounts['Requested'] || 0}\n` +
+      `• Completed: ${statusCounts['Completed'] || 0}\n` +
+      `• Cancelled: ${statusCounts['Cancelled'] || 0}`
+  }
+
+  // Pattern: By Marketing (sales per marketing)
+  if (lowerPrompt.match(/sales|penjualan per marketing|performance marketing/i)) {
+    if (cache.topMarketingThisMonth?.length > 0) {
+      const total = cache.topMarketingThisMonth.reduce((s, m) => s + m.kubikasi, 0)
+      return `📈 **Penjualan per Marketing (Bulan ${cache.currentMonth}):**\n\n` +
+        cache.topMarketingThisMonth.slice(0, 10).map((m, i) => {
+          const percent = total > 0 ? ((m.kubikasi / total) * 100).toFixed(1) : 0
+          return `${i+1}. **${m.name}**: ${m.kubikasi.toFixed(2)} m³ (${percent}%)`
+        }).join('\n')
+    }
+    return "Tidak ada data penjualan."
+  }
+
+  // Pattern: Wood Type distribution
+  if (lowerPrompt.match(/jenis kayu|wood type|kayu/i)) {
+    return `🪵 **Jenis Kayu:**\n\n` +
+      `Data jenis kayu tersedia di menu Analisis Penjualan.\n` +
+      `Silakan akses halaman Sales Analysis untuk melihat detail.`
+  }
+
+  // Pattern: Customer dengan kubikasi terbesar
+  if (lowerPrompt.match(/customer terbesar|klien terbesar|pelanggan terbesar|project terbesar/i)) {
+    if (cache.topCustomers?.length > 0) {
+      return `👑 **Top Customer (by Kubikasi):**\n\n` + 
+        cache.topCustomers.slice(0, 5).map((c, i) => 
+        `${i+1}. **${c.name}** - ${c.totalKubikasi.toFixed(2)} m³`
+      ).join('\n')
+    }
+    return "Tidak ada data customer."
+  }
+
+  // Pattern: Pertanyaan tentang waktu
+  if (lowerPrompt.match(/bulan ini|bulan lalu|minggu ini|tahun ini|terakhir|latest|terbaru/i)) {
+    return `📅 **Data Periode:**\n\n` +
+      `• Bulan ini: ${cache.currentMonth}\n` +
+      `• Bulan lalu: ${cache.lastMonth}\n\n` +
+      `Semua analytics dihitung berdasarkan periode di atas.`
   }
 
   return null // Tidak ada pattern match, perlu LLM
@@ -2272,19 +2537,45 @@ export async function handleAiChat(req, res) {
 
     // Step 3: Fallback ke LLM hanya untuk pertanyaan kompleks
     console.log('🔄 [AI Chat] Using LLM for complex query...')
+    
+    // Build comprehensive context for LLM
     const relevantContext = JSON.stringify({
+      metadata: {
+        currentMonth: cache.currentMonth,
+        lastMonth: cache.lastMonth,
+        generatedAt: cache.generatedAt,
+        userRole: cache.userRole,
+        userName: cache.userName
+      },
       summary: {
         totalOrders: cache.totalOrders,
         activeOrders: cache.activeOrders,
-        topMarketing: cache.topMarketingThisMonth?.[0],
+        completedOrders: cache.completedOrders,
         urgentCount: cache.urgentOrders?.length || 0,
-        repeatCustomerCount: cache.repeatCustomers?.length || 0
+        requestedCount: cache.requestedOrders?.length || 0,
+        repeatCustomerCount: cache.repeatCustomers?.length || 0,
+        nearingDeadlineCount: cache.nearingDeadline?.length || 0,
+        stuckItemsCount: cache.stuckItems?.length || 0
       },
-      urgentOrders: cache.urgentOrders?.slice(0, 5),
-      topMarketing: cache.topMarketingThisMonth?.slice(0, 5),
-      topProducts: cache.topProductsThisMonth?.slice(0, 5),
-      repeatCustomers: cache.repeatCustomers?.slice(0, 10),
-      nearingDeadline: cache.nearingDeadline?.slice(0, 5)
+      topPerformance: {
+        topMarketing: cache.topMarketingThisMonth?.slice(0, 5),
+        topProducts: cache.topProductsThisMonth?.slice(0, 5),
+        topCustomers: cache.topCustomers?.slice(0, 5),
+        repeatCustomers: cache.repeatCustomers?.slice(0, 10)
+      },
+      attention: {
+        urgentOrders: cache.urgentOrders?.slice(0, 5),
+        requestedOrders: cache.requestedOrders?.slice(0, 5),
+        nearingDeadline: cache.nearingDeadline?.slice(0, 5),
+        stuckItems: cache.stuckItems?.slice(0, 5)
+      },
+      comparison: {
+        marketingThisMonth: cache.topMarketingThisMonth,
+        marketingLastMonth: cache.topMarketingLastMonth,
+        productsThisMonth: cache.topProductsThisMonth,
+        productsLastMonth: cache.topProductsLastMonth
+      },
+      status: cache.latestOrderMap?.slice(0, 20) // Last 20 orders for context
     })
 
     const text = await generateNaturalResponse(
