@@ -77,6 +77,8 @@ export default async function handler(req, res) {
 
       case 'addNewProduct':
         return await Controller.handleAddNewProduct(req, res)
+      case 'getAnalyticsCache':
+        return await Controller.handleGetAnalyticsCache(req, res)
       case 'ollamaChat': // Nama action tetap sama (sesuai apiService.js)
         console.log('🚦 [Vercel Index] Routing to handleAiChat (Hugging Face)...')
         return await Controller.handleAiChat(req, res)

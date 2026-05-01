@@ -1846,185 +1846,457 @@ export async function handleGetCommissionData(req, res) {
   }
 }
 
+// =================================================================
+// PRE-COMPUTED ANALYTICS CACHE - Sekali fetch, langsung answer kompleks
+// =================================================================
+
+// Cache in-memory (reset setiap cold start, tapi tetap lebih baik dari 2x LLM call)
+let analyticsCache = null
+let cacheTimestamp = null
+const CACHE_TTL_MS = 5 * 60 * 1000 // 5 menit cache
+
+async function buildFullAnalyticsCache(user) {
+  const doc = await openDoc()
+  const [orderSheet, itemSheet, progressSheet, productSheet] = await Promise.all([
+    getSheet(doc, 'orders'),
+    getSheet(doc, 'order_items'),
+    getSheet(doc, 'progress_tracking'),
+    getSheet(doc, 'product_master')
+  ])
+
+  const [orderRowsRaw, itemRowsRaw, progressRowsRaw, productRowsRaw] = await Promise.all([
+    orderSheet.getRows(),
+    itemSheet.getRows(),
+    progressSheet.getRows(),
+    productSheet.getRows()
+  ])
+
+  const orderRowsRawObjects = orderRowsRaw.map((r) => r.toObject())
+  const itemRows = itemRowsRaw.map((r) => r.toObject())
+  const progressRows = progressRowsRaw.map((r) => r.toObject())
+  const productRows = productRowsRaw.map((r) => r.toObject())
+
+  // Filter berdasarkan marketing
+  const orderRows = filterOrdersByMarketing(orderRowsRawObjects, user)
+
+  // Build latest order map
+  const latestOrderMap = new Map()
+  orderRows.forEach((order) => {
+    const orderId = order.id
+    const rev = toNum(order.revision_number)
+    if (order.status !== 'Cancelled') {
+      const existing = latestOrderMap.get(orderId)
+      if (!existing || rev > existing.revision_number) {
+        latestOrderMap.set(orderId, { ...order, revision_number: rev })
+      }
+    }
+  })
+
+  // Latest item revisions
+  const latestItemRevisions = new Map()
+  itemRows.forEach((item) => {
+    const orderId = item.order_id
+    const rev = toNum(item.revision_number, -1)
+    const current = latestItemRevisions.get(orderId)
+    if (current === undefined || rev > current) {
+      latestItemRevisions.set(orderId, rev)
+    }
+  })
+
+  // Progress by composite key
+  const progressByCompositeKey = {}
+  progressRows.forEach((row) => {
+    const key = `${row.order_id}-${row.order_item_id}`
+    if (!progressByCompositeKey[key]) progressByCompositeKey[key] = []
+    progressByCompositeKey[key].push({ stage: row.stage, created_at: row.created_at })
+  })
+
+  // ========== COMPUTE ALL ANALYTICS ONCE ==========
+
+  const now = new Date()
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const lastMonth = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`
+
+  // 1. Urgent Orders
+  const urgentOrders = Array.from(latestOrderMap.values())
+    .filter(o => o.priority === 'Urgent' && o.status !== 'Completed' && o.status !== 'Cancelled')
+    .map(o => ({ order_number: o.order_number, project_name: o.project_name, deadline: o.deadline, status: o.status }))
+
+  // 2. Sales by Marketing (this month)
+  const salesByMarketingThisMonth = {}
+  const salesByMarketingLastMonth = {}
+  const marketingOrderCount = {}
+  const marketingKubikasi = {}
+
+  latestOrderMap.forEach((order) => {
+    const marketing = order.acc_marketing || 'N/A'
+    const ym = getYearMonth(order.created_at)
+    const kubikasi = toNum(order.kubikasi_total, 0)
+
+    if (!marketingKubikasi[marketing]) {
+      marketingKubikasi[marketing] = { totalKubikasi: 0, orderCount: 0 }
+      salesByMarketingThisMonth[marketing] = 0
+      salesByMarketingLastMonth[marketing] = 0
+    }
+    marketingKubikasi[marketing].totalKubikasi += kubikasi
+    marketingKubikasi[marketing].orderCount += 1
+
+    if (ym === currentMonth) {
+      salesByMarketingThisMonth[marketing] = (salesByMarketingThisMonth[marketing] || 0) + kubikasi
+    } else if (ym === lastMonth) {
+      salesByMarketingLastMonth[marketing] = (salesByMarketingLastMonth[marketing] || 0) + kubikasi
+    }
+  })
+
+  const topMarketingThisMonth = Object.entries(salesByMarketingThisMonth)
+    .map(([name, kubikasi]) => ({ name, kubikasi }))
+    .sort((a, b) => b.kubikasi - a.kubikasi)
+
+  const topMarketingByOrders = Object.values(marketingKubikasi)
+    .sort((a, b) => b.orderCount - a.orderCount)
+
+  // 3. Top Products (this month)
+  const productSalesThisMonth = {}
+  const productSalesLastMonth = {}
+
+  itemRows.forEach((item) => {
+    const order = latestOrderMap.get(item.order_id)
+    if (!order || toNum(item.revision_number) !== latestItemRevisions.get(item.order_id)) return
+
+    const ym = getYearMonth(order.created_at)
+    const productName = item.product_name
+    const quantity = toNum(item.quantity, 0)
+
+    if (!productName) return
+
+    if (ym === currentMonth) {
+      productSalesThisMonth[productName] = (productSalesThisMonth[productName] || 0) + quantity
+    } else if (ym === lastMonth) {
+      productSalesLastMonth[productName] = (productSalesLastMonth[productName] || 0) + quantity
+    }
+  })
+
+  const topProductsThisMonth = Object.entries(productSalesThisMonth)
+    .map(([name, qty]) => ({ name, quantity: qty }))
+    .sort((a, b) => b.quantity - a.quantity)
+    .slice(0, 10)
+
+  // 4. Customer Repeat Orders
+  const customerOrderCount = {}
+  latestOrderMap.forEach((order) => {
+    const customer = order.project_name
+    if (customer) {
+      customerOrderCount[customer] = (customerOrderCount[customer] || 0) + 1
+    }
+  })
+
+  const repeatCustomers = Object.entries(customerOrderCount)
+    .filter(([_, count]) => count > 1)
+    .map(([name, count]) => ({ name, orderCount: count }))
+    .sort((a, b) => b.orderCount - a.orderCount)
+
+  // 5. Largest Orders by Marketing
+  const ordersByMarketing = {}
+  latestOrderMap.forEach((order) => {
+    const marketing = order.acc_marketing || 'N/A'
+    if (!ordersByMarketing[marketing]) ordersByMarketing[marketing] = []
+    ordersByMarketing[marketing].push({
+      order_number: order.order_number,
+      kubikasi: toNum(order.kubikasi_total, 0),
+      project_name: order.project_name
+    })
+  })
+
+  const largestOrderByMarketing = {}
+  Object.entries(ordersByMarketing).forEach(([marketing, orders]) => {
+    const sorted = orders.sort((a, b) => b.kubikasi - a.kubikasi)
+    largestOrderByMarketing[marketing] = sorted[0]
+  })
+
+  // 6. Order Stats
+  const totalOrders = latestOrderMap.size
+  const activeOrders = Array.from(latestOrderMap.values())
+    .filter(o => o.status !== 'Completed' && o.status !== 'Cancelled').length
+  const completedOrders = Array.from(latestOrderMap.values())
+    .filter(o => o.status === 'Completed').length
+
+  // 7. Nearing Deadline (7 days)
+  const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  const nearingDeadline = Array.from(latestOrderMap.values())
+    .filter(o => {
+      if (!o.deadline || o.status === 'Completed' || o.status === 'Cancelled') return false
+      const deadline = new Date(o.deadline)
+      return deadline <= sevenDaysFromNow && deadline >= now
+    })
+    .map(o => ({ order_number: o.order_number, project_name: o.project_name, deadline: o.deadline }))
+    .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))
+
+  // 8. Stuck Items (no progress > 5 days)
+  const fiveDaysAgo = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000)
+  const stuckItems = []
+  latestItemRevisions.forEach((rev, orderId) => {
+    const order = latestOrderMap.get(orderId)
+    if (!order || order.status === 'Completed' || order.status === 'Cancelled') return
+
+    const items = itemRows.filter(i => i.order_id === orderId && toNum(i.revision_number) === rev)
+    items.forEach(item => {
+      const key = `${orderId}-${item.id}`
+      const progress = progressByCompositeKey[key] || []
+      if (progress.length > 0) {
+        const latest = [...progress].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]
+        if (new Date(latest.created_at) < fiveDaysAgo && latest.stage !== 'Siap Kirim') {
+          stuckItems.push({
+            order_number: order.order_number,
+            item_name: item.product_name,
+            last_update: latest.created_at
+          })
+        }
+      }
+    })
+  })
+
+  // 9. Progress Summary
+  const progressByStage = {}
+  progressRows.forEach(p => {
+    progressByStage[p.stage] = (progressByStage[p.stage] || 0) + 1
+  })
+
+  // 10. Product Master (for new product suggestions)
+  const allProductNames = productRows.map(p => p.product_name).filter(Boolean)
+  const soldProducts = new Set(itemRows.map(i => i.product_name).filter(Boolean))
+  const slowMovingProducts = allProductNames.filter(n => !soldProducts.has(n))
+
+  return {
+    // Metadata
+    generatedAt: now.toISOString(),
+    currentMonth,
+    lastMonth,
+    userRole: user?.role || 'unknown',
+    userName: user?.name || 'unknown',
+
+    // Stats
+    totalOrders,
+    activeOrders,
+    completedOrders,
+
+    // Urgent
+    urgentOrders,
+
+    // Marketing
+    topMarketingThisMonth,
+    topMarketingByOrders,
+    largestOrderByMarketing,
+
+    // Products
+    topProductsThisMonth,
+
+    // Customers
+    repeatCustomers,
+
+    // Deadline & Stuck
+    nearingDeadline,
+    stuckItems,
+
+    // Progress
+    progressByStage,
+
+    // Products
+    slowMovingProducts
+  }
+}
+
+export async function handleGetAnalyticsCache(req, res) {
+  console.log('🏁 [Vercel] handleGetAnalyticsCache started!')
+  const { user } = req.body
+  const { forceRefresh } = req.query
+
+  try {
+    // Check cache validity
+    const now = Date.now()
+    const isCacheValid = analyticsCache && 
+                        cacheTimestamp && 
+                        (now - cacheTimestamp) < CACHE_TTL_MS
+
+    if (isCacheValid && !forceRefresh) {
+      // Filter cache berdasarkan user role
+      if (user?.role === 'marketing') {
+        // Return data yang sudah difilter untuk marketing
+        return res.status(200).json(analyticsCache)
+      }
+      return res.status(200).json(analyticsCache)
+    }
+
+    console.log('🔄 [Analytics] Building fresh cache...')
+    analyticsCache = await buildFullAnalyticsCache(user)
+    cacheTimestamp = now
+
+    return res.status(200).json(analyticsCache)
+  } catch (err) {
+    console.error('💥 [Vercel] ERROR in handleGetAnalyticsCache:', err.message)
+    return res.status(500).json({ success: false, error: err.message })
+  }
+}
+
+// =================================================================
+// INTELLIGENT PATTERN MATCHING - Tanpa LLM untuk pertanyaan umum
+// =================================================================
+
+function matchQueryToAnswer(prompt, cache) {
+  const lowerPrompt = prompt.toLowerCase()
+  
+  // Pattern: Urgent Orders
+  if (lowerPrompt.match(/order urgent|po urgent|urgent|prioritas tinggi|yang urgent/i)) {
+    if (cache.urgentOrders?.length > 0) {
+      return cache.urgentOrders.map(o => 
+        `• **${o.order_number}** - ${o.project_name} (${o.status})`
+      ).join('\n')
+    }
+    return "Tidak ada order urgent saat ini."
+  }
+
+  // Pattern: Top Marketing this month
+  if (lowerPrompt.match(/marketing paling banyak|jualan paling banyak|penjualan tertinggi|top marketing|marketing terbaik/i)) {
+    if (cache.topMarketingThisMonth?.length > 0) {
+      const top = cache.topMarketingThisMonth[0]
+      return `🏆 **${top.name}** dengan ${top.kubikasi.toFixed(2)} m³ bulan ini.`
+    }
+    return "Tidak ada data penjualan bulan ini."
+  }
+
+  // Pattern: Largest order by marketing
+  if (lowerPrompt.match(/order terbesar|po terbesar|pesanan terbesar| terbesar marketing/i)) {
+    const entries = Object.entries(cache.largestOrderByMarketing || {})
+    if (entries.length > 0) {
+      const sorted = entries
+        .map(([m, o]) => ({ marketing: m, ...o }))
+        .sort((a, b) => b.kubikasi - a.kubikasi)
+      
+      return sorted.slice(0, 5).map(o => 
+        `• **${o.marketing}**: ${o.order_number} (${o.kubikasi.toFixed(2)} m³) - ${o.project_name}`
+      ).join('\n')
+    }
+    return "Tidak ada data order."
+  }
+
+  // Pattern: Repeat customers
+  if (lowerPrompt.match(/repeat|customer ulang|pelanggan tetap|beli lagi|klien tetap/i)) {
+    if (cache.repeatCustomers?.length > 0) {
+      return cache.repeatCustomers.slice(0, 10).map(c => 
+        `• **${c.name}** - ${c.orderCount} kali pesan`
+      ).join('\n')
+    }
+    return "Tidak ada customer repeat."
+  }
+
+  // Pattern: Total orders
+  if (lowerPrompt.match(/jumlah total|total order|ada berapa order|berapa order/i)) {
+    return `📊 **Total: ${cache.totalOrders}** | Aktif: ${cache.activeOrders} | Selesai: ${cache.completedOrders}`
+  }
+
+  // Pattern: Deadline
+  if (lowerPrompt.match(/deadline|dekat|jatuh tempo|segera|hari ini/i)) {
+    if (cache.nearingDeadline?.length > 0) {
+      return cache.nearingDeadline.slice(0, 5).map(o => 
+        `• **${o.order_number}** - ${o.project_name} (${o.deadline})`
+      ).join('\n')
+    }
+    return "Tidak ada deadline dekat."
+  }
+
+  // Pattern: Stuck items
+  if (lowerPrompt.match(/stuck|macet|tidak bergerak|belum jadi|proses/i)) {
+    if (cache.stuckItems?.length > 0) {
+      return cache.stuckItems.slice(0, 5).map(s => 
+        `• **${s.order_number}** - ${s.item_name} (last: ${s.last_update})`
+      ).join('\n')
+    }
+    return "Tidak ada item stuck."
+  }
+
+  // Pattern: Top products
+  if (lowerPrompt.match(/produk paling|item paling|laris|best seller|top product/i)) {
+    if (cache.topProductsThisMonth?.length > 0) {
+      return cache.topProductsThisMonth.slice(0, 5).map(p => 
+        `• **${p.name}** - ${p.quantity} unit`
+      ).join('\n')
+    }
+    return "Tidak ada data produk."
+  }
+
+  // Pattern: Help
+  if (lowerPrompt.match(/bisa apa|fitur|menu|bantuan|help/i)) {
+    return `Saya bisa menjawab:
+• Jumlah total order
+• Order urgent
+• Marketing dengan penjualan tertinggi bulan ini
+• Order terbesar per marketing
+• Customer repeat order
+• Deadline terdekat
+• Item yang stuck
+• Produk terlaris bulan ini
+• Dan pertanyaan umum lainnya!`
+  }
+
+  return null // Tidak ada pattern match, perlu LLM
+}
+
+// =================================================================
+// ENHANCED AI CHAT - Pakai cache + pattern matching
+// =================================================================
+
 export async function handleAiChat(req, res) {
   const { prompt, user, history } = req.body
   if (!prompt) return res.status(400).json({ error: 'Prompt required' })
 
-  // 1. FETCH CONTEXT (Hanya PO dulu agar cepat di Vercel)
-  let allOrders = []
+  console.log('💬 [AI Chat] Prompt:', prompt)
+
   try {
-    allOrders = await listOrdersforChat(user)
-  } catch (e) {
-    console.error(e)
-    return res.status(500).json({ error: 'Context fetch failed' })
-  }
+    // Step 1: Get analytics cache (satu kali saja)
+    let cache = analyticsCache
+    let cacheValid = cache && cacheTimestamp && (Date.now() - cacheTimestamp) < CACHE_TTL_MS
 
-  // 2. DECIDE TOOL (Call 1)
-  let aiDecision = { tool: 'unknown' }
-  try {
-    const today = new Date().toISOString().split('T')[0]
-    // System prompt disingkat agar hemat token di Vercel, tapi tetap fungsional
-    const systemPrompt = `Anda adalah Asisten ERP Ubinkayu. Tugas Anda adalah mengubah pertanyaan pengguna menjadi JSON 'perintah' yang valid. HANYA KEMBALIKAN JSON.
-Hari ini adalah ${today}.
-
---- INFORMASI PENGGUNA SAAT INI ---
-Nama: ${user?.name || 'Tamu'}
-Role: ${user?.role || 'Tidak Dikenal'}
-Panggil user dengan nama depannya (${user?.name?.split(' ')[0] || 'Tamu'}).
----
-
---- ATURAN PRIORITAS ---
-1. Jika user menyebut nomor PO, nama customer, atau revisi, Anda HARUS menggunakan "GetOrderInfo".
-2. Tentukan 'intent' user dengan hati-hati.
-
---- Alat (Tools) yang Tersedia ---
-// (Daftar alat disederhanakan untuk Vercel agar tidak terlalu panjang,
-// fokus pada fitur inti PO karena keterbatasan waktu eksekusi serverless)
-
-1. "getTotalOrder": (Untuk pertanyaan jumlah/total PO).
-   - Keywords: "jumlah order", "total order", "ada berapa order", "semua order aktif".
-   - JSON: {"tool": "getTotalOrder"}
-
-2. "GetOrderInfo": (Mencari PO berdasarkan nomor, customer, atau revisi).
-   - Keywords: "status order [nomor]", "link file [nomor]", "info order [nomor]".
-   - JSON: {"tool": "GetOrderInfo", "param": {"orderNumber": "...", "customerName": "...", "revisionNumber": "...", "intent": "details"}}
-
-3. "getUrgentOrders": (Untuk pertanyaan PO 'Urgent').
-   - JSON: {"tool": "getUrgentOrders"}
-
-4. "getNearingDeadline": (Untuk pertanyaan PO 'deadline dekat').
-   - JSON: {"tool": "getNearingDeadline"}
-
-5. "general": (Untuk sapaan umum).
-   - Keywords: "halo", "terima kasih".
-   - JSON: {"tool": "general"}
-
-ATURAN KETAT:
-- JANGAN menjawab pertanyaan. HANYA KEMBALIKAN JSON.
-- Jika tidak yakin tool mana, KEMBALIKAN: {"tool": "unknown"}`
-
-    const formattedHistory = (history || []).map((m) => ({
-      role: m.sender === 'user' ? 'user' : 'assistant',
-      content: m.text
-    }))
-
-    const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
-        temperature: 0.1,
-        max_tokens: 150,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...formattedHistory,
-          { role: 'user', content: prompt }
-        ]
-      })
-    })
-    const json = await resp.json()
-    let content = json.choices[0]?.message?.content?.trim() || '{}'
-    if (content.includes('```json')) content = content.split('```json')[1].split('```')[0].trim()
-    else if (content.includes('```')) content = content.split('```')[1].trim()
-    aiDecision = JSON.parse(content)
-  } catch (e) {
-    // Fallback cerdas jika JSON gagal diparse
-    aiDecision = { tool: 'general' }
-  }
-
-  // 3. EXECUTE & GENERATE NATURAL RESPONSE (Call 2)
-  try {
-    switch (aiDecision.tool) {
-      case 'getTotalOrder': {
-        const total = allOrders.length
-        const active = allOrders.filter(
-          (p) => p.status !== 'Completed' && p.status !== 'Cancelled'
-        ).length
-        const data = { totalPOs: total, activeOrders: active }
-        const text = await generateNaturalResponse(
-          JSON.stringify(data),
-          'User tanya jumlah PO',
-          prompt,
-          user
-        )
-        return res.status(200).json({ response: text })
-      }
-      case 'GetOrderInfo': {
-        // Implementasi sederhana untuk Vercel (bisa dikembangkan lagi nanti)
-        const { orderNumber, customerName } = aiDecision.param || {}
-        let found = allOrders.slice(0, 5) // Default ambil 5 teratas jika tidak ada param
-        if (orderNumber)
-          found = allOrders.filter((p) => p.order_number?.toLowerCase().includes(orderNumber.toLowerCase()))
-        else if (customerName)
-          found = allOrders.filter((p) =>
-            p.project_name?.toLowerCase().includes(customerName.toLowerCase())
-          )
-
-        const text = await generateNaturalResponse(
-          JSON.stringify(found.slice(0, 3)),
-          `User cari PO: ${orderNumber || customerName || 'terbaru'}`,
-          prompt,
-          user
-        )
-        return res.status(200).json({ response: text })
-      }
-      case 'getUserInfo': {
-        if (!user) return res.status(200).json({ response: 'Anda belum login.' })
-        const data = {
-          nama: user.name,
-          role: user.role,
-          info: `Anda login sebagai ${user.name} (${user.role})`
-        }
-        const text = await generateNaturalResponse(
-          JSON.stringify(data),
-          'User tanya info akunnya',
-          prompt,
-          user
-        )
-        return res.status(200).json({ response: text })
-      }
-      case 'general': {
-        // --- [PERBAIKAN JAM] ---
-        // Ambil waktu saat ini di zona waktu Asia/Jakarta (WIB)
-        const wibTimeString = new Date().toLocaleString('en-US', {
-          timeZone: 'Asia/Jakarta',
-          hour: 'numeric',
-          hour12: false
-        })
-        const currentHourWIB = parseInt(wibTimeString)
-        // -----------------------
-
-        const text = await generateNaturalResponse(
-          JSON.stringify({ jam: currentHourWIB }), // Kirim jam yang sudah dikoreksi
-          'User menyapa atau mengobrol santai',
-          prompt,
-          user
-        )
-        return res.status(200).json({ response: text })
-      }
-
-      case 'help':
-        return res.status(200).json({
-          response:
-            "Saya bisa membantu mengecek jumlah PO, mencari status PO, atau info akun Anda. Coba tanya: 'berapa order aktif saya?'"
-        })
-
-      default: {
-        // Fallback ke AI untuk respons "saya tidak mengerti" yang lebih sopan
-        const unknownText = await generateNaturalResponse(
-          '{}',
-          'User bertanya hal di luar kemampuan bot',
-          prompt,
-          user
-        )
-        return res.status(200).json({ response: unknownText })
-      }
+    if (!cacheValid) {
+      console.log('🔄 [AI Chat] Building analytics cache...')
+      cache = await buildFullAnalyticsCache(user)
+      analyticsCache = cache
+      cacheTimestamp = Date.now()
     }
+
+    // Step 2: Try pattern matching first (tanpa LLM!)
+    const patternAnswer = matchQueryToAnswer(prompt, cache)
+    if (patternAnswer) {
+      console.log('✅ [AI Chat] Using pattern matching (no LLM)')
+      return res.status(200).json({ response: patternAnswer, source: 'pattern' })
+    }
+
+    // Step 3: Fallback ke LLM hanya untuk pertanyaan kompleks
+    console.log('🔄 [AI Chat] Using LLM for complex query...')
+    const relevantContext = JSON.stringify({
+      summary: {
+        totalOrders: cache.totalOrders,
+        activeOrders: cache.activeOrders,
+        topMarketing: cache.topMarketingThisMonth?.[0],
+        urgentCount: cache.urgentOrders?.length || 0,
+        repeatCustomerCount: cache.repeatCustomers?.length || 0
+      },
+      urgentOrders: cache.urgentOrders?.slice(0, 5),
+      topMarketing: cache.topMarketingThisMonth?.slice(0, 5),
+      topProducts: cache.topProductsThisMonth?.slice(0, 5),
+      repeatCustomers: cache.repeatCustomers?.slice(0, 10),
+      nearingDeadline: cache.nearingDeadline?.slice(0, 5)
+    })
+
+    const text = await generateNaturalResponse(
+      relevantContext,
+      'Pertanyaan kompleks yang tidak bisa dijawab dengan pattern matching',
+      prompt,
+      user
+    )
+
+    return res.status(200).json({ response: text, source: 'llm' })
   } catch (e) {
-    console.error(e)
+    console.error('💥 [AI Chat] Error:', e)
     return res.status(500).json({ error: `Terjadi kesalahan: ${e.message}` })
   }
 }
