@@ -527,6 +527,10 @@ export async function handleSaveNewOrder(req, res) {
     await NewOrderRow.save({ raw: false })
     console.log(`✅ [Vercel] pdf_link & file_size_bytes updated.`)
 
+    // Invalidate analytics cache karena data sheet berubah
+    analyticsCache = null
+    cacheTimestamp = null
+
     return res.status(200).json({ success: true, orderId, revision_number: 0 })
   } catch (err) {
     console.error('💥 [Vercel] ERROR in handleSaveNewOrder:', err.message, err.stack)
@@ -847,6 +851,10 @@ export async function handleUpdateOrder(req, res) {
     await newRevisionRow.save({ raw: false })
     console.log(`✅ [Vercel Update] pdf_link & file_size_bytes updated.`)
 
+    // Invalidate analytics cache karena data sheet berubah
+    analyticsCache = null
+    cacheTimestamp = null
+
     return res.status(200).json({ success: true, revision_number: newRevNum })
   } catch (err) {
     console.error('💥 [Vercel Update] ERROR in handleUpdateOrder:', err.message, err.stack)
@@ -942,6 +950,11 @@ export async function handleDeleteOrder(req, res) {
     failedFiles: failedFiles.length > 0 ? failedFiles : undefined
   }
   const message = `PO berhasil dihapus (${summary.deletedRevisions} revisi, ${summary.deletedItems} item, ${summary.deletedFiles} file).`
+  
+  // Invalidate analytics cache karena data sheet berubah
+  analyticsCache = null
+  cacheTimestamp = null
+  
   return res.status(200).json({ success: true, message, summary })
 }
 
@@ -1576,6 +1589,11 @@ export async function handleAddNewProduct(req, res) {
     const sheet = await getSheet(doc, 'product_master')
     const nextId = await getNextIdFromSheet(sheet)
     await sheet.addRow({ id: nextId, ...productData })
+    
+    // Invalidate analytics cache karena data sheet berubah
+    analyticsCache = null
+    cacheTimestamp = null
+    
     return res.status(200).json({ success: true, newId: nextId })
   } catch (error) {
     console.error('❌ Gagal menambahkan produk baru di Vercel:', error.message)
@@ -2512,20 +2530,28 @@ Coba tanya: "ranking marketing" atau "beri ringkasan" atau "analisis bulan ini"`
 
 export async function handleAiChat(req, res) {
   const { prompt, user, history } = req.body
+  const { forceRefresh } = req.query
   if (!prompt) return res.status(400).json({ error: 'Prompt required' })
 
   console.log('💬 [AI Chat] Prompt:', prompt)
 
   try {
-    // Step 1: Get analytics cache (satu kali saja)
-    let cache = analyticsCache
-    let cacheValid = cache && cacheTimestamp && (Date.now() - cacheTimestamp) < CACHE_TTL_MS
+    // Step 1: Check cache validity — gunakan cache jika masih segar (untuk hemat token)
+    const now = Date.now()
+    const isCacheValid = analyticsCache && 
+                        cacheTimestamp && 
+                        (now - cacheTimestamp) < CACHE_TTL_MS
 
-    if (!cacheValid) {
-      console.log('🔄 [AI Chat] Building analytics cache...')
+    let cache = analyticsCache
+    
+    // Jika cache expired atau forceRefresh di-request, rebuild dari sheet
+    if (!isCacheValid || forceRefresh) {
+      console.log('🔄 [AI Chat] Cache expired atau forceRefresh. Rebuilding from Sheets...')
       cache = await buildFullAnalyticsCache(user)
       analyticsCache = cache
-      cacheTimestamp = Date.now()
+      cacheTimestamp = now
+    } else {
+      console.log('✅ [AI Chat] Using valid cache (token-efficient)')
     }
 
     // Step 2: Try pattern matching first (tanpa LLM!)
