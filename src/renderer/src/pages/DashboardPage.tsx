@@ -20,7 +20,7 @@ import {
   CartesianGrid,
 } from 'recharts'
 
-import { LuPackage, LuHourglass, LuCheck, LuHardDrive } from 'react-icons/lu'
+import { LuPackage, LuHourglass, LuCheck } from 'react-icons/lu'
 
 import { useWindowWidth } from '../hooks/useWindowWidth'
 // [DIHAPUS] Tidak perlu apiService untuk GDrive lagi
@@ -244,12 +244,6 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
           value={summaryStats.completedPOs}
           icon={LuCheck}
           cardClassName="completed-order-card"
-        />
-        <StatCard
-          title="Penggunaan GDrive"
-          value={`${summaryStats.gdriveUsageMB} MB`} // Add MB unit
-          icon={LuHardDrive}
-          cardClassName="gdrive-card"
         />
       </div>
 
