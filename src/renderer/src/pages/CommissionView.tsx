@@ -281,7 +281,7 @@ const CommissionView: React.FC<CommissionViewProps> = ({ currentUser }) => {
                 <th style={{ ...th, textAlign: 'right' }}>Total Penjualan</th>
                 <th style={{ ...th, textAlign: 'center' }}>Rate (%)</th>
                 <th style={{ ...th, textAlign: 'right' }}>Komisi</th>
-                <th style={{ ...th, textAlign: 'center' }}>Status</th>
+                
               </tr>
             </thead>
             <tbody>
@@ -300,9 +300,7 @@ const CommissionView: React.FC<CommissionViewProps> = ({ currentUser }) => {
                     </span>
                   </td>
                   <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: '#16a34a' }}>{formatRupiahFull(m.totalKomisi)}</td>
-                  <td style={{ ...td, textAlign: 'center' }}>
-                    <span className="comm-badge-paid">Paid</span>
-                  </td>
+                  
                 </tr>
               ))}
             </tbody>
