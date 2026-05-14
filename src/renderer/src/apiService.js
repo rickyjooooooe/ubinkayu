@@ -189,7 +189,9 @@ export function previewOrder(data) {
 // --- Fungsi Progress Tracking ---
 
 export function updateItemProgress(data) {
-  if (window.api) return window.api.updateItemProgress(data)
+  if (window.api && typeof window.api.updateItemProgress === 'function') {
+    return window.api.updateItemProgress(data)
+  }
   return fetchAPI(createApiEndpoint('updateItemProgress'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
