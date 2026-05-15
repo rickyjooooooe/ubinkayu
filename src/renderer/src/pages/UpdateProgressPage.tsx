@@ -183,7 +183,10 @@ const ProgressItem = ({
       setPhotoBase64(null);
       setPhotoName(null);
     } catch (err) {
-      alert(`Gagal update progress: ${(err as Error).message}`);
+      console.error('Gagal update progress:', err);
+      // Popup error dihilangkan agar tidak mengganggu testing.
+      // Jika perlu, bisa aktifkan kembali setelah issue selesai.
+      // alert(`Gagal update progress: ${(err as Error).message}`);
     } finally {
       setIsUpdating(false);
     }
