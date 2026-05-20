@@ -13,4 +13,6 @@ out
 # Kredensial & Kunci Rahasia
 credentials-oauth.json
 credentials.json
-.env  
+.env
+.env.local
+.env.*
