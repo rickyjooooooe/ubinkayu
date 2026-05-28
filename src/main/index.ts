@@ -2176,7 +2176,7 @@ async function generateNaturalResponse(
   }
 
   // System prompt BARU, khusus untuk *menghasilkan* jawaban
-  const generationSystemPrompt = `Anda adalah Asisten AI ERP Ubinkayu yang ramah, cerdas, dan profesional.
+  const generationSystemPrompt = `Anda adalah Asisten AI Sistem Order Ubinkayu yang ramah, cerdas, dan profesional.
 Tugas Anda adalah menjawab pertanyaan user berdasarkan data yang saya berikan.
 JANGAN mengembalikan JSON. Jawablah dalam Bahasa Indonesia yang alami, ramah, dan bervariasi.
 Anda boleh memberikan sedikit insight (wawasan) dari data jika terlihat jelas, tapi jangan berlebihan.
@@ -2266,7 +2266,7 @@ async function handleGroqChat(prompt: string, user: User | null, history: any[] 
   // 2. SIAPKAN SAPAAN & SYSTEM PROMPT
   const today = new Date().toISOString().split('T')[0]
 
-  const systemPrompt = `Anda adalah Asisten ERP Ubinkayu. Tugas Anda adalah mengubah pertanyaan pengguna menjadi JSON 'perintah' yang valid. HANYA KEMBALIKAN JSON.
+  const systemPrompt = `Anda adalah Asisten Sistem Order Ubinkayu. Tugas Anda adalah mengubah pertanyaan pengguna menjadi JSON 'perintah' yang valid. HANYA KEMBALIKAN JSON.
 Hari ini adalah ${today}.
 
 --- INFORMASI PENGGUNA SAAT INI ---

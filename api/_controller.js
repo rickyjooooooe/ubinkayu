@@ -1750,7 +1750,7 @@ async function generateNaturalResponse(dataContext, userRequest, originalPrompt,
   const groqToken = process.env.GROQ_API_KEY
   if (!groqToken) throw new Error('GROQ_API_KEY missing')
 
-  const sysPrompt = `Anda adalah Asisten AI ERP Ubinkayu.
+  const sysPrompt = `Anda adalah Asisten AI Sistem Order Ubinkayu.
 Tugas Anda adalah menjawab pertanyaan user secara natural.
 ANDA HARUS MENJAWAB HANYA BERDASARKAN DATA KONTEKS YANG DIBERIKAN.
 JANGAN mengarang data.
@@ -2422,7 +2422,7 @@ function matchQueryToAnswer(prompt, cache) {
 
   // Pattern: Help
   if (lowerPrompt.match(/bisa apa|fitur|menu|bantuan|help|apa saja/i)) {
-    return `🤖 **Kemampuan AI ERP Ubinkayu:**
+    return `🤖 **Kemampuan AI Sistem Order Ubinkayu:**
 
 **📊 Analisis & Ranking:**
 • Ranking marketing, produk, customer
@@ -2451,7 +2451,7 @@ Coba tanya: "ranking marketing" atau "beri ringkasan" atau "analisis bulan ini"`
 
   // Pattern: Ringkasan / Summary
   if (lowerPrompt.match(/ringkasan|summary|overview|rekap|statistik|dashboard/i)) {
-    return `📊 **Ringkasan ERP Ubinkayu**
+    return `📊 **Ringkasan Sistem Order Ubinkayu**
 
 **📈 Status Order:**
 • Total: ${cache.totalOrders} | Aktif: ${cache.activeOrders} | Selesai: ${cache.completedOrders}
