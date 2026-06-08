@@ -23,9 +23,44 @@ const POTable: React.FC<POTableProps> = ({
   onShowProgress,
   currentUserRole
 }) => {
+  // Helper untuk memparsing tanggal dari string secara lokal agar aman dari offset timezone
+  const parseLocalDate = (dateStr?: string | null): Date | null => {
+    if (!dateStr || typeof dateStr !== 'string') return null
+    const trimmed = dateStr.trim()
+    if (!trimmed || trimmed === '-') return null
+
+    // 1. Format YYYY-MM-DD atau YYYY/MM/DD
+    const ymdMatch = trimmed.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/)
+    if (ymdMatch) {
+      const year = parseInt(ymdMatch[1], 10)
+      const month = parseInt(ymdMatch[2], 10) - 1
+      const day = parseInt(ymdMatch[3], 10)
+      return new Date(year, month, day)
+    }
+
+    // 2. Format DD/MM/YYYY atau DD-MM-YYYY
+    const dmyMatch = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/)
+    if (dmyMatch) {
+      const day = parseInt(dmyMatch[1], 10)
+      const month = parseInt(dmyMatch[2], 10) - 1
+      const year = parseInt(dmyMatch[3], 10)
+      return new Date(year, month, day)
+    }
+
+    // 3. Fallback ke parser bawaan JS
+    const parsed = new Date(trimmed)
+    if (!isNaN(parsed.getTime())) {
+      return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate())
+    }
+
+    return null
+  }
+
   const formatDate = (dateString?: string) => {
     if (!dateString) return '-'
-    return new Date(dateString).toLocaleDateString('id-ID', {
+    const parsed = parseLocalDate(dateString)
+    if (!parsed) return dateString
+    return parsed.toLocaleDateString('id-ID', {
       day: '2-digit',
       month: 'short',
       year: 'numeric'
@@ -35,11 +70,21 @@ const POTable: React.FC<POTableProps> = ({
   // Memeriksa apakah tanggal kirim sudah lewat (hanya untuk order yang belum Selesai/Batal)
   const isDeadlinePassed = (deadlineString?: string, status?: string) => {
     if (!deadlineString) return false
-    if (status === 'Completed' || status === 'Cancelled') return false
-    const deadlineDate = new Date(deadlineString)
+    const lowerStatus = (status || '').toLowerCase()
+    if (
+      lowerStatus === 'completed' ||
+      lowerStatus === 'cancelled' ||
+      lowerStatus === 'selesai' ||
+      lowerStatus === 'batal'
+    )
+      return false
+
+    const deadlineDate = parseLocalDate(deadlineString)
+    if (!deadlineDate) return false
+
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    deadlineDate.setHours(0, 0, 0, 0)
+
     return deadlineDate < today
   }
 
