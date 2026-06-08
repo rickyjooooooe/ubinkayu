@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import * as apiService from '../apiService'
 import { Card } from '../components/Card'
-import { Button } from '../components/Button'
+
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell
 } from 'recharts'
@@ -100,12 +100,7 @@ const CommissionView: React.FC<CommissionViewProps> = ({ currentUser }) => {
     summary.byMarketing.map(m => ({ name: m.name, komisi: m.totalKomisi }))
   , [summary.byMarketing])
 
-  const formatRupiah = (val: number) => {
-    if (!val || isNaN(val)) return 'Rp 0'
-    if (val >= 1_000_000_000) return `Rp ${(val / 1_000_000_000).toFixed(1).replace('.', ',')} M`
-    if (val >= 1_000_000) return `Rp ${(val / 1_000_000).toFixed(1).replace('.', ',')} jt`
-    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val)
-  }
+
 
   const formatRupiahFull = (val: number) =>
     new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val || 0)

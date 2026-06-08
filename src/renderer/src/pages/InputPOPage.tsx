@@ -99,7 +99,7 @@ const AddProductModal: React.FC<{ isOpen: boolean; onClose: () => void; onSaveSu
 interface InputPOPageProps {
   onSaveSuccess: () => void
   editingPO: POHeader | null
-  currentUser?: { name: string; role: string } | null
+  currentUser?: { name: string; role?: string } | null
   // mode bisa diset secara eksplisit dari parent, atau diturunkan otomatis dari role/editingPO
   mode?: PageMode
 }

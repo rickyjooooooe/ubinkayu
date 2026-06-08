@@ -432,7 +432,7 @@ function App() {
           <UpdateProgressPage
             order={trackingPO}
             onBack={() => handleNavigate('tracking')} // Gunakan handleNavigate
-            onProgressSaved={() => fetchPOs(true)} // Refresh PO list setelah simpan progress
+            onRefresh={() => fetchPOs(true)} // Refresh PO list setelah simpan progress
             currentUser={currentUser}
           />
         )
@@ -473,7 +473,6 @@ function App() {
           onRefresh={handleRefresh}
           isRefreshing={isRefreshing}
           onLogout={() => handleLogout()} // Pakai arrow function
-          userName={currentUser.name}
           currentUser={currentUser}
         />
       )}

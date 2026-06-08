@@ -1,7 +1,7 @@
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import FilterPanel from '../components/FilterPanel';
@@ -61,13 +61,18 @@ const POListPage: React.FC<POListPageProps> = ({
     }
   }, [poList])
 
-  // Pisahkan PO berdasarkan tab aktif (hanya dari regularPOs)
-  const listByTab = useMemo(() => {
-    if (activeTab === 'active') {
-      return regularPOs.filter((order) => order.status !== 'Completed' && order.status !== 'Cancelled');
-    }
+  // Pisahkan PO berdasarkan kategori utama
+  const activePOs = useMemo(() => {
+    return regularPOs.filter((order) => order.status !== 'Completed' && order.status !== 'Cancelled');
+  }, [regularPOs]);
+
+  const completedPOs = useMemo(() => {
     return regularPOs.filter((order) => order.status === 'Completed');
-  }, [regularPOs, activeTab]);
+  }, [regularPOs]);
+
+  const listByTab = useMemo(() => {
+    return activeTab === 'active' ? activePOs : completedPOs;
+  }, [activePOs, completedPOs, activeTab]);
 
   const {
     availableWoodTypes, availableProductTypes, availableMarketing,
@@ -100,8 +105,8 @@ const POListPage: React.FC<POListPageProps> = ({
     setFilters((prev) => ({ ...prev, [name]: value }));
   };
 
-  const filteredAndSortedPOs = useMemo(() => {
-    let processedPOs = [...listByTab];
+  const applyFiltersAndSort = useCallback((ordersList: POHeader[]) => {
+    let processedPOs = [...ordersList];
     if (filters.searchQuery) {
       const query = filters.searchQuery.toLowerCase();
       processedPOs = processedPOs.filter((order) =>
@@ -143,7 +148,19 @@ const POListPage: React.FC<POListPageProps> = ({
       default: processedPOs.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()); break;
     }
     return processedPOs;
-  }, [listByTab, filters]);
+  }, [filters]);
+
+  const filteredActivePOs = useMemo(() => {
+    return applyFiltersAndSort(activePOs);
+  }, [activePOs, applyFiltersAndSort]);
+
+  const filteredCompletedPOs = useMemo(() => {
+    return applyFiltersAndSort(completedPOs);
+  }, [completedPOs, applyFiltersAndSort]);
+
+  const filteredAndSortedPOs = useMemo(() => {
+    return activeTab === 'active' ? filteredActivePOs : filteredCompletedPOs;
+  }, [activeTab, filteredActivePOs, filteredCompletedPOs]);
 
   const filteredWoodKubikasi = useMemo(() => {
     if (filters.woodType === 'all') return null;
@@ -160,12 +177,7 @@ const POListPage: React.FC<POListPageProps> = ({
     if (!dateString) return '-';
     try { return new Date(dateString).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) } catch { return '-' }
   };
-  const formatRupiah = (val?: string | number | null) => {
-    if (!val) return '-'
-    const n = Number(val)
-    if (isNaN(n) || n === 0) return '-'
-    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n)
-  }
+
 
   // ── Render section Request Order dari Marketing (admin & manager) ─────────
   const renderRequestedSection = () => {
@@ -315,10 +327,10 @@ const POListPage: React.FC<POListPageProps> = ({
 
       <div className="view-switcher">
         <button className={`view-switcher-btn ${activeTab === 'active' ? 'active' : ''}`} onClick={() => setActiveTab('active')}>
-          Order Aktif ({activeTab === 'active' ? filteredAndSortedPOs.length : listByTab.filter(order => order.status !== 'Completed' && order.status !== 'Cancelled').length})
+          Order Aktif ({filteredActivePOs.length})
         </button>
         <button className={`view-switcher-btn ${activeTab === 'completed' ? 'active' : ''}`} onClick={() => setActiveTab('completed')}>
-          Order Selesai ({activeTab === 'completed' ? filteredAndSortedPOs.length : listByTab.filter(order => order.status === 'Completed').length})
+          Order Selesai ({filteredCompletedPOs.length})
         </button>
       </div>
 

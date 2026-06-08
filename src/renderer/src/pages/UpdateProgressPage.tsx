@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/explicit-function-return-type */
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 import { POHeader, POItem, ProductionStage, User } from '../types' // Pastikan User diimpor
@@ -278,7 +278,7 @@ const ProgressItem = ({
             </Button>
             {photoName && (
               <Button
-                variant="danger-text"
+                variant="danger"
                 onClick={() => {
                   setPhotoPath(null)
                   setPhotoBase64(null)
@@ -292,7 +292,7 @@ const ProgressItem = ({
             )}
           </div>
           <Button
-            onClick={() => handleUpdate(selectedStage)}
+            onClick={() => handleUpdate()}
             disabled={isUpdating || !selectedStage || isMarketingRole} // <-- Di-disable jika marketing
             className="save-progress-btn"
           >

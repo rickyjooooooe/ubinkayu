@@ -38,7 +38,6 @@ interface NavbarProps {
   onRefresh: () => void
   isRefreshing: boolean
   onLogout: () => void
-  userName?: string
   currentUser: User | null
 }
 
@@ -48,7 +47,6 @@ const Navbar: React.FC<NavbarProps> = ({
   onRefresh,
   isRefreshing,
   onLogout,
-  userName,
   currentUser
 }) => {
   const windowWidth = useWindowWidth()
