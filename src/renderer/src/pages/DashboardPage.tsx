@@ -256,25 +256,32 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading, onShow
       </div>
 
       {!isLoading && dashboardData.overduePOs.length > 0 && (
-        <Card className="attention-card" style={{ backgroundColor: '#FEF2F2', borderLeft: '4px solid #EF4444' }}>
-          <h4 style={{ color: '#991B1B' }}>🚨 Perhatian! Terlewat Deadline ({dashboardData.overduePOs.length} Order)</h4>
-          <p style={{ color: '#7F1D1D', fontSize: '14px', margin: '4px 0 12px 0' }}>
+        <Card className="attention-card" style={{ backgroundColor: '#FEF2F2', borderLeft: '4px solid #EF4444', padding: '20px' }}>
+          <h4 style={{ color: '#991B1B', margin: '0 0 8px 0', fontSize: '16px', fontWeight: 600 }}>🚨 Perhatian! Terlewat Deadline ({dashboardData.overduePOs.length} Order)</h4>
+          <p style={{ color: '#7F1D1D', fontSize: '13.5px', margin: '0 0 16px 0', lineHeight: 1.4 }}>
             Order berikut telah melewati target tanggal kirim tetapi belum selesai diproduksi:
           </p>
 
-          <div className="attention-list">
-            {dashboardData.overduePOs.map((order) => (
-              <div key={order.id} className="attention-item" style={{ borderBottom: '1px solid #FEE2E2', padding: '8px 0' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            {dashboardData.overduePOs.map((order, idx) => (
+              <div
+                key={order.id}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '12px 4px',
+                  borderBottom: idx === dashboardData.overduePOs.length - 1 ? 'none' : '1px solid #FCA5A5'
+                }}
+              >
                 {/* Bagian Kiri: Info Order dan Customer */}
-                <div className="attention-info">
-                  <p className="attention-line-1" style={{ margin: 0 }}>
-                    <strong style={{ color: '#991B1B' }}>{order.order_number}</strong>
-                    <span className="customer-name" style={{ color: '#7F1D1D' }}> - {order.project_name}</span>
-                  </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <strong style={{ color: '#991B1B', fontSize: '14px' }}>{order.order_number}</strong>
+                  <span style={{ color: '#7F1D1D', fontSize: '14px' }}>- {order.project_name}</span>
                 </div>
 
                 {/* Bagian Kanan: Badge Lewat dan Detail Link */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexShrink: 0 }}>
                   <span style={{ color: '#EF4444', fontWeight: 'bold', fontSize: '13px' }}>
                     Lewat: {(() => {
                       const parsed = parseLocalDate(order.deadline)
@@ -294,12 +301,13 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading, onShow
                         background: '#EF4444',
                         color: 'white',
                         border: 'none',
-                        borderRadius: '4px',
-                        padding: '4px 10px',
-                        fontSize: '11px',
+                        borderRadius: '6px',
+                        padding: '6px 14px',
+                        fontSize: '12px',
                         fontWeight: 600,
                         cursor: 'pointer',
-                        transition: 'background 0.2s'
+                        transition: 'background 0.2s',
+                        boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
                       }}
                       onMouseOver={(e) => (e.currentTarget.style.background = '#DC2626')}
                       onMouseOut={(e) => (e.currentTarget.style.background = '#EF4444')}
