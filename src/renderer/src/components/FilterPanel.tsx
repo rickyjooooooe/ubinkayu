@@ -171,13 +171,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
             <Input label="" type="date" name="dateTo" value={filters.dateTo} onChange={handleInputChange} />
           </div>
         </div>
-        <div className="form-group date-filter-group">
-          <label>Tanggal Kirim</label>
-          <Input
-            label="" type="date" name="deadlineDate"
-            value={filters.deadlineDate} onChange={handleInputChange}
-          />
-        </div>
+
 
       </div> {/* Akhir filter-grid-refined */}
 

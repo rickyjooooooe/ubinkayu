@@ -41,7 +41,6 @@ const POListPage: React.FC<POListPageProps> = ({
     priority: 'all',
     dateFrom: '',
     dateTo: '',
-    deadlineDate: '',
     woodType: 'all',
     productType: 'all',
     marketing: 'all',
@@ -117,7 +116,7 @@ const POListPage: React.FC<POListPageProps> = ({
     if (filters.priority !== 'all') processedPOs = processedPOs.filter((order) => (order.priority || 'Normal').toLowerCase() === filters.priority.toLowerCase());
     if (filters.dateFrom) { try { const d = new Date(filters.dateFrom); processedPOs = processedPOs.filter(order => { try { return new Date(order.created_at) >= d } catch { return false } }) } catch { } }
     if (filters.dateTo) { try { const d = new Date(filters.dateTo); d.setDate(d.getDate() + 1); processedPOs = processedPOs.filter(order => { try { return new Date(order.created_at) < d } catch { return false } }) } catch { } }
-    if (filters.deadlineDate) { try { processedPOs = processedPOs.filter((order) => { if (!order.deadline) return false; try { return new Date(order.deadline).toISOString().split('T')[0] === filters.deadlineDate } catch { return false } }) } catch { } }
+
     if (filters.marketing !== 'all') processedPOs = processedPOs.filter((order) => order.acc_marketing === filters.marketing);
     if (filters.lastRevisedBy !== 'all') {
       if (filters.lastRevisedBy === 'N/A') processedPOs = processedPOs.filter(order => !order.lastRevisedBy || order.lastRevisedBy === 'N/A');
