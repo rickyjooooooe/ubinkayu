@@ -26,9 +26,43 @@ import { useWindowWidth } from '../hooks/useWindowWidth'
 // [DIHAPUS] Tidak perlu apiService untuk GDrive lagi
 // import * as apiService from '../apiService'
 
+// Helper untuk memparsing tanggal dari string secara lokal agar aman dari offset timezone
+const parseLocalDate = (dateStr?: string | null): Date | null => {
+  if (!dateStr || typeof dateStr !== 'string') return null
+  const trimmed = dateStr.trim()
+  if (!trimmed || trimmed === '-') return null
+
+  // 1. Format YYYY-MM-DD atau YYYY/MM/DD
+  const ymdMatch = trimmed.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/)
+  if (ymdMatch) {
+    const year = parseInt(ymdMatch[1], 10)
+    const month = parseInt(ymdMatch[2], 10) - 1
+    const day = parseInt(ymdMatch[3], 10)
+    return new Date(year, month, day)
+  }
+
+  // 2. Format DD/MM/YYYY atau DD-MM-YYYY
+  const dmyMatch = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/)
+  if (dmyMatch) {
+    const day = parseInt(dmyMatch[1], 10)
+    const month = parseInt(dmyMatch[2], 10) - 1
+    const year = parseInt(dmyMatch[3], 10)
+    return new Date(year, month, day)
+  }
+
+  // 3. Fallback ke parser bawaan JS
+  const parsed = new Date(trimmed)
+  if (!isNaN(parsed.getTime())) {
+    return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate())
+  }
+
+  return null
+}
+
 interface DashboardPageProps {
   poList: POHeader[]
   isLoading: boolean
+  onShowDetail?: (order: POHeader) => void
 }
 
 const StatCard = ({ title, value, icon: IconComponent, cardClassName }) => (
@@ -41,7 +75,7 @@ const StatCard = ({ title, value, icon: IconComponent, cardClassName }) => (
   </Card>
 )
 
-const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
+const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading, onShowDetail }) => {
   const windowWidth = useWindowWidth()
   const isMobile = windowWidth < 500
 
@@ -57,6 +91,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
         dailyPOData: [],
         statusPOData: [],
         nearingDeadlinePOs: [],
+        overduePOs: [],
         totalDriveUsageMB: 0 // [BARU]
       }
     }
@@ -123,14 +158,42 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
     }))
 
     const today = new Date()
+    today.setHours(0, 0, 0, 0)
     const nextTwoWeeks = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000)
+
     const nearingDeadlinePOs = poList
       .filter((order) => {
         if (!order.deadline || order.status === 'Completed' || order.status === 'Cancelled') return false
-        const deadlineDate = new Date(order.deadline)
+        const deadlineDate = parseLocalDate(order.deadline)
+        if (!deadlineDate) return false
         return deadlineDate >= today && deadlineDate <= nextTwoWeeks
       })
-      .sort((a, b) => new Date(a.deadline || 0).getTime() - new Date(b.deadline || 0).getTime())
+      .sort((a, b) => {
+        const dateA = parseLocalDate(a.deadline)
+        const dateB = parseLocalDate(b.deadline)
+        return (dateA?.getTime() || 0) - (dateB?.getTime() || 0)
+      })
+
+    const overduePOs = poList
+      .filter((order) => {
+        if (!order.deadline) return false
+        const lowerStatus = (order.status || '').toLowerCase()
+        if (
+          lowerStatus === 'completed' ||
+          lowerStatus === 'cancelled' ||
+          lowerStatus === 'selesai' ||
+          lowerStatus === 'batal'
+        )
+          return false
+        const deadlineDate = parseLocalDate(order.deadline)
+        if (!deadlineDate) return false
+        return deadlineDate < today
+      })
+      .sort((a, b) => {
+        const dateA = parseLocalDate(a.deadline)
+        const dateB = parseLocalDate(b.deadline)
+        return (dateA?.getTime() || 0) - (dateB?.getTime() || 0)
+      })
 
     // [PERBAIKAN] Pastikan semua nilai dikembalikan dari useMemo
     return {
@@ -140,6 +203,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
       dailyPOData,
       statusPOData,
       nearingDeadlinePOs,
+      overduePOs,
       totalDriveUsageMB: totalDriveUsageBytes / (1024 * 1024) // Konversi ke MB
     }
   }, [poList]) // Dependensi hanya poList
@@ -190,6 +254,65 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading }) => {
           <p>Ringkasan aktivitas produksi PT Ubinkayu — {todayFormatted}</p>
         </div>
       </div>
+
+      {!isLoading && dashboardData.overduePOs.length > 0 && (
+        <Card className="attention-card" style={{ backgroundColor: '#FEF2F2', borderLeft: '4px solid #EF4444' }}>
+          <h4 style={{ color: '#991B1B' }}>🚨 Perhatian! Terlewat Deadline ({dashboardData.overduePOs.length} Order)</h4>
+          <p style={{ color: '#7F1D1D', fontSize: '14px', margin: '4px 0 12px 0' }}>
+            Order berikut telah melewati target tanggal kirim tetapi belum selesai diproduksi:
+          </p>
+
+          <div className="attention-list">
+            {dashboardData.overduePOs.map((order) => (
+              <div key={order.id} className="attention-item" style={{ borderBottom: '1px solid #FEE2E2', padding: '8px 0' }}>
+                {/* Bagian Kiri: Info Order dan Customer */}
+                <div className="attention-info">
+                  <p className="attention-line-1" style={{ margin: 0 }}>
+                    <strong style={{ color: '#991B1B' }}>{order.order_number}</strong>
+                    <span className="customer-name" style={{ color: '#7F1D1D' }}> - {order.project_name}</span>
+                  </p>
+                </div>
+
+                {/* Bagian Kanan: Badge Lewat dan Detail Link */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ color: '#EF4444', fontWeight: 'bold', fontSize: '13px' }}>
+                    Lewat: {(() => {
+                      const parsed = parseLocalDate(order.deadline)
+                      return parsed
+                        ? parsed.toLocaleDateString('id-ID', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric'
+                          })
+                        : order.deadline
+                    })()}
+                  </span>
+                  {onShowDetail && (
+                    <button
+                      onClick={() => onShowDetail(order)}
+                      style={{
+                        background: '#EF4444',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        padding: '4px 10px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        transition: 'background 0.2s'
+                      }}
+                      onMouseOver={(e) => (e.currentTarget.style.background = '#DC2626')}
+                      onMouseOut={(e) => (e.currentTarget.style.background = '#EF4444')}
+                    >
+                      Detail
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {!isLoading && dashboardData.nearingDeadlinePOs.length > 0 && (
         <Card className="attention-card">

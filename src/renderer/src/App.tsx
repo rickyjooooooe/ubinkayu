@@ -385,7 +385,7 @@ function App() {
     switch (view) {
       case 'dashboard':
         // Gunakan isLoadingPOs untuk dashboard
-        return <DashboardPage poList={allOrders} isLoading={isLoadingPOs} />
+        return <DashboardPage poList={allOrders} isLoading={isLoadingPOs} onShowDetail={handleShowDetail} />
       case 'list':
         return (
           <POListPage
@@ -459,7 +459,7 @@ function App() {
       default:
         console.warn('Invalid view state:', view, 'defaulting to dashboard.')
         setView('dashboard') // Perbaiki state view
-        return <DashboardPage poList={allOrders} isLoading={isLoadingPOs} />
+        return <DashboardPage poList={allOrders} isLoading={isLoadingPOs} onShowDetail={handleShowDetail} />
     }
   }
 
