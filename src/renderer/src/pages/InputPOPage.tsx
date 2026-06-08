@@ -13,35 +13,6 @@ import * as apiService from '../apiService'
 // ---------------------------------------------------------------
 type PageMode = 'new' | 'request' | 'confirm' | 'edit'
 
-// [BARU] Komponen Modal untuk Konfirmasi Revisi
-const RevisionConfirmModal: React.FC<{
-  isOpen: boolean
-  onClose: () => void
-  onConfirm: (reviserName: string) => void
-}> = ({ isOpen, onClose, onConfirm }) => {
-  const [reviserName, setReviserName] = useState('')
-  if (!isOpen) return null
-  const handleConfirm = () => {
-    if (!reviserName.trim()) { alert('Nama perevisi harus diisi!'); return }
-    onConfirm(reviserName)
-    setReviserName('')
-  }
-  return (
-    <div className="modal-overlay">
-      <div className="modal-content">
-        <div className="modal-header"><h3>Konfirmasi Revisi</h3></div>
-        <div className="modal-body">
-          <p>Untuk melacak perubahan, silakan masukkan nama Anda sebagai perevisi.</p>
-          <Input label="Nama Perevisi" value={reviserName} onChange={(e) => setReviserName(e.target.value)} placeholder="Masukkan nama Anda..." />
-        </div>
-        <div className="modal-footer">
-          <Button variant="secondary" onClick={onClose}>Batal</Button>
-          <Button onClick={handleConfirm}>Konfirmasi & Simpan Revisi</Button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className }) =>
   <div className={`card-container ${className || ''}`}>{children}</div>
@@ -107,7 +78,7 @@ interface InputPOPageProps {
 const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, currentUser, mode: modeProp }) => {
   const today = new Date().toISOString().split('T')[0]
   const isElectron = !!(window as any).api
-  const [isRevisionModalOpen, setIsRevisionModalOpen] = useState(false)
+
 
   // ---------------------------------------------------------------
   // Tentukan mode aktif
@@ -366,7 +337,7 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
   const handleConfirmRequest = async (reviserName: string) => {
     if (items.length === 0) return alert('Tambahkan minimal satu item.')
     setIsSaving(true)
-    setIsRevisionModalOpen(false)
+
     try {
       const itemsWithKubikasi = items.map((item) => ({ ...item, kubikasi: calculateKubikasi(item) }))
       const kubikasi_total = itemsWithKubikasi.reduce((acc, item) => acc + (item.kubikasi || 0), 0)
@@ -393,7 +364,7 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
   const handleSaveOrUpdateOrder = async (reviserName?: string) => {
     if (!orderData.nomorOrder || !orderData.namaCustomer) return alert('Nomor Order dan Nama Customer harus diisi!')
     if (items.length === 0) return alert('Tambahkan minimal satu item.')
-    setIsSaving(true); setIsRevisionModalOpen(false)
+    setIsSaving(true)
     try {
       const payload = await constructPayload()
       if (reviserName) payload.revisedBy = reviserName
@@ -474,9 +445,9 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
               if (isRequestMode) {
                 handleSendRequest()
               } else if (isConfirmMode) {
-                setIsRevisionModalOpen(true)
+                handleConfirmRequest(currentUser?.name || 'Unknown')
               } else if (editingPO) {
-                setIsRevisionModalOpen(true)
+                handleSaveOrUpdateOrder(currentUser?.name || 'Unknown')
               } else {
                 handleSaveOrUpdateOrder()
               }
@@ -715,11 +686,7 @@ const InputPOPage: React.FC<InputPOPageProps> = ({ onSaveSuccess, editingPO, cur
 
       <AddProductModal isOpen={isAddProductModalOpen} onClose={() => setIsAddProductModalOpen(false)} onSaveSuccess={fetchProducts} />
 
-      <RevisionConfirmModal
-        isOpen={isRevisionModalOpen}
-        onClose={() => setIsRevisionModalOpen(false)}
-        onConfirm={(name) => isConfirmMode ? handleConfirmRequest(name) : handleSaveOrUpdateOrder(name)}
-      />
+
     </div>
   )
 }
