@@ -12,14 +12,11 @@ import {
   Legend,
   ResponsiveContainer,
   CartesianGrid,
-  PieChart,
-  Pie,
   Cell,
   LineChart,
   Line
 } from 'recharts'
 import * as apiService from '../apiService'
-import { useWindowWidth } from '../hooks/useWindowWidth' // Hook ukuran window
 import { LuLightbulb } from 'react-icons/lu'
 import { User } from '../types'
 
@@ -64,9 +61,6 @@ interface AnalysisPageProps {
 }
 
 const AnalysisPage: React.FC<AnalysisPageProps> = ({ currentUser }) => {
-  const windowWidth = useWindowWidth()
-  const isMobile = windowWidth < 768 // Adjust breakpoint if needed
-
   // --- State untuk menyimpan data analisis ---
   const [analysisData, setAnalysisData] = useState<AnalysisResultData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -224,17 +218,18 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ currentUser }) => {
                   margin={{ left: 100, right: 30 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" />
-                  <YAxis type="category" dataKey="name" width={100} interval={0} fontSize={11} />
+                  <XAxis type="number" tick={{ fontSize: 12 }} />
+                  <YAxis type="category" dataKey="name" width={100} interval={0} fontSize={12} tick={{ fontSize: 12 }} />
                   <Tooltip
+                    contentStyle={{ fontSize: '13px' }}
                     formatter={(value, name) => {
-                      if (name === 'Total m³') return [`${Number(value).toFixed(3)} m³`, name]
+                      if (name === 'Total Volume (m3)') return [`${Number(value).toFixed(3)} m3`, name]
                       if (name === 'Jumlah Order') return [`${value} Order`, name]
                       return [value, name]
                     }}
                   />
-                  <Legend />
-                  <Bar dataKey="totalKubikasi" name="Total m³" fill={COLORS[0]} />
+                  <Legend wrapperStyle={{ fontSize: '14px', paddingTop: '10px' }} />
+                  <Bar dataKey="totalKubikasi" name="Total Volume (m3)" fill={COLORS[0]} />
                   <Bar dataKey="orderCount" name="Jumlah Order" fill={COLORS[1]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -254,18 +249,19 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ currentUser }) => {
                   margin={{ left: 150, right: 30 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" allowDecimals={false} />
-                  <YAxis type="category" dataKey="name" width={150} interval={0} fontSize={10} />
+                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
+                  <YAxis type="category" dataKey="name" width={150} interval={0} fontSize={12} tick={{ fontSize: 12 }} />
                   <Tooltip
+                    contentStyle={{ fontSize: '13px' }}
                     formatter={(value, name) => {
                       if (name === 'Total Kuantitas') return [`${value} unit`, name]
-                      if (name === 'Total Kubikasi') return [`${Number(value).toFixed(3)} m³`, name]
+                      if (name === 'Total Kubikasi (m3)') return [`${Number(value).toFixed(3)} m3`, name]
                       return [value, name]
                     }}
                   />
-                  <Legend />
+                  <Legend wrapperStyle={{ fontSize: '14px', paddingTop: '10px' }} />
                   <Bar dataKey="totalQuantity" name="Total Kuantitas" fill={COLORS[2]} />
-                  <Bar dataKey="totalKubikasi" name="Total Kubikasi" fill={COLORS[3]} />
+                  <Bar dataKey="totalKubikasi" name="Total Kubikasi (m3)" fill={COLORS[3]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -277,7 +273,7 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ currentUser }) => {
           <div className="dashboard-widgets-grid">
             {/* Grafik Marketing Bulanan */}
             <Card>
-              <h4>📈 Tren Penjualan Marketing per Bulan (m³)</h4>
+              <h4>📈 Tren Penjualan Marketing per Bulan (m3)</h4>
               {analysisData.monthlyMarketingChartData.length > 0 && marketingKeysForChart.length > 0 ? (
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart
@@ -285,10 +281,10 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ currentUser }) => {
                     margin={{ top: 5, right: 30, left: 0, bottom: 5 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis />
-                    <Tooltip formatter={(value) => `${Number(value).toFixed(3)} m³`} />
-                    <Legend />
+                    <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip contentStyle={{ fontSize: '13px' }} formatter={(value) => `${Number(value).toFixed(3)} m3`} />
+                    <Legend wrapperStyle={{ fontSize: '14px', paddingTop: '10px' }} />
                     {marketingKeysForChart.map((key, index) => (
                       <Line
                         key={key}
@@ -316,10 +312,10 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ currentUser }) => {
                     margin={{ top: 5, right: 30, left: 0, bottom: 5 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis allowDecimals={false} />
-                    <Tooltip formatter={(value) => `${value} unit`} />
-                    <Legend />
+                    <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                    <Tooltip contentStyle={{ fontSize: '13px' }} formatter={(value) => `${value} unit`} />
+                    <Legend wrapperStyle={{ fontSize: '14px', paddingTop: '10px' }} />
                     {productKeysForChart.map((key, index) => (
                       // Isi nilai 0 jika data produk tidak ada di bulan tsb
                       <Line
@@ -348,31 +344,21 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ currentUser }) => {
               <h4>📊 Distribusi Jenis Kayu (Unit Terjual)</h4>
               {analysisData.woodTypeDistribution.length > 0 ? (
                 <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={analysisData.woodTypeDistribution}
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={isMobile ? 60 : 80}
-                      labelLine={false}
-                      label={
-                        !isMobile &&
-                        ((props: any) => `${props.name} (${(props.percent * 100).toFixed(0)}%)`)
-                      }
-                    >
-                      {analysisData.woodTypeDistribution.map((_entry, index) => (
+                  <BarChart
+                    data={analysisData.woodTypeDistribution}
+                    margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                    <Tooltip contentStyle={{ fontSize: '13px' }} formatter={(value) => [`${value} unit`, 'Kuantitas']} />
+                    <Legend wrapperStyle={{ fontSize: '14px', paddingTop: '10px' }} />
+                    <Bar dataKey="value" name="Kuantitas (Unit Terjual)" fill={COLORS[4 % COLORS.length]}>
+                      {analysisData.woodTypeDistribution.map((_, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => `${value} unit`} />
-                    <Legend
-                      layout={isMobile ? 'horizontal' : 'vertical'}
-                      verticalAlign={isMobile ? 'bottom' : 'middle'}
-                      align={isMobile ? 'center' : 'right'}
-                    />
-                  </PieChart>
+                    </Bar>
+                  </BarChart>
                 </ResponsiveContainer>
               ) : (
                 <p>Tidak ada data jenis kayu.</p>
@@ -380,13 +366,13 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ currentUser }) => {
             </Card>
             {/* Top Customers */}
             <Card>
-              <h4>⭐ Top 10 Customer (Berdasarkan Volume m³)</h4>
+              <h4>⭐ Top 10 Customer (Berdasarkan Volume m3)</h4>
               {analysisData.topCustomers.length > 0 ? (
                 <ol className="top-customer-list">
                   {analysisData.topCustomers.map((c) => (
                     <li key={c.name}>
                       <span>{c.name}</span>
-                      <strong>{c.totalKubikasi.toFixed(3)} m³</strong>
+                      <strong>{c.totalKubikasi.toFixed(3)} m3</strong>
                     </li>
                   ))}
                 </ol>
