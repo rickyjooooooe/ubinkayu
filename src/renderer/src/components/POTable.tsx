@@ -32,6 +32,17 @@ const POTable: React.FC<POTableProps> = ({
     })
   }
 
+  // Memeriksa apakah tanggal kirim sudah lewat (hanya untuk order yang belum Selesai/Batal)
+  const isDeadlinePassed = (deadlineString?: string, status?: string) => {
+    if (!deadlineString) return false
+    if (status === 'Completed' || status === 'Cancelled') return false
+    const deadlineDate = new Date(deadlineString)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    deadlineDate.setHours(0, 0, 0, 0)
+    return deadlineDate < today
+  }
+
   const formatLastRevisedDate = (d: string | undefined) =>
     d
       ? new Date(d).toLocaleString('id-ID', {
@@ -96,7 +107,15 @@ const POTable: React.FC<POTableProps> = ({
               <td>{order.lastRevisedBy || '-'}</td>
               <td>{formatLastRevisedDate(order.lastRevisedDate)}</td>
               <td>{formatDate(order.created_at)}</td>
-              <td>{formatDate(order.deadline)}</td>
+              <td
+                style={
+                  isDeadlinePassed(order.deadline, order.status)
+                    ? { color: 'var(--color-text-error, #d92121)', fontWeight: 'bold' }
+                    : undefined
+                }
+              >
+                {formatDate(order.deadline)}
+              </td>
               {/* Jenis Kayu & Produk (Including Kubikasi per item) */}
               <td className="product-list-cell">
                 {order.items && order.items.length > 0 ? (
