@@ -1468,7 +1468,7 @@ export async function handleGetProductSalesAnalysis(req, res) {
     })
 
     const topSellingProducts = Object.values(salesByProduct)
-      .sort((a, b) => b.totalQuantity - a.totalQuantity)
+      .sort((a, b) => b.totalKubikasi - a.totalKubikasi)
       .slice(0, 10)
 
     const salesByMarketingSorted = Object.values(salesByMarketing).sort(

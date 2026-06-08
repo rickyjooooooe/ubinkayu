@@ -2010,7 +2010,7 @@ async function getProductSalesAnalysis(user: User | null, startDate?: string, en
     })
 
     const topSellingProductsFull = Object.values(salesByProduct).sort(
-      (a: any, b: any) => b.totalQuantity - a.totalQuantity
+      (a: any, b: any) => b.totalKubikasi - a.totalKubikasi
     )
 
     const salesByMarketingSorted = Object.values(salesByMarketing).sort(

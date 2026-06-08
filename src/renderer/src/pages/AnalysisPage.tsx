@@ -240,7 +240,7 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ currentUser }) => {
 
           {/* --- Card Top Selling Products --- */}
           <Card style={{ marginBottom: '1.5rem' }}>
-            <h4>🏆 Top 10 Produk (Berdasarkan Kuantitas & Kubikasi)</h4>
+            <h4>🏆 Top 10 Produk (Berdasarkan Volume m3)</h4>
             {analysisData.topSellingProducts.length > 0 ? (
               <ResponsiveContainer width="100%" height={400}>
                 <BarChart
@@ -249,19 +249,14 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ currentUser }) => {
                   margin={{ left: 150, right: 30 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
+                  <XAxis type="number" tick={{ fontSize: 12 }} />
                   <YAxis type="category" dataKey="name" width={150} interval={0} fontSize={12} tick={{ fontSize: 12 }} />
                   <Tooltip
                     contentStyle={{ fontSize: '13px' }}
-                    formatter={(value, name) => {
-                      if (name === 'Total Kuantitas') return [`${value} unit`, name]
-                      if (name === 'Total Kubikasi (m3)') return [`${Number(value).toFixed(3)} m3`, name]
-                      return [value, name]
-                    }}
+                    formatter={(value) => [`${Number(value).toFixed(3)} m3`, 'Total Volume']}
                   />
                   <Legend wrapperStyle={{ fontSize: '14px', paddingTop: '10px' }} />
-                  <Bar dataKey="totalQuantity" name="Total Kuantitas" fill={COLORS[2]} />
-                  <Bar dataKey="totalKubikasi" name="Total Kubikasi (m3)" fill={COLORS[3]} />
+                  <Bar dataKey="totalKubikasi" name="Total Volume (m3)" fill={COLORS[3]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
