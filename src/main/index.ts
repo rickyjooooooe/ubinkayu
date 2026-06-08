@@ -1978,7 +1978,7 @@ async function getProductSalesAnalysis(user: User | null, startDate?: string, en
       }
 
       if (woodType)
-        woodTypeDistribution[woodType] = (woodTypeDistribution[woodType] || 0) + quantity
+        woodTypeDistribution[woodType] = (woodTypeDistribution[woodType] || 0) + kubikasi
 
       try {
         salesByDateForTrend.push({ date: new Date(order.created_at), name: productName, quantity })

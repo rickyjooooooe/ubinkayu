@@ -341,7 +341,7 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ currentUser }) => {
           <div className="dashboard-widgets-grid" style={{ marginTop: '1.5rem' }}>
             {/* Wood Type Distribution */}
             <Card>
-              <h4>📊 Distribusi Jenis Kayu (Unit Terjual)</h4>
+              <h4>📊 Distribusi Jenis Kayu (Volume m3)</h4>
               {analysisData.woodTypeDistribution.length > 0 ? (
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart
@@ -350,10 +350,10 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ currentUser }) => {
                   >
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                    <Tooltip contentStyle={{ fontSize: '13px' }} formatter={(value) => [`${value} unit`, 'Kuantitas']} />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip contentStyle={{ fontSize: '13px' }} formatter={(value) => [`${Number(value).toFixed(3)} m3`, 'Total Volume']} />
                     <Legend wrapperStyle={{ fontSize: '14px', paddingTop: '10px' }} />
-                    <Bar dataKey="value" name="Kuantitas (Unit Terjual)" fill={COLORS[4 % COLORS.length]}>
+                    <Bar dataKey="value" name="Total Volume (m3)" fill={COLORS[4 % COLORS.length]}>
                       {analysisData.woodTypeDistribution.map((_, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
