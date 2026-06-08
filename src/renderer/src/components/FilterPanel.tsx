@@ -36,6 +36,12 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
     onFilterChange(e.target.name, e.target.value)
   }
 
+  // Helper untuk mengubah huruf pertama menjadi kapital untuk tampilan UI
+  const capitalizeFirstLetter = (str: string) => {
+    if (!str) return ''
+    return str.charAt(0).toUpperCase() + str.slice(1)
+  }
+
   return (
     <Card className="filter-panel refined-filter">
       <div className="filter-header">
@@ -97,14 +103,22 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
           <label>Jenis Kayu</label>
           <select name="woodType" value={filters.woodType || 'all'} onChange={handleInputChange}>
             <option value="all">Semua Jenis Kayu</option>
-            {availableWoodTypes.map((woodType) => (<option key={woodType} value={woodType}>{woodType}</option>))}
+            {availableWoodTypes.map((woodType) => (
+              <option key={woodType} value={woodType}>
+                {capitalizeFirstLetter(woodType)}
+              </option>
+            ))}
           </select>
         </div>
         <div className="form-group">
           <label>Produk</label>
           <select name="productType" value={filters.productType || 'all'} onChange={handleInputChange}>
             <option value="all">Semua Produk</option>
-            {availableProductTypes.map((productType) => (<option key={productType} value={productType}>{productType}</option>))}
+            {availableProductTypes.map((productType) => (
+              <option key={productType} value={productType}>
+                {capitalizeFirstLetter(productType)}
+              </option>
+            ))}
           </select>
         </div>
         
@@ -113,14 +127,22 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
           <label>Finishing</label>
           <select name="finishing" value={filters.finishing || 'all'} onChange={handleInputChange}>
             <option value="all">Semua Finishing</option>
-            {availableFinishing.map((name) => (<option key={name} value={name}>{name}</option>))}
+            {availableFinishing.map((name) => (
+              <option key={name} value={name}>
+                {capitalizeFirstLetter(name)}
+              </option>
+            ))}
           </select>
         </div>
         <div className="form-group">
           <label>Sample</label>
           <select name="sample" value={filters.sample || 'all'} onChange={handleInputChange}>
             <option value="all">Semua Sample</option>
-            {availableSample.map((name) => (<option key={name} value={name}>{name}</option>))}
+            {availableSample.map((name) => (
+              <option key={name} value={name}>
+                {capitalizeFirstLetter(name)}
+              </option>
+            ))}
           </select>
         </div>
         <div className="form-group">
@@ -138,6 +160,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
             <option value="N/A">Belum Direvisi</option>
           </select>
         </div>
+
 
         {/* --- Bagian Bawah: Filter Tanggal --- */}
         <div className="form-group date-filter-group">
