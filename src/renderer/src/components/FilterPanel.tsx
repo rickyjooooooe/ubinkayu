@@ -60,8 +60,8 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
             {/* Opsi yang sudah ada */}
             <option value="created-desc">PO Terbaru (Tgl Masuk)</option>
             <option value="created-asc">PO Terlama (Tgl Masuk)</option>
-            <option value="deadline-asc">Target Kirim (Terdekat)</option>
-            <option value="deadline-desc">Target Kirim (Terjauh)</option>
+            <option value="deadline-asc">Mendekati Deadline</option>
+            <option value="deadline-desc">Terjauh dari Deadline</option>
             <option value="priority">Prioritas (Urgent {'>'} High {'>'} Normal)</option>
             
             {/* [TAMBAH] Opsi Sort Baru */}
