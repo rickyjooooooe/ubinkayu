@@ -1344,7 +1344,7 @@ export async function handleGetAttentionData(req, res) {
 
 export async function handleGetProductSalesAnalysis(req, res) {
   console.log('🏁 [Vercel] handleGetProductSalesAnalysis started!')
-  const { user } = req.body // [TERIMA USER]
+  const { user, startDate, endDate } = req.body // [TERIMA USER & FILTER TANGGAL]
 
   try {
     const doc = await openDoc()
@@ -1364,7 +1364,25 @@ export async function handleGetProductSalesAnalysis(req, res) {
     const productRows = productRowsRaw.map((r) => r.toObject())
 
     // [FILTER MARKETING]
-    const orderRows = filterOrdersByMarketing(orderRowsRawObjects, user)
+    let orderRows = filterOrdersByMarketing(orderRowsRawObjects, user)
+
+    // [FILTER TANGGAL]
+    if (startDate || endDate) {
+      orderRows = orderRows.filter((order) => {
+        if (!order.created_at) return false
+        const orderDate = new Date(order.created_at)
+        if (startDate) {
+          const start = new Date(startDate)
+          if (orderDate < start) return false
+        }
+        if (endDate) {
+          const end = new Date(endDate)
+          end.setHours(23, 59, 59, 999) // Set ke akhir hari
+          if (orderDate > end) return false
+        }
+        return true
+      })
+    }
 
     const latestOrderMap = orderRows.reduce((map, order) => {
       const orderId = order.id

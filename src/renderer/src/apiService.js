@@ -240,14 +240,12 @@ export function getAttentionData(user) {
   })
 }
 
-export function getProductSalesAnalysis(user) {
-  // <-- [UBAH]
-  if (window.api) return window.api.getProductSalesAnalysis(user) // <-- [UBAH]
+export function getProductSalesAnalysis(user, startDate, endDate) {
+  if (window.api) return window.api.getProductSalesAnalysis(user, startDate, endDate)
   return fetchAPI(createApiEndpoint('getProductSalesAnalysis'), {
-    // <-- [UBAH]
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user })
+    body: JSON.stringify({ user, startDate, endDate })
   })
 }
 

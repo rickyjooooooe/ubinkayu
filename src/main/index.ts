@@ -1888,7 +1888,7 @@ const getYearMonth = (dateString: any) => {
   return date ? date.substring(0, 7) : null // Ambil YYYY-MM
 }
 
-async function getProductSalesAnalysis(user: User | null) {
+async function getProductSalesAnalysis(user: User | null, startDate?: string, endDate?: string) {
   try {
     const doc = await openDoc()
     const [itemSheet, Sheet, productSheet] = await Promise.all([
@@ -1906,7 +1906,26 @@ async function getProductSalesAnalysis(user: User | null) {
     const orderRowsRaw = rawOrderRows.map((r: any) => r.toObject())
     const productRows = rawProductRows.map((r: any) => r.toObject())
 
-    const orderRows = filterOrdersByMarketing(orderRowsRaw, user)
+    // [FILTER MARKETING]
+    let orderRows = filterOrdersByMarketing(orderRowsRaw, user)
+
+    // [FILTER TANGGAL]
+    if (startDate || endDate) {
+      orderRows = orderRows.filter((order: any) => {
+        if (!order.created_at) return false
+        const orderDate = new Date(order.created_at)
+        if (startDate) {
+          const start = new Date(startDate)
+          if (orderDate < start) return false
+        }
+        if (endDate) {
+          const end = new Date(endDate)
+          end.setHours(23, 59, 59, 999) // Set ke akhir hari
+          if (orderDate > end) return false
+        }
+        return true
+      })
+    }
 
     const latestOrderMap = orderRows.reduce((map: any, order: any) => {
       const orderId = order.id
@@ -3296,7 +3315,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('progress:updateItem', (_event, data) => updateItemProgress(data))
   ipcMain.handle('progress:getRecentProgressUpdates', (_event, user) => getRecentProgressUpdates(user))
   ipcMain.handle('progress:getAttentionData', (_event, user) => getAttentionData(user))
-  ipcMain.handle('analysis:getProductSales', (_event, user) => getProductSalesAnalysis(user))
+  ipcMain.handle('analysis:getProductSales', (_event, user, startDate, endDate) => getProductSalesAnalysis(user, startDate, endDate))
   ipcMain.handle('analysis:getSalesItemData', (_event, user) => getSalesItemData(user))
   ipcMain.handle('app:read-file-base64', async (_event, filePath) => {
     try {
