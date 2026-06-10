@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 
 // [DIUBAH] Impor React dan hooks yang diperlukan
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import { POHeader } from '../types'
 import { Card } from '../components/Card'
 
@@ -76,6 +76,7 @@ const StatCard = ({ title, value, icon: IconComponent, cardClassName }) => (
 )
 
 const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading, onShowDetail }) => {
+  const [isOverdueExpanded, setIsOverdueExpanded] = useState(false)
   const windowWidth = useWindowWidth()
   const isMobile = windowWidth < 500
 
@@ -245,6 +246,9 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading, onShow
     // You might want a better loading indicator
     return <div className="page-container" style={{ textAlign: 'center', paddingTop: '5rem' }}>Loading Dashboard Data...</div>;
   }
+  const visibleOverduePOs = isOverdueExpanded
+    ? dashboardData.overduePOs
+    : dashboardData.overduePOs.slice(0, 5)
 
   return (
     <div className="page-container">
@@ -263,7 +267,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading, onShow
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-            {dashboardData.overduePOs.map((order, idx) => (
+            {visibleOverduePOs.map((order, idx) => (
               <div
                 key={order.id}
                 style={{
@@ -271,7 +275,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading, onShow
                   justifyContent: 'space-between',
                   alignItems: 'center',
                   padding: '12px 4px',
-                  borderBottom: idx === dashboardData.overduePOs.length - 1 ? 'none' : '1px solid #FCA5A5'
+                  borderBottom: idx === visibleOverduePOs.length - 1 ? 'none' : '1px solid #FCA5A5'
                 }}
               >
                 {/* Bagian Kiri: Info Order dan Customer */}
@@ -319,6 +323,38 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ poList, isLoading, onShow
               </div>
             ))}
           </div>
+
+          {dashboardData.overduePOs.length > 5 && (
+            <div style={{ textAlign: 'center', marginTop: '12px' }}>
+              <button
+                onClick={() => setIsOverdueExpanded(!isOverdueExpanded)}
+                style={{
+                  background: 'transparent',
+                  color: '#991B1B',
+                  border: '1px solid #FCA5A5',
+                  borderRadius: '6px',
+                  padding: '6px 16px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = '#FEE2E2'
+                  e.currentTarget.style.borderColor = '#EF4444'
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = 'transparent'
+                  e.currentTarget.style.borderColor = '#FCA5A5'
+                }}
+              >
+                {isOverdueExpanded ? 'Tampilkan Lebih Sedikit ▲' : `Tampilkan ${dashboardData.overduePOs.length - 5} Lainnya ▼`}
+              </button>
+            </div>
+          )}
         </Card>
       )}
 
